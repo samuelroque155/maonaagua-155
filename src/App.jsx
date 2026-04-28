@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
+
+// --- IMPORTAÇÕES DO FIREBASE ---
+import { auth, db } from './firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 // --- CONFIGURAÇÕES ---
 const listaQuimica = [
@@ -17,6 +22,13 @@ const gradBtn = "bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 tex
 const gradText = "bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-500 bg-clip-text text-transparent";
 
 export default function App() {
+  // --- AUTENTICAÇÃO E LOGIN ---
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [emailLogin, setEmailLogin] = useState('');
+  const [senhaLogin, setSenhaLogin] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+
   // --- ESTADOS DO APLICATIVO ---
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
@@ -24,8 +36,6 @@ export default function App() {
   const dateObj = new Date();
   const diaAtual = dateObj.getDay(); 
   const dataHojeStr = dateObj.toDateString();
-  
-  // Pegando o mês e ano automáticos para o relatório
   const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const mesEscrito = mesesCompletos[dateObj.getMonth()];
   const anoEscrito = dateObj.getFullYear();
@@ -45,18 +55,38 @@ export default function App() {
     }
   }, [modoEscuro]);
 
-  // CLIENTES
-  const [clientes, setClientes] = useState(() => {
-    const salvo = localStorage.getItem('maonagua_v4');
-    return salvo ? JSON.parse(salvo) : [
-      { id: 1, nome: 'Dona Maria', endereco: 'Centro', diasVisita: [1, 4], adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] },
-      { id: 2, nome: 'Condomínio Solar', endereco: 'Bairro das Acácias', diasVisita: [diaAtual], adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] }
-    ];
-  });
+  // --- CONTROLE DE CLIENTES (AGORA NA NUVEM) ---
+  const [clientes, setClientes] = useState([]);
 
+  // Monitora se o usuário está logado e baixa os dados dele
   useEffect(() => {
-    localStorage.setItem('maonagua_v4', JSON.stringify(clientes));
-  }, [clientes]);
+    const desinscrever = onAuthStateChanged(auth, async (usuarioAtual) => {
+      setUser(usuarioAtual);
+      if (usuarioAtual) {
+        // Busca o documento do usuário no cofre
+        const docRef = doc(db, 'usuarios', usuarioAtual.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setClientes(docSnap.data().clientes || []);
+        } else {
+          // Se for o primeiro acesso, cria um vazio
+          await setDoc(docRef, { clientes: [] });
+          setClientes([]);
+        }
+      }
+      setAuthLoading(false);
+    });
+    return () => desinscrever();
+  }, []);
+
+  // Nova função MÁGICA: Atualiza a tela e salva na nuvem ao mesmo tempo
+  const atualizarE_SalvarClientes = async (novosClientes) => {
+    setClientes(novosClientes); // Atualiza na hora na tela
+    if (user) {
+      // Salva em segundo plano no Firebase
+      await setDoc(doc(db, 'usuarios', user.uid), { clientes: novosClientes });
+    }
+  };
 
   const [clienteAtual, setClienteAtual] = useState(null);
   const [aspecto, setAspecto] = useState(''); 
@@ -75,13 +105,36 @@ export default function App() {
   const [novoEndereco, setNovoEndereco] = useState('');
   const [novosDias, setNovosDias] = useState([]);
 
-  const piscinasDeHoje = clientes.filter(c => {
-    return c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual;
-  });
+  const piscinasDeHoje = clientes.filter(c => c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual);
 
-  // --- FUNÇÕES ---
+  // --- FUNÇÕES DE LOGIN ---
+  const handleLogin = async () => {
+    if(!emailLogin || !senhaLogin) return alert("Preencha e-mail e senha");
+    try {
+      await signInWithEmailAndPassword(auth, emailLogin, senhaLogin);
+    } catch (error) {
+      alert("Erro ao entrar: Verifique seu e-mail e senha.");
+    }
+  };
+
+  const handleCadastro = async () => {
+    if(!emailLogin || !senhaLogin) return alert("Preencha e-mail e senha");
+    if(senhaLogin.length < 6) return alert("A senha deve ter pelo menos 6 letras/números.");
+    try {
+      await createUserWithEmailAndPassword(auth, emailLogin, senhaLogin);
+    } catch (error) {
+      alert("Erro ao criar conta. O e-mail já pode estar em uso.");
+    }
+  };
+
+  const handleSair = async () => {
+    const sair = window.confirm("Tem certeza que deseja sair do aplicativo?");
+    if(sair) await signOut(auth);
+  };
+
+  // --- FUNÇÕES DO APP ---
   const iniciarVisita = (cliente) => {
-    setClientes(clientes.map(c => c.id === cliente.id ? { ...c, visitaEmAndamentoData: dataHojeStr } : c));
+    atualizarE_SalvarClientes(clientes.map(c => c.id === cliente.id ? { ...c, visitaEmAndamentoData: dataHojeStr } : c));
     setClienteAtual(cliente);
     if (cliente.visitaEmAndamentoData !== dataHojeStr) {
       setHoraInicioVisita(Date.now()); 
@@ -134,13 +187,13 @@ export default function App() {
   };
 
   const adiarVisita = (clienteId, novoDiaIndex) => {
-    setClientes(clientes.map(c => c.id === clienteId ? { ...c, adiadoPara: novoDiaIndex } : c));
+    atualizarE_SalvarClientes(clientes.map(c => c.id === clienteId ? { ...c, adiadoPara: novoDiaIndex } : c));
     setMostrarAdiarId(null);
   };
 
   const adicionarCliente = () => {
     if (novoNome && novoEndereco && novosDias.length > 0) {
-      setClientes([...clientes, { 
+      atualizarE_SalvarClientes([...clientes, { 
         id: Date.now(), nome: novoNome, endereco: novoEndereco, diasVisita: novosDias,
         adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
       }]);
@@ -157,7 +210,7 @@ export default function App() {
   const excluirCliente = (id) => {
     const confirmacao = window.confirm("⚠️ TEM CERTEZA?\n\nIsso vai apagar este cliente e todo o histórico de visitas dele para sempre.");
     if (confirmacao) {
-      setClientes(clientes.filter(c => c.id !== id));
+      atualizarE_SalvarClientes(clientes.filter(c => c.id !== id));
       setTela('relatorio');
     }
   };
@@ -191,7 +244,7 @@ export default function App() {
       txtA: textoAlerta
     };
     
-    setClientes(clientes.map(c => {
+    atualizarE_SalvarClientes(clientes.map(c => {
       if (c.id === clienteAtual.id) {
         const historicoBase = c.historicoVisitas || [];
         return { 
@@ -217,19 +270,13 @@ export default function App() {
     
     const ultimaVisitaReal = historico[historico.length - 1];
     
-    setAspecto(ultimaVisitaReal.a || '');
-    setPh(ultimaVisitaReal.p || '');
-    setCloro(ultimaVisitaReal.c || '');
-    setAlcalinidade(ultimaVisitaReal.al || '');
-    setFotosVisita(ultimaVisitaReal.fotos || []);
-    setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
-    setFotoAlerta(ultimaVisitaReal.fotoA || null);
-    setTextoAlerta(ultimaVisitaReal.txtA || '');
-    setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []);
-    setHoraInicioVisita(Date.now()); 
+    setAspecto(ultimaVisitaReal.a || ''); setPh(ultimaVisitaReal.p || ''); setCloro(ultimaVisitaReal.c || ''); setAlcalinidade(ultimaVisitaReal.al || '');
+    setFotosVisita(ultimaVisitaReal.fotos || []); setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
+    setFotoAlerta(ultimaVisitaReal.fotoA || null); setTextoAlerta(ultimaVisitaReal.txtA || '');
+    setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []); setHoraInicioVisita(Date.now()); 
     
     const novoHistorico = historico.slice(0, -1);
-    setClientes(clientes.map(c => c.id === clienteAlvo.id ? { 
+    atualizarE_SalvarClientes(clientes.map(c => c.id === clienteAlvo.id ? { 
       ...c, 
       ultimaVisita: null, 
       visitaEmAndamentoData: dataHojeStr,
@@ -272,13 +319,10 @@ export default function App() {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ title: 'Relatório Mão Na Água', files: [file] });
       } else {
-        const a = document.createElement('a');
-        a.href = dataUrl; a.download = file.name; a.click();
+        const a = document.createElement('a'); a.href = dataUrl; a.download = file.name; a.click();
         alert("Imagem salva na sua galeria/downloads!");
       }
-    } catch (error) { 
-      alert("Erro ao processar PDF: " + error.message); 
-    }
+    } catch (error) { alert("Erro ao processar PDF: " + error.message); }
   };
 
   const compartilharAlertaSeparado = async (visita) => {
@@ -293,15 +337,60 @@ export default function App() {
         await navigator.share({ files: [file], title: 'Atenção Técnica' });
       } else {
         alert("Baixando a foto de alerta para você enviar no WhatsApp.");
-        const a = document.createElement('a');
-        a.href = dataUrl; a.download = file.name; a.click();
+        const a = document.createElement('a'); a.href = dataUrl; a.download = file.name; a.click();
       }
-    } catch(e) {
-      alert('Erro ao processar a imagem do relato: ' + e.message);
-    }
+    } catch(e) { alert('Erro ao processar a imagem do relato: ' + e.message); }
   };
 
-  // --- TELAS ---
+  // --- TELA DE CARREGAMENTO INICIAL ---
+  if (authLoading) {
+    return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-pink-500 font-bold">Conectando ao Firebase...</div>;
+  }
+
+  // --- TELA DE LOGIN / CADASTRO ---
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-white font-sans relative overflow-hidden">
+        {/* Fundo decorativo */}
+        <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-pink-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 bg-purple-600 rounded-full mix-blend-multiply filter blur-[100px] opacity-20"></div>
+
+        <div className="w-full max-w-sm relative z-10">
+          <div className="text-center mb-10">
+            <h1 className={`text-5xl font-black mb-2 ${gradText}`}>Mão Na Água</h1>
+            <p className="text-zinc-400 font-medium tracking-widest uppercase text-xs">Gestão Profissional</p>
+          </div>
+
+          <div className="bg-zinc-900/50 p-6 rounded-3xl border border-zinc-800 shadow-2xl backdrop-blur-sm">
+            <h2 className="text-xl font-bold mb-6 text-zinc-100">{isRegistering ? 'Criar Nova Conta' : 'Acesse seu aplicativo'}</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider ml-2">E-mail</label>
+                <input type="email" placeholder="seu@email.com" value={emailLogin} onChange={e => setEmailLogin(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl outline-none focus:border-pink-500 text-white transition-colors mt-1" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider ml-2">Senha</label>
+                <input type="password" placeholder="Mínimo 6 caracteres" value={senhaLogin} onChange={e => setSenhaLogin(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl outline-none focus:border-pink-500 text-white transition-colors mt-1" />
+              </div>
+              
+              <button onClick={isRegistering ? handleCadastro : handleLogin} className={`w-full py-4 rounded-xl font-bold mt-4 shadow-lg ${gradBtn}`}>
+                {isRegistering ? 'CADASTRAR E ENTRAR' : 'ENTRAR'}
+              </button>
+            </div>
+
+            <div className="mt-6 text-center">
+              <button onClick={() => setIsRegistering(!isRegistering)} className="text-xs text-zinc-400 font-bold hover:text-pink-400 transition-colors">
+                {isRegistering ? 'Já tem uma conta? Faça login' : 'Não tem conta? Cadastre-se'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- TELAS DO APLICATIVO LOGADO ---
   if (tela === 'lista') {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 pb-24 font-sans transition-colors duration-300">
@@ -316,6 +405,9 @@ export default function App() {
             </button>
             <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-pink-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
               <CalendarDays size={20} />
+            </button>
+            <button onClick={handleSair} className="bg-rose-50 dark:bg-rose-500/10 p-2 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors">
+              <LogOut size={20} />
             </button>
           </div>
         </header>
@@ -573,7 +665,6 @@ export default function App() {
           <div id="relatorio-print" className="bg-white w-full shadow-lg rounded-sm overflow-hidden border border-zinc-200 text-zinc-900">
             <header className="p-5 border-b-4 border-b-transparent relative" style={{ borderImage: 'linear-gradient(to right, #facc15, #ec4899, #9333ea) 1' }}>
               
-              {/* --- CABEÇALHO ATUALIZADO --- */}
               <div className="flex justify-between items-start mb-2">
                 <div>
                   <h1 className="text-4xl font-black tracking-tight text-pink-600 mb-1">Mão Na Água</h1>
@@ -586,7 +677,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              {/* ---------------------------- */}
 
               <div className="mt-5 bg-zinc-50 rounded-lg p-3 border border-zinc-100"><p className="text-[10px] text-zinc-400 font-bold uppercase mb-0.5">Cliente</p><p className="text-sm font-bold text-zinc-800">{clienteExibicao.nome}</p><div className="mt-2 inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold"><CheckCircle2 size={12} /> Água Equilibrada</div></div>
             </header>

@@ -572,19 +572,22 @@ export default function App() {
           {/* O RELATÓRIO PDF É SEMPRE RENDERIZADO BRANCO E LIMPO */}
           <div id="relatorio-print" className="bg-white w-full shadow-lg rounded-sm overflow-hidden border border-zinc-200 text-zinc-900">
             <header className="p-5 border-b-4 border-b-transparent relative" style={{ borderImage: 'linear-gradient(to right, #facc15, #ec4899, #9333ea) 1' }}>
-              <div className="flex justify-between items-start">
+              
+              {/* --- CABEÇALHO ATUALIZADO --- */}
+              <div className="flex justify-between items-start mb-2">
                 <div>
-                  <h1 className="text-2xl font-black tracking-tight text-pink-600 mb-0.5">Mão Na Água</h1>
-                  <p className="text-[10px] text-zinc-400 font-medium tracking-widest uppercase">Gestão Profissional</p>
+                  <h1 className="text-4xl font-black tracking-tight text-pink-600 mb-1">Mão Na Água</h1>
+                  <p className="text-xs font-black text-zinc-600 tracking-widest uppercase">Gestão Profissional</p>
                 </div>
-                {/* --- AQUI ESTÁ A ATUALIZAÇÃO DO MÊS/ANO BEM VISÍVEL --- */}
                 <div className="text-right flex flex-col items-end">
-                  <h2 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Relatório Mensal</h2>
-                  <div className="bg-pink-100 border border-pink-200 px-3 py-1 rounded-lg">
-                    <p className="text-sm font-black text-pink-700 uppercase tracking-wide">{mesEscrito} / {anoEscrito}</p>
+                  <h2 className="text-xs font-black text-zinc-800 uppercase tracking-widest mb-1.5">Relatório Mensal</h2>
+                  <div className="bg-pink-100 border border-pink-200 px-3 py-1.5 rounded-lg">
+                    <p className="text-sm font-black text-pink-700 uppercase tracking-widest">{mesEscrito} / {anoEscrito}</p>
                   </div>
                 </div>
               </div>
+              {/* ---------------------------- */}
+
               <div className="mt-5 bg-zinc-50 rounded-lg p-3 border border-zinc-100"><p className="text-[10px] text-zinc-400 font-bold uppercase mb-0.5">Cliente</p><p className="text-sm font-bold text-zinc-800">{clienteExibicao.nome}</p><div className="mt-2 inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold"><CheckCircle2 size={12} /> Água Equilibrada</div></div>
             </header>
 

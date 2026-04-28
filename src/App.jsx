@@ -3,7 +3,7 @@ import {
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
   AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 // --- CONFIGURAÇÕES ---
 const listaQuimica = [
@@ -211,7 +211,6 @@ export default function App() {
     setFotoAlerta(null); setTextoAlerta(''); setProdutosFaltando([]); setClienteAtual(null);
   };
 
-  // --- CORRIGIDO: Mensagem sem alerta técnico ---
   const enviarAvisoWhatsApp = (cliente, historicoProdutos = []) => {
     let mensagem = `Olá, ${cliente.nome}! 🌊\nPassando para avisar que a manutenção da sua piscina foi concluída com sucesso.\n\n`;
     
@@ -231,51 +230,41 @@ export default function App() {
     const elemento = document.getElementById('relatorio-print');
     if (!elemento) return;
     try {
-      const canvas = await html2canvas(elemento, { scale: 2, useCORS: true });
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `Relatorio_${clienteRelatorio.nome}.png`, { type: 'image/png' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ title: 'Relatório Mão Na Água', files: [file] });
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = file.name; a.click();
-          URL.revokeObjectURL(url);
-          alert("Imagem salva!");
-        }
-      }, 'image/png');
-    } catch (error) { alert("Erro ao gerar imagem."); }
+      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `Relatorio_${clienteRelatorio.nome}.png`, { type: 'image/png' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: 'Relatório Mão Na Água', files: [file] });
+      } else {
+        const a = document.createElement('a');
+        a.href = dataUrl; a.download = file.name; a.click();
+        alert("Imagem salva na sua galeria/downloads!");
+      }
+    } catch (error) { 
+      alert("Erro ao processar PDF: " + error.message); 
+    }
   };
 
-  // --- CORRIGIDO: Força o envio da Imagem no WhatsApp ---
   const compartilharAlertaSeparado = async (visita) => {
     const elemento = document.getElementById('alerta-print');
     if (!elemento) return;
     try {
-      const canvas = await html2canvas(elemento, { scale: 2, useCORS: true });
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `Alerta_${clienteRelatorio.nome}.png`, { type: 'image/png' });
-        
-        // Removido o campo "text:" para que o WhatsApp não engula a imagem.
-        // O texto já está "impresso" visualmente dentro da própria foto!
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Atenção Técnica' });
-        } else {
-          alert("Baixando a foto de alerta para você enviar no WhatsApp.");
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = file.name; a.click();
-          URL.revokeObjectURL(url);
-        }
-      }, 'image/png');
+      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `Alerta_${clienteRelatorio.nome}.png`, { type: 'image/png' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Atenção Técnica' });
+      } else {
+        alert("Baixando a foto de alerta para você enviar no WhatsApp.");
+        const a = document.createElement('a');
+        a.href = dataUrl; a.download = file.name; a.click();
+      }
     } catch(e) {
-      alert('Erro ao processar a imagem do relato.');
+      alert('Erro ao processar a imagem do relato: ' + e.message);
     }
   };
-
-  // --- RENDERIZAÇÃO ---
 
   if (tela === 'lista') {
     return (
@@ -503,7 +492,6 @@ export default function App() {
           )}
 
           <div className="flex gap-2 mb-4">
-            {/* CORREÇÃO: O botão TEXTO agora passa a função LIMPA de enviarAvisoWhatsApp */}
             <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, produtosDoRelatorio)} className="flex-1 bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"><MessageSquare size={18} /> Texto</button>
             <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"><Share2 size={18} /> Imagem PDF</button>
           </div>

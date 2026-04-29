@@ -1,0 +1,16 @@
+{
+  "short_name": "Mão Na Água",
+  "name": "Mão Na Água - Gestão Profissional",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ec4899",
+  "background_color": "#09090b"
+}

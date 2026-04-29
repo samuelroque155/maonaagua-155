@@ -1,25 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Fundo invisível/transparente, ou escuro dependendo do tema -->
   <defs>
     <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#facc15;stop-opacity:1" /> <!-- Amarelo -->
-      <stop offset="50%" style="stop-color:#ec4899;stop-opacity:1" /> <!-- Rosa -->
-      <stop offset="100%" style="stop-color:#9333ea;stop-opacity:1" /> <!-- Roxo -->
+      <stop offset="0%" style="stop-color:#facc15;stop-opacity:1" /> 
+      <stop offset="50%" style="stop-color:#ec4899;stop-opacity:1" /> 
+      <stop offset="100%" style="stop-color:#9333ea;stop-opacity:1" /> 
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="10" stdDeviation="15" flood-color="#ec4899" flood-opacity="0.4"/>
+      <feDropShadow dx="0" dy="10" stdDeviation="15" flood-color="#ec4899" flood-opacity="0.3"/>
     </filter>
   </defs>
 
-  <!-- Fundo escuro levemente arredondado para contraste no celular -->
-  <rect width="512" height="512" rx="112" fill="#09090b" />
+  <rect width="512" height="512" rx="112" fill="#ffffff" />
 
-  <!-- Forma do pingo d'água / escudo centralizado -->
   <path d="M 256 96 C 256 96 112 256 112 336 C 112 415.5 176.5 448 256 448 C 335.5 448 400 415.5 400 336 C 400 256 256 96 256 96 Z" fill="url(#grad1)" filter="url(#shadow)"/>
 
-  <!-- Brilho/Reflexo na água para dar volume 3D -->
-  <path d="M 216 190 C 160 250 144 300 144 336 C 144 360 152 380 168 396 C 168 396 160 350 216 280 C 260 225 216 190 216 190 Z" fill="#ffffff" opacity="0.3"/>
-
-  <!-- Letra M central em branco absoluto com bordas suaves -->
-  <path d="M 206 380 L 206 280 L 256 330 L 306 280 L 306 380 L 336 380 L 336 240 L 256 300 L 176 240 L 176 380 Z" fill="#ffffff" opacity="0.95"/>
+  <path d="M 206 380 L 206 280 L 256 330 L 306 280 L 306 380 L 336 380 L 336 240 L 256 300 L 176 240 L 176 380 Z" fill="#ffffff" />
 </svg>

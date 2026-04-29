@@ -31,9 +31,9 @@ const listaQuimica = [
 const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
 // --- O SEU NOVO TEMA AQUÁTICO EM GRADIENTE ---
-const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
+const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
 const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
-const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; // Usado em separadores especiais
+const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
 const gradIconBg = "bg-gradient-to-br from-sky-100 to-emerald-100 dark:from-sky-900/30 dark:to-emerald-900/30 text-teal-600 dark:text-teal-400";
 
 export default function App() {
@@ -406,6 +406,9 @@ export default function App() {
             </button>
             <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
               <CalendarDays size={20} />
+            </button>
+            <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-500 shadow-sm hover:scale-105 transition-transform">
+              <LogOut size={20} />
             </button>
           </div>
         </header>

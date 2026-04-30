@@ -33,7 +33,7 @@ const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', '
 // --- O SEU NOVO TEMA AQUÁTICO EM GRADIENTE ---
 const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
 const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
-const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; // Usado em separadores especiais
+const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
 const gradIconBg = "bg-gradient-to-br from-sky-100 to-emerald-100 dark:from-sky-900/30 dark:to-emerald-900/30 text-teal-600 dark:text-teal-400";
 
 export default function App() {
@@ -229,8 +229,9 @@ export default function App() {
       return;
     }
     
-    const tempoMs = Date.now() - (horaInicioVisita || Date.now());
-    const tempoMinutos = Math.max(1, Math.round(tempoMs / 60000)); 
+    // --- TEMPO CORRIGIDO E APLICADO AQUI ---
+    const tempoMsTotal = Date.now() - (horaInicioVisita || Date.now());
+    const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
     
     const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
@@ -243,6 +244,7 @@ export default function App() {
       p: ph, 
       al: alcalinidade, 
       t: tempoFormatado,
+      tMs: tempoMsTotal, // Salva o tempo real em milissegundos
       fotos: fotosVisita, 
       fotoA: fotoAlerta, 
       txtA: textoAlerta
@@ -277,7 +279,10 @@ export default function App() {
     setAspecto(ultimaVisitaReal.a || ''); setPh(ultimaVisitaReal.p || ''); setCloro(ultimaVisitaReal.c || ''); setAlcalinidade(ultimaVisitaReal.al || '');
     setFotosVisita(ultimaVisitaReal.fotos || []); setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
     setFotoAlerta(ultimaVisitaReal.fotoA || null); setTextoAlerta(ultimaVisitaReal.txtA || '');
-    setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []); setHoraInicioVisita(Date.now()); 
+    setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []); 
+    
+    // --- TEMPO COMPENSADO AQUI ---
+    setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
     
     const novoHistorico = historico.slice(0, -1);
     atualizarE_SalvarClientes(clientes.map(c => c.id === clienteAlvo.id ? { 
@@ -406,6 +411,10 @@ export default function App() {
             </button>
             <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
               <CalendarDays size={20} />
+            </button>
+            {/* BOTÃO DE SAIR ADICIONADO AQUI! */}
+            <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-rose-500 shadow-sm hover:scale-105 transition-transform">
+              <LogOut size={20} />
             </button>
           </div>
         </header>
@@ -584,7 +593,7 @@ export default function App() {
               })}
             </div>
           </section>
-          <button onClick={salvarVisita} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg ${gradBtn}`}>SALVAR E FINALIZAR</button>
+          <button onClick={salvarVisita} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>SALVAR E FINALIZAR</button>
         </div>
       </div>
     );

@@ -10,22 +10,31 @@ import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-// --- CONFIGURAÇÕES DOS PRODUTOS ---
+// --- CONFIGURAÇÕES DOS PRODUTOS E ACESSÓRIOS ---
 const listaQuimica = [
-  'Solo (Sanitizante iGUI)', 
-  'Oxi (Oxidante iGUI)', 
-  'Cloro Granulado Splash 10kg', 
-  'Cloro Granulado Splash 1kg', 
-  'Cloro em Pastilha (iGUI/Splash)', 
-  'Algicida Manutenção (iGUI/Splash)', 
-  'Algicida Choque (iGUI/Splash)', 
-  'Decantador / Clarificante (iGUI/Splash)', 
-  'Limpa Bordas (iGUI/Splash)', 
-  'Barrilha Leve / Elevador de pH', 
-  'Redutor de pH e Alcalinidade', 
-  'Elevador de Alcalinidade',
-  'Floculante',
-  'Sal para Gerador'
+  'CLORO BALDE 10 KL', 
+  'CLORO 1 KL', 
+  'ELEVADOR DE ALCALINIDADE 2 KL', 
+  'BARRILHA 2KL', 
+  'SULFATO DE ALUMÍNIO 2KL', 
+  'LIMPA BORDAS 1LT', 
+  'CLARIFICANTE 1LT', 
+  'CLARIFICANTE EM GEL', 
+  'REDUTOR DE PH E ALCALINIDADE 1LT', 
+  'ALGICIDA SEM COBRE 1LT', 
+  'ALGICIDA DE MANUTENÇÃO 1LT', 
+  'ALGICIDA DE CHOQUE 1LT', 
+  'SAL PRA GERADOR DE CLORO 25 KL'
+];
+
+const listaAcessorios = [
+  'ESCOVA PRA PISCINA', 
+  'ASPIRADOR', 
+  'CABO TELESCÓPIO 4MTs', 
+  'CABO TELESCÓPIO 6 MTs', 
+  'CAPA TÉRMICA', 
+  'MANGUEIRA DE ASPIRAÇÃO', 
+  'PENEIRA TIPO PELICANO'
 ];
 
 const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -33,7 +42,7 @@ const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', '
 // --- O SEU NOVO TEMA AQUÁTICO EM GRADIENTE ---
 const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
 const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
-const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
+const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; // Usado em separadores especiais
 const gradIconBg = "bg-gradient-to-br from-sky-100 to-emerald-100 dark:from-sky-900/30 dark:to-emerald-900/30 text-teal-600 dark:text-teal-400";
 
 export default function App() {
@@ -229,7 +238,6 @@ export default function App() {
       return;
     }
     
-    // --- TEMPO CORRIGIDO E APLICADO AQUI ---
     const tempoMsTotal = Date.now() - (horaInicioVisita || Date.now());
     const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
@@ -244,7 +252,7 @@ export default function App() {
       p: ph, 
       al: alcalinidade, 
       t: tempoFormatado,
-      tMs: tempoMsTotal, // Salva o tempo real em milissegundos
+      tMs: tempoMsTotal, 
       fotos: fotosVisita, 
       fotoA: fotoAlerta, 
       txtA: textoAlerta
@@ -281,7 +289,6 @@ export default function App() {
     setFotoAlerta(ultimaVisitaReal.fotoA || null); setTextoAlerta(ultimaVisitaReal.txtA || '');
     setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []); 
     
-    // --- TEMPO COMPENSADO AQUI ---
     setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
     
     const novoHistorico = historico.slice(0, -1);
@@ -309,7 +316,7 @@ export default function App() {
   const enviarAvisoWhatsApp = (cliente, historicoProdutos = []) => {
     let mensagem = `Olá, ${cliente.nome}! 🌊\nPassando para avisar que a manutenção da sua piscina foi concluída com sucesso.\n\n`;
     if (historicoProdutos.length > 0) {
-       mensagem += `⚠️ *Produtos Faltando:*\nIdentifiquei que precisamos repor alguns itens:\n`;
+       mensagem += `⚠️ *Produtos/Acessórios Faltando:*\nIdentifiquei que precisamos repor alguns itens:\n`;
        historicoProdutos.forEach(p => { mensagem += `- ${p.qtd}x ${p.nome}\n`; });
        mensagem += `\n`;
     }
@@ -412,7 +419,7 @@ export default function App() {
             <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
               <CalendarDays size={20} />
             </button>
-            {/* BOTÃO DE SAIR ADICIONADO AQUI! */}
+            {/* BOTÃO SAIR */}
             <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-rose-500 shadow-sm hover:scale-105 transition-transform">
               <LogOut size={20} />
             </button>
@@ -567,6 +574,7 @@ export default function App() {
             </div>
           </section>
 
+          {/* NOVA LISTA DE PRODUTOS QUÍMICOS */}
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
             <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Produtos a Repor</p>
@@ -593,6 +601,35 @@ export default function App() {
               })}
             </div>
           </section>
+          
+          {/* NOVA SEÇÃO DE ACESSÓRIOS A REPOR */}
+          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-sky-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
+            <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Acessórios a Repor</p>
+            <div className="space-y-3">
+              {listaAcessorios.map(q => {
+                const item = produtosFaltando.find(p => p.nome === q);
+                return (
+                  <div key={q} className={`flex flex-col p-3 rounded-[1.25rem] border transition-colors ${item ? 'bg-gradient-to-r from-sky-50 to-teal-50 dark:from-sky-900/10 dark:to-teal-900/10 border-teal-300 dark:border-teal-700/50' : 'bg-slate-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-teal-200 dark:hover:border-teal-800'}`}>
+                    <div className="flex items-center justify-between">
+                      <button onClick={() => toggleProduto(q)} className="flex items-center gap-3.5 flex-1 text-left">
+                        <div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${item ? 'bg-gradient-to-br from-sky-400 to-teal-400 border-transparent shadow-sm' : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900'}`}>{item && <Check size={14} className="text-white font-black" />}</div>
+                        <span className={`text-sm font-medium ${item ? 'text-teal-800 dark:text-teal-300 font-bold' : 'text-zinc-600 dark:text-zinc-400'}`}>{q}</span>
+                      </button>
+                      {item && (
+                        <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 rounded-xl p-1.5 border border-teal-100 dark:border-teal-800 shadow-sm">
+                          <button onClick={() => updateQtdProduto(q, -1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"><Minus size={14} /></button>
+                          <span className="font-bold text-sm w-4 text-center text-teal-700 dark:text-teal-400">{item.qtd}</span>
+                          <button onClick={() => updateQtdProduto(q, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"><Plus size={14} /></button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
           <button onClick={salvarVisita} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>SALVAR E FINALIZAR</button>
         </div>
       </div>

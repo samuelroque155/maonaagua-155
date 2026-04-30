@@ -593,9 +593,18 @@ export default function App() {
                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
              </label>
              
+             {/* NOVO: OPÇÃO DE EXCLUIR A FOTO DE PROBLEMA */}
              {fotoAlerta && (
                <div className="ml-3 mr-3 mt-4 space-y-4">
-                 <img src={fotoAlerta} className="w-full h-48 object-cover rounded-[1.25rem] border border-rose-200 dark:border-rose-800 shadow-sm" alt="Problema" />
+                 <div className="relative">
+                   <img src={fotoAlerta} className="w-full h-48 object-cover rounded-[1.25rem] border border-rose-200 dark:border-rose-800 shadow-sm" alt="Problema" />
+                   <button 
+                     onClick={() => setFotoAlerta(null)}
+                     className="absolute top-2 right-2 bg-rose-500/90 text-white rounded-lg p-2 shadow-sm hover:bg-rose-600 transition-colors backdrop-blur-sm"
+                   >
+                     <Trash2 size={16} />
+                   </button>
+                 </div>
                  <textarea 
                    placeholder="Descreva a peça partida, vazamento..." 
                    value={textoAlerta}

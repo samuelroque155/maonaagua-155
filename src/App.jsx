@@ -182,6 +182,11 @@ export default function App() {
     setFotosContagem(prev => prev + 1);
   });
 
+  const removerFoto = (indexToRemove) => {
+    setFotosVisita(prev => prev.filter((_, index) => index !== indexToRemove));
+    setFotosContagem(prev => prev - 1);
+  };
+
   const handleFotoAlerta = (e) => processarFotoComprimida(e, (base64) => {
     setFotoAlerta(base64);
   });
@@ -238,7 +243,14 @@ export default function App() {
       return;
     }
     
-    const tempoMsTotal = Date.now() - (horaInicioVisita || Date.now());
+    const dataFim = new Date();
+    const dataInicio = new Date(horaInicioVisita || Date.now());
+    
+    // FORMATANDO A HORA (EX: 14:30)
+    const formataHora = (data) => `${data.getHours().toString().padStart(2, '0')}:${data.getMinutes().toString().padStart(2, '0')}`;
+    const horarioVisita = `${formataHora(dataInicio)} - ${formataHora(dataFim)}`;
+
+    const tempoMsTotal = dataFim.getTime() - dataInicio.getTime();
     const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
     
@@ -247,6 +259,7 @@ export default function App() {
     
     const novaVisita = {
       d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
+      h: horarioVisita, 
       a: aspecto, 
       c: cloro, 
       p: ph, 
@@ -419,7 +432,6 @@ export default function App() {
             <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
               <CalendarDays size={20} />
             </button>
-            {/* BOTÃO SAIR */}
             <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-rose-500 shadow-sm hover:scale-105 transition-transform">
               <LogOut size={20} />
             </button>
@@ -541,6 +553,23 @@ export default function App() {
               <Camera size={36} className="text-teal-400" /> <span className="text-sm font-bold tracking-wide">Adicionar Foto da Piscina</span>
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleNovaFoto} />
             </label>
+            
+            {/* NOVO: EXIBIR MINIATURAS DAS FOTOS COM BOTÃO DE EXCLUIR */}
+            {fotosVisita.length > 0 && (
+              <div className="flex gap-3 overflow-x-auto mt-5 pb-2 scrollbar-hide">
+                {fotosVisita.map((foto, index) => (
+                  <div key={index} className="relative min-w-[80px] h-20 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm flex-shrink-0">
+                    <img src={foto} className="w-full h-full object-cover" alt={`Foto ${index + 1}`} />
+                    <button 
+                      onClick={() => removerFoto(index)}
+                      className="absolute top-1 right-1 bg-rose-500/90 text-white rounded-md p-1 shadow-sm hover:bg-rose-600 transition-colors backdrop-blur-sm"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-rose-200 dark:border-rose-900/30 relative overflow-hidden transition-colors shadow-sm">
@@ -574,7 +603,6 @@ export default function App() {
             </div>
           </section>
 
-          {/* NOVA LISTA DE PRODUTOS QUÍMICOS */}
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
             <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Produtos a Repor</p>
@@ -602,7 +630,6 @@ export default function App() {
             </div>
           </section>
           
-          {/* NOVA SEÇÃO DE ACESSÓRIOS A REPOR */}
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-sky-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
             <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Acessórios a Repor</p>
@@ -764,7 +791,7 @@ export default function App() {
                       <tr>
                         <th className="p-2 border-b">Data</th>
                         <th className="p-2 border-b text-center">Aspecto</th>
-                        <th className="p-2 border-b text-center text-teal-600">Tempo</th>
+                        <th className="p-2 border-b text-center text-teal-600">Horário / Tempo</th>
                         <th className="p-2 border-b text-center">Cloro</th>
                         <th className="p-2 border-b text-center">pH</th>
                         <th className="p-2 border-b text-center">Alc</th>
@@ -778,7 +805,12 @@ export default function App() {
                            <tr key={i} className="hover:bg-slate-50 transition-colors">
                              <td className="p-2 font-bold text-zinc-800 whitespace-nowrap">{v.d}</td>
                              <td className={`p-2 text-center font-bold ${v.a === 'Cristalina' ? 'text-emerald-500' : 'text-yellow-500'}`}>{v.a}</td>
-                             <td className="p-2 text-center font-bold text-zinc-500 flex items-center justify-center gap-1"><Clock size={9}/> {v.t || '--'}</td>
+                             <td className="p-2 text-center font-bold text-zinc-500">
+                               <div className="flex flex-col items-center justify-center gap-0.5">
+                                 <span className="text-[9px] whitespace-nowrap text-zinc-600 dark:text-zinc-400">{v.h || '--'}</span>
+                                 <span className="flex items-center gap-1 text-[10px]"><Clock size={9} className="text-teal-500"/> {v.t || '--'}</span>
+                               </div>
+                             </td>
                              <td className="p-2 text-center text-zinc-700">{v.c}</td>
                              <td className="p-2 text-center text-zinc-700">{v.p}</td>
                              <td className="p-2 text-center text-zinc-700">{v.al}</td>

@@ -1,109 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw
 } from 'lucide-react';
-import { toPng } from 'html-to-image';
+import html2canvas from 'html2canvas';
 
-// --- IMPORTAÇÕES DO FIREBASE ---
-import { auth, db } from './firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-
-// --- CONFIGURAÇÕES DOS PRODUTOS ---
+// --- CONFIGURAÇÕES ---
 const listaQuimica = [
-  'Solo (Sanitizante iGUI)', 
-  'Oxi (Oxidante iGUI)', 
-  'Cloro Granulado Splash 10kg', 
-  'Cloro Granulado Splash 1kg', 
-  'Cloro em Pastilha (iGUI/Splash)', 
-  'Algicida Manutenção (iGUI/Splash)', 
-  'Algicida Choque (iGUI/Splash)', 
-  'Decantador / Clarificante (iGUI/Splash)', 
-  'Limpa Bordas (iGUI/Splash)', 
-  'Barrilha Leve / Elevador de pH', 
-  'Redutor de pH e Alcalinidade', 
-  'Elevador de Alcalinidade',
-  'Floculante',
-  'Sal para Gerador'
+  'Cloro Granulado 10kg', 'Cloro Granulado 1kg', 'Cloro em Pastilha', 'Algicida de Manutenção', 
+  'Algicida de Choque', 'Algicida sem cobre', 'Clarificante / Decantador', 'Clarificante em Gel', 
+  'Sulfato de Alumínio 2kg', 'Barrilha Leve 2kg', 'Elevador de Alcalinidade 2kg', 
+  'Redutor de pH e Alcalinidade', 'Limpa Bordas', 'Sal para Gerador'
 ];
-
 const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-
-// --- O SEU NOVO TEMA AQUÁTICO EM GRADIENTE ---
-const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
-const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
-const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
-const gradIconBg = "bg-gradient-to-br from-sky-100 to-emerald-100 dark:from-sky-900/30 dark:to-emerald-900/30 text-teal-600 dark:text-teal-400";
+const gradBtn = "bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 text-white border-none";
+const gradText = "bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-500 bg-clip-text text-transparent";
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [emailLogin, setEmailLogin] = useState('');
-  const [senhaLogin, setSenhaLogin] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
-  
-  const dateObj = new Date();
-  const diaAtual = dateObj.getDay(); 
-  const dataHojeStr = dateObj.toDateString();
-  const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-  const mesEscrito = mesesCompletos[dateObj.getMonth()];
-  const anoEscrito = dateObj.getFullYear();
+  const diaAtual = new Date().getDay(); 
+  const dataHojeStr = new Date().toDateString();
 
-  const [modoEscuro, setModoEscuro] = useState(() => {
-    const salvo = localStorage.getItem('maonagua_tema');
-    return salvo !== null ? JSON.parse(salvo) : true; 
+  const [clientes, setClientes] = useState(() => {
+    const salvo = localStorage.getItem('maonagua_v4');
+    return salvo ? JSON.parse(salvo) : [
+      { id: 1, nome: 'Dona Maria', endereco: 'Centro', diasVisita: [1, 4], adiadoPara: null, ultimaVisita: null, ultimosProdutosFaltando: [], historicoVisitas: [] },
+      { id: 2, nome: 'Condomínio Solar', endereco: 'Bairro das Acácias', diasVisita: [diaAtual], adiadoPara: null, ultimaVisita: null, ultimosProdutosFaltando: [], historicoVisitas: [] }
+    ];
   });
 
   useEffect(() => {
-    localStorage.setItem('maonagua_tema', JSON.stringify(modoEscuro));
-    if (modoEscuro) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [modoEscuro]);
-
-  const [clientes, setClientes] = useState([]);
-
-  useEffect(() => {
-    const desinscrever = onAuthStateChanged(auth, async (usuarioAtual) => {
-      setUser(usuarioAtual);
-      if (usuarioAtual) {
-        const docRef = doc(db, 'usuarios', usuarioAtual.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setClientes(docSnap.data().clientes || []);
-        } else {
-          await setDoc(docRef, { clientes: [] });
-          setClientes([]);
-        }
-      }
-      setAuthLoading(false);
-    });
-    return () => desinscrever();
-  }, []);
-
-  const atualizarE_SalvarClientes = async (novosClientes) => {
-    setClientes(novosClientes); 
-    if (user) {
-      await setDoc(doc(db, 'usuarios', user.uid), { clientes: novosClientes });
-    }
-  };
+    localStorage.setItem('maonagua_v4', JSON.stringify(clientes));
+  }, [clientes]);
 
   const [clienteAtual, setClienteAtual] = useState(null);
   const [aspecto, setAspecto] = useState(''); 
   const [ph, setPh] = useState('');
   const [cloro, setCloro] = useState('');
   const [alcalinidade, setAlcalinidade] = useState('');
+  
   const [fotosContagem, setFotosContagem] = useState(0);
   const [fotosVisita, setFotosVisita] = useState([]);
   const [horaInicioVisita, setHoraInicioVisita] = useState(null);
+  
   const [fotoAlerta, setFotoAlerta] = useState(null);
   const [textoAlerta, setTextoAlerta] = useState('');
+
   const [produtosFaltando, setProdutosFaltando] = useState([]);
   const [mostrarAdiarId, setMostrarAdiarId] = useState(null);
   
@@ -111,38 +54,11 @@ export default function App() {
   const [novoEndereco, setNovoEndereco] = useState('');
   const [novosDias, setNovosDias] = useState([]);
 
-  const piscinasDeHoje = clientes.filter(c => c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual);
-
-  const handleLogin = async () => {
-    if(!emailLogin || !senhaLogin) return alert("Preencha e-mail e senha");
-    try {
-      await signInWithEmailAndPassword(auth, emailLogin, senhaLogin);
-    } catch (error) {
-      alert("Erro ao entrar: Verifique o e-mail e a senha.");
-    }
-  };
-
-  const handleCadastro = async () => {
-    if(!emailLogin || !senhaLogin) return alert("Preencha e-mail e senha");
-    if(senhaLogin.length < 6) return alert("A senha deve ter pelo menos 6 caracteres.");
-    try {
-      await createUserWithEmailAndPassword(auth, emailLogin, senhaLogin);
-    } catch (error) {
-      alert("Erro ao cadastrar: " + error.message);
-    }
-  };
-
-  const handleSair = async () => {
-    const sair = window.confirm("Tem certeza que deseja sair da sua conta?");
-    if(sair) await signOut(auth);
-  };
+  const piscinasDeHoje = clientes.filter(c => c.ultimaVisita !== dataHojeStr && (c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual));
 
   const iniciarVisita = (cliente) => {
-    atualizarE_SalvarClientes(clientes.map(c => c.id === cliente.id ? { ...c, visitaEmAndamentoData: dataHojeStr } : c));
     setClienteAtual(cliente);
-    if (cliente.visitaEmAndamentoData !== dataHojeStr) {
-      setHoraInicioVisita(Date.now()); 
-    }
+    setHoraInicioVisita(Date.now()); 
     setTela('visita');
   };
 
@@ -191,15 +107,15 @@ export default function App() {
   };
 
   const adiarVisita = (clienteId, novoDiaIndex) => {
-    atualizarE_SalvarClientes(clientes.map(c => c.id === clienteId ? { ...c, adiadoPara: novoDiaIndex } : c));
+    setClientes(clientes.map(c => c.id === clienteId ? { ...c, adiadoPara: novoDiaIndex } : c));
     setMostrarAdiarId(null);
   };
 
   const adicionarCliente = () => {
     if (novoNome && novoEndereco && novosDias.length > 0) {
-      atualizarE_SalvarClientes([...clientes, { 
+      setClientes([...clientes, { 
         id: Date.now(), nome: novoNome, endereco: novoEndereco, diasVisita: novosDias,
-        adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
+        adiadoPara: null, ultimaVisita: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
       }]);
       setNovoNome(''); setNovoEndereco(''); setNovosDias([]); setTela('lista');
     } else {
@@ -211,89 +127,70 @@ export default function App() {
     setNovosDias(novosDias.includes(diaIndex) ? novosDias.filter(d => d !== diaIndex) : [...novosDias, diaIndex]);
   };
 
-  const excluirCliente = (id) => {
-    const confirmacao = window.confirm("⚠️ TEM CERTEZA?\n\nIsso vai apagar este cliente e todo o histórico de visitas dele para sempre da nuvem.");
-    if (confirmacao) {
-      atualizarE_SalvarClientes(clientes.filter(c => c.id !== id));
-      setTela('relatorio');
-    }
-  };
-
-  const validarFecharTarefa = () => {
-    return fotosContagem >= 3 && ph !== '' && cloro !== '' && alcalinidade !== '' && aspecto !== '';
-  };
-
   const salvarVisita = () => {
-    if (!validarFecharTarefa()) {
+    if (fotosContagem < 3 || !ph || !cloro || !alcalinidade || !aspecto) {
       alert("⚠️ ATENÇÃO:\n\nPara finalizar, você precisa de:\n- No mínimo 3 fotos\n- Preencher pH, Cloro e Alc\n- Selecionar o aspecto da água.");
       return;
     }
     
-    const tempoMs = Date.now() - (horaInicioVisita || Date.now());
-    const tempoMinutos = Math.max(1, Math.round(tempoMs / 60000)); 
+    // CORREÇÃO DO TEMPO: Cálculo do tempo total em milissegundos para salvar no histórico
+    const tempoMsTotal = Date.now() - (horaInicioVisita || Date.now());
+    const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
     
+    const dateObj = new Date();
     const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
-    const mesesCurtos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     
     const novaVisita = {
-      d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
-      a: aspecto, 
-      c: cloro, 
-      p: ph, 
-      al: alcalinidade, 
+      d: `${diaFormatado}/${meses[dateObj.getMonth()]}`,
+      a: aspecto, c: cloro, p: ph, al: alcalinidade, 
       t: tempoFormatado,
-      fotos: fotosVisita, 
-      fotoA: fotoAlerta, 
-      txtA: textoAlerta
+      tMs: tempoMsTotal, // Guardamos os milissegundos reais para a conta do "Reabrir"
+      fotos: fotosVisita, fotoA: fotoAlerta, txtA: textoAlerta
     };
     
-    atualizarE_SalvarClientes(clientes.map(c => {
+    setClientes(clientes.map(c => {
       if (c.id === clienteAtual.id) {
-        const historicoBase = c.historicoVisitas || [];
         return { 
-          ...c, 
-          ultimaVisita: dataHojeStr, 
-          visitaEmAndamentoData: null, 
-          adiadoPara: null,
+          ...c, ultimaVisita: dataHojeStr, adiadoPara: null,
           ultimosProdutosFaltando: [...produtosFaltando],
-          historicoVisitas: [...historicoBase, novaVisita]
+          historicoVisitas: [...(c.historicoVisitas || []), novaVisita]
         };
       }
       return c;
     }));
 
-    alert(`✅ VISITA FINALIZADA!\n\nSalvo na nuvem com sucesso. Tempo: ${tempoFormatado}`);
+    alert(`✅ VISITA FINALIZADA!`);
     setTela('lista');
     resetarFormulario();
   };
 
-  const executarReabertura = (clienteAlvo) => {
-    const historico = clienteAlvo.historicoVisitas || [];
+  const reabrirTarefa = () => {
+    const clienteParaEditar = clientes.find(c => c.id === clienteRelatorio.id);
+    const historico = clienteParaEditar.historicoVisitas || [];
     if (historico.length === 0) return;
-    
     const ultimaVisitaReal = historico[historico.length - 1];
     
-    setAspecto(ultimaVisitaReal.a || ''); setPh(ultimaVisitaReal.p || ''); setCloro(ultimaVisitaReal.c || ''); setAlcalinidade(ultimaVisitaReal.al || '');
-    setFotosVisita(ultimaVisitaReal.fotos || []); setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
-    setFotoAlerta(ultimaVisitaReal.fotoA || null); setTextoAlerta(ultimaVisitaReal.txtA || '');
-    setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []); setHoraInicioVisita(Date.now()); 
+    setAspecto(ultimaVisitaReal.a || '');
+    setPh(ultimaVisitaReal.p || '');
+    setCloro(ultimaVisitaReal.c || '');
+    setAlcalinidade(ultimaVisitaReal.al || '');
+    setFotosVisita(ultimaVisitaReal.fotos || []);
+    setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
+    setFotoAlerta(ultimaVisitaReal.fotoA || null);
+    setTextoAlerta(ultimaVisitaReal.txtA || '');
+    setProdutosFaltando(clienteParaEditar.ultimosProdutosFaltando || []);
+    
+    // CORREÇÃO MÁGICA: Ajustamos a "hora de início" para o passado
+    // Se gastaste 30min antes, a nova hora de início será "Agora - 30min"
+    setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
     
     const novoHistorico = historico.slice(0, -1);
-    atualizarE_SalvarClientes(clientes.map(c => c.id === clienteAlvo.id ? { 
-      ...c, 
-      ultimaVisita: null, 
-      visitaEmAndamentoData: dataHojeStr,
-      historicoVisitas: novoHistorico, 
-      ultimosProdutosFaltando: [] 
-    } : c));
-    
-    setClienteAtual(clienteAlvo);
+    setClientes(clientes.map(c => c.id === clienteParaEditar.id ? { ...c, ultimaVisita: null, historicoVisitas: novoHistorico, ultimosProdutosFaltando: [] } : c));
+    setClienteAtual(clienteParaEditar);
     setTela('visita');
   };
-
-  const reabrirTarefaDaHome = (cliente) => executarReabertura(cliente);
-  const reabrirTarefa = () => executarReabertura(clientes.find(c => c.id === clienteRelatorio.id));
 
   const resetarFormulario = () => {
     setAspecto(''); setPh(''); setCloro(''); setAlcalinidade('');
@@ -301,11 +198,11 @@ export default function App() {
     setFotoAlerta(null); setTextoAlerta(''); setProdutosFaltando([]); setClienteAtual(null);
   };
 
-  const enviarAvisoWhatsApp = (cliente, historicoProdutos = []) => {
+  const enviarAvisoWhatsApp = (cliente, listaProdutos = [], relatoProblema = '') => {
     let mensagem = `Olá, ${cliente.nome}! 🌊\nPassando para avisar que a manutenção da sua piscina foi concluída com sucesso.\n\n`;
-    if (historicoProdutos.length > 0) {
-       mensagem += `⚠️ *Produtos Faltando:*\nIdentifiquei que precisamos repor alguns itens:\n`;
-       historicoProdutos.forEach(p => { mensagem += `- ${p.qtd}x ${p.nome}\n`; });
+    if (listaProdutos.length > 0) {
+       mensagem += `⚠️ *Produtos Faltando:*\n`;
+       listaProdutos.forEach(p => { mensagem += `- ${p.qtd}x ${p.nome}\n`; });
        mensagem += `\n`;
     }
     mensagem += `Qualquer dúvida, estou à disposição!\n*Mão Na Água - Gestão Profissional*`;
@@ -316,487 +213,177 @@ export default function App() {
     const elemento = document.getElementById('relatorio-print');
     if (!elemento) return;
     try {
-      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], `Relatorio_${clienteRelatorio.nome}.png`, { type: 'image/png' });
-      
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ title: 'Relatório Mão Na Água', files: [file] });
-      } else {
-        const a = document.createElement('a'); a.href = dataUrl; a.download = file.name; a.click();
-        alert("Imagem salva na sua galeria/downloads!");
-      }
-    } catch (error) { alert("Erro ao processar PDF: " + error.message); }
+      const canvas = await html2canvas(elemento, { scale: 2, useCORS: true });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `Relatorio_${clienteRelatorio.nome}.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: 'Relatório Mão Na Água', files: [file] });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = file.name; a.click();
+          URL.revokeObjectURL(url);
+          alert("Imagem salva!");
+        }
+      }, 'image/png');
+    } catch (error) { alert("Erro ao gerar imagem."); }
   };
 
   const compartilharAlertaSeparado = async (visita) => {
     const elemento = document.getElementById('alerta-print');
     if (!elemento) return;
     try {
-      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], `Alerta_${clienteRelatorio.nome}.png`, { type: 'image/png' });
-      
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Atenção Técnica' });
-      } else {
-        alert("Baixando a foto de alerta para você enviar no WhatsApp.");
-        const a = document.createElement('a'); a.href = dataUrl; a.download = file.name; a.click();
-      }
-    } catch(e) { alert('Erro ao processar a imagem do relato: ' + e.message); }
+      const canvas = await html2canvas(elemento, { scale: 2, useCORS: true });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `Alerta_${clienteRelatorio.nome}.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'Atenção Técnica' });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = file.name; a.click();
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+    } catch(e) { alert('Erro ao processar imagem.'); }
   };
 
-  if (authLoading) {
-    return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-teal-400 font-bold">A conectar ao Firebase...</div>;
-  }
+  // --- RENDERIZAÇÃO ---
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-white font-sans relative overflow-hidden">
-        <div className="absolute top-[-20%] left-[-10%] w-96 h-96 bg-sky-500 rounded-full mix-blend-screen filter blur-[120px] opacity-20"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-80 h-80 bg-emerald-400 rounded-full mix-blend-screen filter blur-[100px] opacity-20"></div>
-
-        <div className="w-full max-w-sm relative z-10">
-          <div className="text-center mb-10">
-            <h1 className={`text-6xl font-black mb-2 tracking-tight ${gradText} drop-shadow-sm`}>Mão Na Água</h1>
-            <p className="text-teal-200/60 font-medium tracking-widest uppercase text-xs mt-3">Gestão Profissional</p>
-          </div>
-
-          <div className="bg-zinc-900/60 p-8 rounded-[2rem] border border-zinc-800 shadow-2xl backdrop-blur-md">
-            <h2 className="text-xl font-bold mb-8 text-zinc-100">{isRegistering ? 'Criar Nova Conta' : 'Aceda à sua aplicação'}</h2>
-            
-            <div className="space-y-5">
-              <div>
-                <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider ml-2">E-mail</label>
-                <input type="email" placeholder="seu@email.com" value={emailLogin} onChange={e => setEmailLogin(e.target.value)} className="w-full bg-zinc-950/80 border border-zinc-800 p-4 rounded-2xl outline-none focus:border-teal-400 text-white transition-colors mt-1" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider ml-2">Senha</label>
-                <input type="password" placeholder="Mínimo 6 caracteres" value={senhaLogin} onChange={e => setSenhaLogin(e.target.value)} className="w-full bg-zinc-950/80 border border-zinc-800 p-4 rounded-2xl outline-none focus:border-teal-400 text-white transition-colors mt-1" />
-              </div>
-              
-              <button onClick={isRegistering ? handleCadastro : handleLogin} className={`w-full py-4 rounded-2xl font-bold mt-6 text-lg ${gradBtn}`}>
-                {isRegistering ? 'CADASTRAR E ENTRAR' : 'ENTRAR'}
-              </button>
+  if (tela === 'lista') return (
+    <div className="min-h-screen bg-zinc-950 p-4 max-w-md mx-auto text-zinc-100 pb-24 font-sans">
+      <header className="flex justify-between items-start mb-6 border-b border-zinc-800 pb-4">
+        <div><h1 className={`text-4xl font-black ${gradText}`}>Mão Na Água</h1><p className="text-zinc-500 text-sm">Hoje é {diasDaSemanaNomes[diaAtual]}</p></div>
+        <button onClick={() => setTela('agenda')} className="bg-zinc-900 p-2 rounded-xl border border-zinc-800 text-pink-500"><CalendarDays size={20} /></button>
+      </header>
+      <h2 className={`font-bold text-xl mb-4 ${gradText}`}>Limpar Hoje</h2>
+      <div className="space-y-4">
+        {piscinasDeHoje.length === 0 ? (
+          <div className="text-center bg-zinc-900 p-8 rounded-3xl border border-zinc-800 mt-10 shadow-lg"><Check size={48} className="mx-auto text-pink-500 mb-3" /><p className="font-bold text-lg">Tudo limpo por hoje!</p></div>
+        ) : piscinasDeHoje.map(c => (
+          <div key={c.id} className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800 shadow-lg">
+            <h3 className="font-bold text-lg">{c.nome}</h3>
+            <p className="text-xs text-zinc-400 mb-4 flex items-center gap-1"><MapPin size={12} className="text-pink-500"/> {c.endereco}</p>
+            <div className="flex gap-2">
+              <button onClick={() => iniciarVisita(c)} className={`flex-1 py-3 rounded-2xl font-bold text-sm ${gradBtn}`}>Iniciar Limpeza</button>
+              <button onClick={() => setMostrarAdiarId(c.id)} className="bg-zinc-950 border border-zinc-800 px-4 py-3 rounded-2xl text-xs text-zinc-500">Adiar</button>
             </div>
-
-            <div className="mt-8 text-center">
-              <button onClick={() => setIsRegistering(!isRegistering)} className="text-sm text-zinc-400 font-medium hover:text-teal-400 transition-colors">
-                {isRegistering ? 'Já tem uma conta? Faça login' : 'Não tem conta? Cadastre-se'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (tela === 'lista') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 pb-24 font-sans transition-colors duration-300">
-        <header className="flex justify-between items-start mb-6 border-b border-zinc-200 dark:border-zinc-800 pb-4 relative">
-          <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-sky-400/20 via-teal-400/50 to-transparent"></div>
-          <div>
-            <h1 className={`text-4xl font-black ${gradText}`}>Mão Na Água</h1>
-            <p className="text-teal-600/70 dark:text-teal-400/60 font-medium text-sm mt-1">Hoje é {diasDaSemanaNomes[diaAtual]}</p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
-              {modoEscuro ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
-              <CalendarDays size={20} />
-            </button>
-            <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-500 shadow-sm hover:scale-105 transition-transform">
-              <LogOut size={20} />
-            </button>
-          </div>
-        </header>
-
-        <h2 className="font-bold text-xl mb-4 text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><Droplets className="text-teal-400" size={20}/> Limpar Hoje</h2>
-        <div className="space-y-4">
-          {piscinasDeHoje.length === 0 ? (
-            <div className="text-center bg-white dark:bg-zinc-900 p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800 mt-10 shadow-lg relative overflow-hidden">
-               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-sky-400 to-emerald-400"></div>
-               <Check size={48} className="mx-auto text-teal-400 mb-3" />
-               <p className="font-bold text-lg text-zinc-700 dark:text-zinc-300">Tudo limpo por hoje!</p>
-            </div>
-          ) : piscinasDeHoje.map(c => {
-            const foiFinalizadoHoje = c.ultimaVisita === dataHojeStr;
-            const emAndamentoHoje = c.visitaEmAndamentoData === dataHojeStr && !foiFinalizadoHoje;
-            
-            let badgeSelo = <span className="text-[10px] px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider">Aberto</span>;
-            if (foiFinalizadoHoje) {
-              badgeSelo = <span className="text-[10px] px-2.5 py-1 rounded-md bg-gradient-to-r from-teal-400/20 to-emerald-400/20 text-teal-700 dark:text-teal-300 font-bold uppercase tracking-wider border border-teal-200/50 dark:border-teal-800/50">Finalizado</span>;
-            } else if (emAndamentoHoje) {
-              badgeSelo = <span className="text-[10px] px-2.5 py-1 rounded-md bg-gradient-to-r from-sky-400/20 to-blue-400/20 text-sky-700 dark:text-sky-300 font-bold uppercase tracking-wider border border-sky-200/50 dark:border-sky-800/50">Em Andamento</span>;
-            }
-
-            return (
-              <div key={c.id} className="bg-white dark:bg-zinc-900 p-5 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
-                {foiFinalizadoHoje && <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-400 to-emerald-400"></div>}
-                
-                <div className="flex justify-between items-center mb-1">
-                  <h3 className={`font-bold text-lg ${foiFinalizadoHoje ? 'ml-2 text-zinc-900 dark:text-zinc-100' : 'text-zinc-900 dark:text-zinc-100'}`}>{c.nome}</h3>
-                  {badgeSelo}
-                </div>
-                <p className={`text-xs text-zinc-500 dark:text-zinc-400 mb-5 flex items-center gap-1.5 ${foiFinalizadoHoje ? 'ml-2' : ''}`}><MapPin size={14} className="text-sky-400"/> {c.endereco}</p>
-                
-                {mostrarAdiarId === c.id ? (
-                  <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                    <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 uppercase tracking-wider">Adiar para qual dia?</p>
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                      {diasDaSemanaNomes.map((dia, index) => index !== diaAtual && (
-                        <button key={index} onClick={() => adiarVisita(c.id, index)} className="text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-2.5 rounded-xl whitespace-nowrap text-zinc-700 dark:text-zinc-300 hover:border-teal-400 transition-colors">{dia}</button>
-                      ))}
-                    </div>
-                    <button onClick={() => setMostrarAdiarId(null)} className="w-full mt-2 text-xs text-rose-500 font-bold p-2 text-center hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors">Cancelar</button>
-                  </div>
-                ) : foiFinalizadoHoje ? (
-                  <button onClick={() => reabrirTarefaDaHome(c)} className="w-full py-3.5 rounded-xl font-bold text-sm bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
-                    <RotateCcw size={16}/> Reabrir Visita
-                  </button>
-                ) : (
-                  <div className="flex gap-2">
-                    <button onClick={() => iniciarVisita(c)} className={`flex-1 py-3.5 rounded-xl font-bold text-sm ${emAndamentoHoje ? 'bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-md' : gradBtn}`}>
-                      {emAndamentoHoje ? 'Continuar Limpeza' : 'Iniciar Limpeza'}
-                    </button>
-                    <button onClick={() => setMostrarAdiarId(c.id)} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-5 py-3.5 rounded-xl text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">Adiar</button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <button onClick={() => setTela('relatorio')} className="fixed bottom-6 left-6 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 px-6 py-4 rounded-full shadow-xl border border-zinc-200 dark:border-zinc-800 flex items-center gap-3 z-50 hover:scale-105 transition-transform"><FileText size={20} className="text-teal-500" /> <span className="font-bold text-xs uppercase tracking-wider">Relatórios</span></button>
-        <button onClick={() => setTela('novo_cliente')} className={`fixed bottom-6 right-6 p-4 rounded-full shadow-xl z-50 hover:rotate-90 transition-transform ${gradBtn}`}><Plus size={28} /></button>
-      </div>
-    );
-  }
-
-  if (tela === 'agenda') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 font-sans pb-20 transition-colors duration-300">
-        <header className="flex items-center gap-4 mb-8 pt-2"><button onClick={() => setTela('lista')} className="p-2 text-sky-500 bg-sky-50 dark:bg-sky-500/10 rounded-xl"><ArrowLeft size={20} /></button><h2 className={`text-2xl font-black ${gradText}`}>Agenda da Semana</h2></header>
-        <div className="space-y-5">
-          {diasDaSemanaNomes.map((nomeDia, index) => {
-            const clientesDoDia = clientes.filter(c => c.diasVisita.includes(index) || c.adiadoPara === index);
-            return (
-              <div key={index} className={`bg-white dark:bg-zinc-900 rounded-[1.5rem] overflow-hidden border transition-colors ${index === diaAtual ? 'border-teal-400 shadow-[0_0_20px_rgba(45,212,191,0.15)] ring-1 ring-teal-400/50' : 'border-zinc-200 dark:border-zinc-800'}`}>
-                <div className={`px-5 py-3.5 font-bold text-sm tracking-wide ${index === diaAtual ? gradBtn + " rounded-none" : 'bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 uppercase text-xs'}`}>{nomeDia} {index === diaAtual && '(Hoje)'}</div>
-                <div className="p-5 space-y-3.5">
-                  {clientesDoDia.length === 0 ? (
-                    <p className="text-sm text-zinc-400 dark:text-zinc-600 italic">Livre.</p>
-                  ) : clientesDoDia.map(c => (
-                    <div key={c.id} className="flex items-center justify-between"><span className="text-zinc-700 dark:text-zinc-200 font-medium text-sm">{c.nome}</span>{c.adiadoPara === index && <span className="text-[10px] text-teal-600 bg-teal-100 dark:text-teal-400 dark:bg-teal-900/40 px-2.5 py-1 rounded-md font-bold tracking-wider uppercase border border-teal-200 dark:border-teal-800">Adiado</span>}</div>
+            {mostrarAdiarId === c.id && (
+              <div className="mt-4 bg-zinc-950 p-4 rounded-2xl border border-zinc-800">
+                <p className="text-xs font-bold text-zinc-400 mb-3">Adiar para qual dia?</p>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {diasDaSemanaNomes.map((dia, index) => index !== diaAtual && (
+                    <button key={index} onClick={() => adiarVisita(c.id, index)} className="text-xs bg-zinc-800 border border-zinc-700 px-4 py-2.5 rounded-xl whitespace-nowrap">{dia}</button>
                   ))}
                 </div>
+                <button onClick={() => setMostrarAdiarId(null)} className="w-full mt-2 text-xs text-rose-400 font-bold p-2 text-center">Cancelar</button>
               </div>
-            )
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  if (tela === 'visita') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto pb-32 font-sans transition-colors duration-300">
-        <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-4 sticky top-0 z-20 shadow-sm dark:shadow-none">
-          <button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"><ArrowLeft size={20}/></button>
-          <h2 className={`font-black text-xl ${gradText}`}>{clienteAtual.nome}</h2>
-        </header>
-        
-        <div className="p-5 space-y-8">
-          <section>
-            <label className="block text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 uppercase tracking-wider">Aspecto da Água</label>
-            <div className="grid grid-cols-3 gap-3">
-              {['Cristalina', 'Turva', 'Verde'].map(opt => (
-                <button key={opt} onClick={() => setAspecto(opt)} className={`py-4 rounded-[1.25rem] font-bold text-sm transition-all ${aspecto === opt ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:border-teal-300'}`}>{opt}</button>
-              ))}
-            </div>
-          </section>
-
-          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-sky-400/10 to-transparent rounded-bl-full pointer-events-none"></div>
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="font-bold flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><Camera size={16} /></div> Fotos Principais</h3>
-              <span className={`text-xs px-2.5 py-1 rounded-md font-bold uppercase tracking-wider ${fotosContagem >= 3 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>{fotosContagem}/3</span>
-            </div>
-            <label className="w-full bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-teal-300/50 dark:border-teal-700/50 py-10 rounded-[1.25rem] flex flex-col items-center gap-3 text-teal-500 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/10 transition-colors">
-              <Camera size={36} className="text-teal-400" /> <span className="text-sm font-bold tracking-wide">Adicionar Foto da Piscina</span>
-              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleNovaFoto} />
-            </label>
-          </section>
-
-          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-rose-200 dark:border-rose-900/30 relative overflow-hidden transition-colors shadow-sm">
-             <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-400 to-rose-600"></div>
-             <h3 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2.5 mb-4 ml-3"><div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-900/30 text-rose-500"><AlertTriangle size={16} /></div> Relatar Problema</h3>
-             
-             <label className={`ml-3 w-[calc(100%-12px)] flex items-center justify-center gap-2.5 py-4 rounded-[1.25rem] font-bold text-sm cursor-pointer border transition-colors ${fotoAlerta ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400' : 'bg-slate-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-rose-300'}`}>
-               <Camera size={20} />{fotoAlerta ? 'Foto Anexada com Sucesso!' : 'Anexar Foto do Defeito'}
-               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
-             </label>
-             
-             {fotoAlerta && (
-               <div className="ml-3 mr-3 mt-4 space-y-4">
-                 <img src={fotoAlerta} className="w-full h-48 object-cover rounded-[1.25rem] border border-rose-200 dark:border-rose-800 shadow-sm" alt="Problema" />
-                 <textarea 
-                   placeholder="Descreva a peça partida, vazamento..." 
-                   value={textoAlerta}
-                   onChange={e => setTextoAlerta(e.target.value)}
-                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 text-zinc-800 dark:text-zinc-200 min-h-[100px] transition-all"
-                 />
-               </div>
-             )}
-          </section>
-
-          <section className="space-y-4">
-            <p className="text-xs font-bold text-teal-600 dark:text-teal-500 uppercase tracking-wider flex items-center gap-2"><Droplets size={14}/> Parâmetros da Água</p>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="flex flex-col gap-1.5"><span className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center font-bold tracking-widest">pH</span><input type="number" placeholder="7.2" value={ph} onChange={e => setPh(e.target.value)} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-center focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 outline-none text-teal-600 dark:text-teal-400 font-bold text-lg shadow-sm transition-all" /></div>
-              <div className="flex flex-col gap-1.5"><span className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center font-bold tracking-widest">CLORO</span><input type="number" placeholder="2.0" value={cloro} onChange={e => setCloro(e.target.value)} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-center focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none text-sky-600 dark:text-sky-400 font-bold text-lg shadow-sm transition-all" /></div>
-              <div className="flex flex-col gap-1.5"><span className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center font-bold tracking-widest">ALC</span><input type="number" placeholder="100" value={alcalinidade} onChange={e => setAlcalinidade(e.target.value)} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-center focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none text-emerald-600 dark:text-emerald-400 font-bold text-lg shadow-sm transition-all" /></div>
-            </div>
-          </section>
-
-          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
-            <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Produtos a Repor</p>
-            <div className="space-y-3">
-              {listaQuimica.map(q => {
-                const item = produtosFaltando.find(p => p.nome === q);
-                return (
-                  <div key={q} className={`flex flex-col p-3 rounded-[1.25rem] border transition-colors ${item ? 'bg-gradient-to-r from-sky-50 to-teal-50 dark:from-sky-900/10 dark:to-teal-900/10 border-teal-300 dark:border-teal-700/50' : 'bg-slate-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-teal-200 dark:hover:border-teal-800'}`}>
-                    <div className="flex items-center justify-between">
-                      <button onClick={() => toggleProduto(q)} className="flex items-center gap-3.5 flex-1 text-left">
-                        <div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${item ? 'bg-gradient-to-br from-sky-400 to-teal-400 border-transparent shadow-sm' : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900'}`}>{item && <Check size={14} className="text-white font-black" />}</div>
-                        <span className={`text-sm font-medium ${item ? 'text-teal-800 dark:text-teal-300 font-bold' : 'text-zinc-600 dark:text-zinc-400'}`}>{q}</span>
-                      </button>
-                      {item && (
-                        <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 rounded-xl p-1.5 border border-teal-100 dark:border-teal-800 shadow-sm">
-                          <button onClick={() => updateQtdProduto(q, -1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"><Minus size={14} /></button>
-                          <span className="font-bold text-sm w-4 text-center text-teal-700 dark:text-teal-400">{item.qtd}</span>
-                          <button onClick={() => updateQtdProduto(q, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"><Plus size={14} /></button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-          <button onClick={salvarVisita} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg ${gradBtn}`}>SALVAR E FINALIZAR</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (tela === 'novo_cliente') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans pb-10 transition-colors duration-300">
-        <header className="flex items-center gap-4 mb-10 mt-2"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Novo Cliente</h2></header>
-        <div className="space-y-6">
-          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Nome Completo</span><input placeholder="Ex: Samuel Silva" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
-          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Endereço / Referência</span><input placeholder="Ex: Setor Central" value={novoEndereco} onChange={e => setNovoEndereco(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
-          
-          <div className="pt-4">
-            <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>
-            <div className="grid grid-cols-4 gap-2.5">
-              {diasDaSemanaNomes.map((d, i) => (
-                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
-              ))}
-            </div>
+            )}
           </div>
-          
-          <button onClick={adicionarCliente} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>CADASTRAR CLIENTE</button>
-        </div>
+        ))}
       </div>
-    );
-  }
+      <button onClick={() => setTela('relatorio')} className="fixed bottom-6 left-6 bg-zinc-900 text-zinc-100 px-5 py-4 rounded-full border border-zinc-800 flex items-center gap-2 z-50 shadow-2xl"><FileText size={20} className="text-pink-500" /> <span className="font-bold text-xs uppercase">Relatórios</span></button>
+      <button onClick={() => setTela('novo_cliente')} className={`fixed bottom-6 right-6 p-4 rounded-full z-50 shadow-2xl ${gradBtn}`}><Plus size={28} /></button>
+    </div>
+  );
 
-  if (tela === 'relatorio') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300">
-        <header className="flex items-center gap-4 mb-8 mt-2"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Meus Clientes</h2></header>
-        <div className="space-y-3.5">
-          {clientes.map(c => (
-            <button key={c.id} onClick={() => { setClienteRelatorio(c); setTela('ver_relatorio'); }} className="w-full bg-white dark:bg-zinc-900 p-5 rounded-[1.25rem] border border-zinc-200 dark:border-zinc-800 text-left flex justify-between items-center hover:border-teal-300 dark:hover:border-teal-700 shadow-sm transition-all group">
-              <div><p className="font-bold text-lg text-zinc-800 dark:text-zinc-200 mb-1">{c.nome}</p><p className="text-[10px] text-teal-600 dark:text-teal-500 uppercase font-bold tracking-widest">Abrir Pasta Virtual</p></div>
-              <div className={`p-3 rounded-xl ${gradIconBg} group-hover:scale-110 transition-transform`}><FileText size={20} /></div>
-            </button>
-          ))}
-        </div>
+  if (tela === 'agenda') return (
+    <div className="min-h-screen bg-zinc-950 p-4 max-w-md mx-auto text-zinc-100 font-sans pb-20">
+      <header className="flex items-center gap-4 mb-6 pt-2"><button onClick={() => setTela('lista')} className="p-2 text-pink-500"><ArrowLeft /></button><h2 className={`text-2xl font-bold ${gradText}`}>Agenda da Semana</h2></header>
+      <div className="space-y-6">
+        {diasDaSemanaNomes.map((nomeDia, index) => {
+          const clientesDoDia = clientes.filter(c => (c.diasVisita && c.diasVisita.includes(index)) || c.adiadoPara === index);
+          return (
+            <div key={index} className={`bg-zinc-900 rounded-3xl overflow-hidden border ${index === diaAtual ? 'border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.2)]' : 'border-zinc-800'}`}>
+              <div className={`px-5 py-3 font-bold text-sm ${index === diaAtual ? gradBtn : 'bg-zinc-950 text-zinc-400'}`}>{nomeDia} {index === diaAtual && '(Hoje)'}</div>
+              <div className="p-5 space-y-3">
+                {clientesDoDia.length === 0 ? <p className="text-xs text-zinc-600 italic">Nenhuma limpeza agendada.</p> : clientesDoDia.map(c => (
+                  <div key={c.id} className="flex items-center justify-between text-sm"><span className="text-zinc-200 font-medium">{c.nome}</span>{c.adiadoPara === index && <span className="text-[10px] text-pink-400 bg-pink-400/10 px-2.5 py-1 rounded-md font-bold">Adiado</span>}</div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </div>
-    );
-  }
+    </div>
+  );
+
+  if (tela === 'visita') return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 max-w-md mx-auto pb-32 font-sans">
+      <header className="bg-zinc-900 p-4 border-b border-zinc-800 flex items-center gap-4 sticky top-0 z-20"><button onClick={() => setTela('lista')} className="p-2 text-zinc-400"><ArrowLeft /></button><h2 className={`font-bold text-xl ${gradText}`}>{clienteAtual.nome}</h2></header>
+      <div className="p-5 space-y-8">
+        <section><label className="block text-sm font-bold text-zinc-500 mb-3 uppercase">Aspecto da Água:</label><div className="grid grid-cols-3 gap-3">{['Cristalina', 'Turva', 'Verde'].map(opt => (<button key={opt} onClick={() => setAspecto(opt)} className={`py-4 rounded-2xl font-bold text-xs ${aspecto === opt ? gradBtn : 'bg-zinc-900 text-zinc-600 border border-zinc-800'}`}>{opt}</button>))}</div></section>
+        <section className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800"><div className="flex justify-between items-center mb-4"><h3 className="font-bold flex items-center gap-2"><Camera size={18} className="text-yellow-500"/> Fotos Principais</h3><span className={`text-xs font-bold ${fotosContagem >= 3 ? 'text-emerald-500' : 'text-rose-500'}`}>{fotosContagem}/3</span></div><label className="w-full bg-zinc-950 border-2 border-dashed border-zinc-700 py-8 rounded-2xl flex flex-col items-center gap-3 text-pink-400 cursor-pointer"><Camera size={32} /> <span className="text-sm font-bold">Adicionar Foto</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleNovaFoto} /></label></section>
+        <section className="bg-zinc-900 p-5 rounded-3xl border border-rose-900/30 relative overflow-hidden"><div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-500 to-orange-500"></div><h3 className="font-bold text-zinc-200 flex items-center gap-2 mb-2 ml-3"><AlertTriangle size={18} className="text-rose-500"/> Relatar Problema</h3><label className={`ml-3 w-[calc(100%-12px)] flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm cursor-pointer border ${fotoAlerta ? 'bg-rose-500/20 border-rose-500 text-rose-400' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}><Camera size={20} />{fotoAlerta ? 'Foto Anexada!' : 'Foto do Problema'}<input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} /></label>{fotoAlerta && (<div className="ml-3 mr-3 mt-3 space-y-3"><img src={fotoAlerta} className="w-full h-40 object-cover rounded-xl border border-zinc-700" /><textarea placeholder="Descreva o problema aqui..." value={textoAlerta} onChange={e => setTextoAlerta(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-xl text-sm outline-none focus:border-rose-500 text-zinc-200 min-h-[80px]"/></div>)}</section>
+        <section className="space-y-4"><p className="text-xs font-bold text-zinc-500 uppercase">Parâmetros da Água</p><div className="grid grid-cols-3 gap-2"><div className="flex flex-col gap-1"><span className="text-[10px] text-zinc-500 text-center font-bold">pH</span><input type="number" step="0.1" value={ph} onChange={e => setPh(e.target.value)} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center focus:border-pink-500 outline-none text-pink-500 font-bold" /></div><div className="flex flex-col gap-1"><span className="text-[10px] text-zinc-500 text-center font-bold">CLORO</span><input type="number" step="0.1" value={cloro} onChange={e => setCloro(e.target.value)} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center focus:border-pink-500 outline-none text-pink-500 font-bold" /></div><div className="flex flex-col gap-1"><span className="text-[10px] text-zinc-500 text-center font-bold">ALC</span><input type="number" value={alcalinidade} onChange={e => setAlcalinidade(e.target.value)} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center focus:border-pink-500 outline-none text-pink-500 font-bold" /></div></div></section>
+        <section className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800"><p className="font-bold text-sm mb-4 flex items-center gap-2 text-yellow-500"><ShoppingCart size={18}/> Produtos Faltando</p><div className="space-y-3">{listaQuimica.map(q => { const item = produtosFaltando.find(p => p.nome === q); return (<div key={q} className={`flex flex-col p-3 rounded-2xl border ${item ? 'bg-pink-900/10 border-pink-500' : 'bg-zinc-950 border-zinc-800'}`}><div className="flex items-center justify-between"><button onClick={() => toggleProduto(q)} className="flex items-center gap-3 flex-1 text-left"><div className={`w-6 h-6 rounded flex items-center justify-center border ${item ? 'bg-pink-500 border-pink-500' : 'border-zinc-700'}`}>{item && <Check size={16}/>}</div><span className={`text-sm font-bold ${item ? 'text-zinc-100' : 'text-zinc-500'}`}>{q}</span></button>{item && (<div className="flex items-center gap-3 bg-zinc-900 rounded-xl p-1 border border-zinc-800"><button onClick={() => updateQtdProduto(q, -1)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg"><Minus size={16} /></button><span className="font-bold text-sm w-4 text-center">{item.qtd}</span><button onClick={() => updateQtdProduto(q, 1)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg"><Plus size={16} /></button></div>)}</div></div>);})}</div></section>
+        <button onClick={salvarVisita} className={`w-full py-5 rounded-2xl font-bold text-lg shadow-2xl ${gradBtn}`}>SALVAR E FINALIZAR</button>
+      </div>
+    </div>
+  );
+
+  if (tela === 'novo_cliente') return (
+    <div className="min-h-screen bg-zinc-950 p-6 text-zinc-100 max-w-md mx-auto font-sans pb-10">
+      <header className="flex items-center gap-4 mb-8"><button onClick={() => setTela('lista')} className="p-2 text-zinc-400"><ArrowLeft/></button><h2 className={`text-xl font-bold ${gradText}`}>Cadastrar Cliente</h2></header>
+      <div className="space-y-5"><div className="space-y-1"><span className="text-xs font-bold text-zinc-500 ml-2 uppercase">Nome Completo</span><input placeholder="Ex: Samuel Silva" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none focus:border-pink-500 text-white" /></div><div className="space-y-1"><span className="text-xs font-bold text-zinc-500 ml-2 uppercase">Endereço</span><input placeholder="Ex: Setor Central" value={novoEndereco} onChange={e => setNovoEndereco(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none focus:border-pink-500 text-white" /></div><p className="text-xs font-bold text-zinc-500 mt-6 mb-2 ml-2 uppercase">Dias de Limpeza</p><div className="grid grid-cols-4 gap-2">{diasDaSemanaNomes.map((d, i) => (<button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3 rounded-xl text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>{d.substring(0, 3)}</button>))}</div><button onClick={adicionarCliente} className={`w-full py-4 rounded-2xl font-bold mt-10 shadow-lg ${gradBtn}`}>SALVAR NOVO CLIENTE</button></div>
+    </div>
+  );
+
+  if (tela === 'relatorio') return (
+    <div className="min-h-screen bg-zinc-950 p-4 text-zinc-100 max-w-md mx-auto font-sans">
+      <header className="flex items-center gap-4 mb-6"><button onClick={() => setTela('lista')} className="p-2 text-zinc-400"><ArrowLeft/></button><h2 className={`text-xl font-bold ${gradText}`}>Histórico de Clientes</h2></header>
+      <div className="space-y-3">{clientes.map(c => (<button key={c.id} onClick={() => { setClienteRelatorio(c); setTela('ver_relatorio'); }} className="w-full bg-zinc-900 p-5 rounded-2xl border border-zinc-800 text-left flex justify-between items-center active:bg-zinc-800 transition-colors"><div><p className="font-bold text-zinc-200">{c.nome}</p><p className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">Ver histórico mensal</p></div><FileText size={20} className="text-pink-500"/></button>))}</div>
+    </div>
+  );
 
   if (tela === 'ver_relatorio') {
     const clienteExibicao = clientes.find(c => c.id === clienteRelatorio.id) || clienteRelatorio;
-    const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
-    const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
-    const fotosDoMes = historicoDoRelatorio.flatMap(v => v.fotos || []).map(f => ({ src: f, data: historicoDoRelatorio.find(x => x.fotos?.includes(f)).d }));
-    const visitasComAlerta = historicoDoRelatorio.filter(v => v.fotoA || v.txtA);
-    const ultimaVisitaReal = historicoDoRelatorio.length > 0 ? historicoDoRelatorio[historicoDoRelatorio.length - 1] : null;
+    const historico = clienteExibicao.historicoVisitas || [];
+    const ultimaVisitaReal = historico.length > 0 ? historico[historico.length - 1] : null;
     const foiVisitadoHoje = clienteExibicao.ultimaVisita === dataHojeStr;
 
     return (
-      <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 max-w-md mx-auto pb-10 font-sans relative overflow-x-hidden transition-colors duration-300">
-        
-        {/* GERADOR DE PDF/IMAGEM (FUNDO BRANCO OBRIGATÓRIO PARA IMPRESSÃO) */}
+      <div className="min-h-screen bg-zinc-100 text-zinc-800 max-w-md mx-auto pb-10 font-sans relative overflow-x-hidden">
         {foiVisitadoHoje && ultimaVisitaReal?.fotoA && (
           <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -50, pointerEvents: 'none' }}>
-            <div id="alerta-print" className="bg-white w-[400px] p-8">
-              <div className="border-l-4 border-rose-500 pl-5 mb-6">
-                <h2 className="text-3xl font-black text-rose-600 tracking-tight">🚨 Atenção Técnica</h2>
-                <p className="text-xs font-bold text-zinc-500 mt-1 uppercase tracking-widest">{clienteExibicao.nome} • {ultimaVisitaReal.d}</p>
-              </div>
-              <img src={ultimaVisitaReal.fotoA} className="w-full h-72 object-cover rounded-2xl mb-6 border-2 border-rose-100" alt="Problema" />
-              <div className="bg-rose-50 p-5 rounded-2xl border border-rose-100">
-                <p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap leading-relaxed">{ultimaVisitaReal.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
-              </div>
-              <div className="mt-8 pt-4 border-t border-zinc-100 text-center">
-                 <p className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] font-bold">Mão Na Água • Relatório Automático</p>
-              </div>
+            <div id="alerta-print" className="bg-white w-[400px] p-6">
+              <div className="border-l-4 border-rose-500 pl-4 mb-4"><h2 className="text-2xl font-black text-rose-600">🚨 Atenção Técnica</h2><p className="text-sm font-bold text-zinc-500">Cliente: {clienteExibicao.nome} • {ultimaVisitaReal.d}</p></div>
+              <img src={ultimaVisitaReal.fotoA} className="w-full h-64 object-cover rounded-xl mb-4 border border-zinc-200" /><div className="bg-rose-50 p-4 rounded-xl border border-rose-100"><p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap">{ultimaVisitaReal.txtA || 'Nenhum detalhe adicional.'}</p></div>
+              <p className="text-[10px] text-zinc-400 mt-6 text-center uppercase tracking-widest">Mão Na Água - Gestão Profissional</p>
             </div>
           </div>
         )}
-
-        <header className="p-4 flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10 shadow-sm transition-colors">
-          <button onClick={() => setTela('relatorio')} className="text-zinc-500 dark:text-zinc-400 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl"><ArrowLeft size={20}/></button>
-          <h2 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">Dossiê do Cliente</h2>
-        </header>
-        
+        <header className="p-4 flex items-center gap-4 bg-white border-b border-zinc-200 sticky top-0 z-10 shadow-sm"><button onClick={() => setTela('relatorio')} className="text-zinc-400 p-2"><ArrowLeft /></button><h2 className="font-bold text-lg text-zinc-800">Visualizar Documento</h2></header>
         <div className="p-4 mt-2">
-          
-          {foiVisitadoHoje && (
-            <button onClick={reabrirTarefa} className="w-full mb-6 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-sky-500/20 active:scale-95 transition-all">
-              <RotateCcw size={18} /> Editar Limpeza de Hoje
-            </button>
-          )}
-
-          <div className="flex gap-3 mb-6">
-            <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, produtosDoRelatorio)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><MessageSquare size={18} /> WhatsApp</button>
-            <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF</button>
+          {foiVisitadoHoje && <button onClick={reabrirTarefa} className="w-full mb-6 bg-blue-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg"><RotateCcw size={18} /> Reabrir Visita de Hoje</button>}
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, clienteExibicao.ultimosProdutosFaltando)} className="flex-1 bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm"><MessageSquare size={18} /> Texto</button>
+            <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm"><Share2 size={18} /> Imagem PDF</button>
           </div>
-
-          {foiVisitadoHoje && ultimaVisitaReal?.fotoA && (
-            <button onClick={() => compartilharAlertaSeparado(ultimaVisitaReal)} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
-              <AlertTriangle size={18} /> Enviar Alerta do Defeito
-            </button>
-          )}
-
-          {/* ÁREA DE IMPRESSÃO DO RELATÓRIO MENSAL */}
-          <div id="relatorio-print" className="bg-white w-full shadow-2xl rounded-2xl overflow-hidden border border-zinc-200 text-zinc-900 relative">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"></div>
-            
-            <header className="p-6 pt-8 relative">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-teal-500 mb-1">Mão Na Água</h1>
-                  <p className="text-[10px] font-black text-zinc-500 tracking-widest uppercase">Gestão Profissional</p>
-                </div>
-                <div className="text-right flex flex-col items-end">
-                  <h2 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Relatório Mensal</h2>
-                  <div className="bg-gradient-to-r from-sky-50 to-teal-50 border border-teal-100 px-3.5 py-1.5 rounded-lg">
-                    <p className="text-sm font-black text-teal-700 uppercase tracking-wider">{mesEscrito} / {anoEscrito}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 bg-slate-50 rounded-xl p-4 border border-zinc-100 shadow-inner">
-                 <p className="text-[10px] text-zinc-400 font-bold uppercase mb-1 tracking-wider">Proprietário / Local</p>
-                 <p className="text-lg font-black text-zinc-800">{clienteExibicao.nome}</p>
-                 <div className="mt-3 inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase"><CheckCircle2 size={12} /> Água Equilibrada (Mês Atual)</div>
-              </div>
+          {foiVisitadoHoje && ultimaVisitaReal?.fotoA && <button onClick={() => compartilharAlertaSeparado(ultimaVisitaReal)} className="w-full mb-6 bg-rose-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg"><AlertTriangle size={18} /> Enviar Relato do Problema</button>}
+          <div id="relatorio-print" className="bg-white w-full shadow-lg rounded-sm overflow-hidden border border-zinc-200">
+            <header className="p-5 border-b-4 border-b-transparent relative" style={{ borderImage: 'linear-gradient(to right, #facc15, #ec4899, #9333ea) 1' }}>
+              <div className="flex justify-between items-start"><div><h1 className="text-2xl font-black tracking-tight text-pink-600 mb-0.5">Mão Na Água</h1><p className="text-[10px] text-zinc-400 font-medium tracking-widest uppercase">Gestão Profissional</p></div><div className="text-right"><h2 className="text-xs font-bold text-zinc-800">Relatório Mensal</h2><p className="text-[10px] text-zinc-500 font-semibold">Abril / 2026</p></div></div>
+              <div className="mt-5 bg-zinc-50 rounded-lg p-3 border border-zinc-100"><p className="text-[10px] text-zinc-400 font-bold uppercase mb-0.5">Cliente</p><p className="text-sm font-bold text-zinc-800">{clienteExibicao.nome}</p><div className="mt-2 inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold"><CheckCircle2 size={12} /> Água Equilibrada</div></div>
             </header>
-
-            <div className="p-6 space-y-8">
-              <section>
-                <h3 className="text-xs font-bold text-zinc-800 border-b border-zinc-200 pb-2 mb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-sky-100 text-sky-600"><Droplets size={12}/></div> Histórico de Parâmetros</h3>
-                <div className="overflow-x-auto rounded-xl border border-zinc-200 shadow-sm">
-                  <table className="w-full text-[9px] text-left">
-                    <thead className="bg-slate-50 text-zinc-500 font-bold uppercase tracking-wider">
-                      <tr>
-                        <th className="p-2 border-b">Data</th>
-                        <th className="p-2 border-b text-center">Aspecto</th>
-                        <th className="p-2 border-b text-center text-teal-600">Tempo</th>
-                        <th className="p-2 border-b text-center">Cloro</th>
-                        <th className="p-2 border-b text-center">pH</th>
-                        <th className="p-2 border-b text-center">Alc</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                      {historicoDoRelatorio.length === 0 ? (
-                         <tr><td colSpan="6" className="p-4 text-center text-xs text-zinc-400 italic">Nenhuma manutenção registada este mês.</td></tr>
-                      ) : (
-                         historicoDoRelatorio.map((v, i) => (
-                           <tr key={i} className="hover:bg-slate-50 transition-colors">
-                             <td className="p-2 font-bold text-zinc-800 whitespace-nowrap">{v.d}</td>
-                             <td className={`p-2 text-center font-bold ${v.a === 'Cristalina' ? 'text-emerald-500' : 'text-yellow-500'}`}>{v.a}</td>
-                             <td className="p-2 text-center font-bold text-zinc-500 flex items-center justify-center gap-1"><Clock size={9}/> {v.t || '--'}</td>
-                             <td className="p-2 text-center text-zinc-700">{v.c}</td>
-                             <td className="p-2 text-center text-zinc-700">{v.p}</td>
-                             <td className="p-2 text-center text-zinc-700">{v.al}</td>
-                           </tr>
-                         ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+            <div className="p-5 space-y-6">
+              <section><h3 className="text-xs font-bold text-zinc-800 border-b border-zinc-200 pb-1 mb-2 flex items-center gap-1"><Droplets size={14} className="text-pink-500" /> Histórico de Parâmetros</h3>
+                <div className="overflow-x-auto rounded border border-zinc-200"><table className="w-full text-[8px] text-left"><thead className="bg-zinc-50 text-zinc-500 font-bold uppercase"><tr><th className="p-1.5 border-b">Data</th><th className="p-1.5 border-b text-center">Aspecto</th><th className="p-1.5 border-b text-center text-pink-600">Tempo</th><th className="p-1.5 border-b text-center">Cloro</th><th className="p-1.5 border-b text-center">pH</th><th className="p-1.5 border-b text-center">Alc</th></tr></thead><tbody className="divide-y divide-zinc-200">{historico.length === 0 ? <tr><td colSpan="6" className="p-3 text-center text-xs text-zinc-500">Nenhum histórico.</td></tr> : historico.map((v, i) => (<tr key={i} className="hover:bg-zinc-50"><td className="p-1.5 font-bold text-zinc-800">{v.d}</td><td className={`p-1.5 text-center font-bold ${v.a === 'Cristalina' ? 'text-green-600' : 'text-yellow-600'}`}>{v.a}</td><td className="p-1.5 text-center font-bold text-zinc-600 flex items-center justify-center gap-0.5"><Clock size={8}/> {v.t || '--'}</td><td className="p-1.5 text-center">{v.c}</td><td className="p-1.5 text-center">{v.p}</td><td className="p-1.5 text-center">{v.al}</td></tr>))}</tbody></table></div>
               </section>
-
-              {visitasComAlerta.length > 0 && (
-                <section className="pt-2 border-t border-zinc-100">
-                  <h3 className="text-xs font-bold text-rose-600 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-rose-100 text-rose-600"><AlertTriangle size={12} /></div> Ocorrências Técnicas</h3>
-                  <div className="space-y-3">
-                    {visitasComAlerta.map((v, i) => (
-                      <div key={i} className="flex gap-3 bg-rose-50/50 p-3 rounded-xl border border-rose-100/50 items-start">
-                        {v.fotoA && <img src={v.fotoA} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-rose-200" alt="Alerta" />}
-                        <div className="flex-1">
-                          <p className="text-[9px] font-black text-rose-800 mb-1 tracking-wider uppercase">{v.d}</p>
-                          <p className="text-[10px] text-zinc-700 leading-relaxed font-medium">{v.txtA || 'Alerta visual gerado sem anotação em texto.'}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+              {historico.filter(v => v.fotoA).length > 0 && (
+                <section className="pt-2 border-t border-zinc-200"><h3 className="text-xs font-bold text-rose-600 pb-2 flex items-center gap-1"><AlertTriangle size={14} /> Ocorrências Registradas</h3><div className="space-y-3">{historico.filter(v => v.fotoA).map((v, i) => (<div key={i} className="flex gap-3 bg-rose-50 p-2 rounded-lg border border-rose-100 items-start"><img src={v.fotoA} className="w-16 h-16 object-cover rounded shadow-sm" /><div className="flex-1"><p className="text-[8px] font-bold text-rose-800 mb-0.5">{v.d}</p><p className="text-[9px] text-zinc-700 leading-tight">{v.txtA || 'Sem descrição.'}</p></div></div>))}</div></section>
               )}
-
-              {fotosDoMes.length > 0 && (
-                <section className="pt-2 border-t border-zinc-100">
-                  <h3 className="text-xs font-bold text-zinc-800 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-teal-100 text-teal-600"><Camera size={12}/></div> Registo Fotográfico</h3>
-                  <div className="grid grid-cols-4 gap-2">
-                    {fotosDoMes.map((foto, i) => (
-                      <div key={i} className="aspect-square rounded-lg overflow-hidden relative border border-zinc-200 bg-zinc-100 shadow-sm">
-                        <img src={foto.src} className="w-full h-full object-cover" alt="Piscina" />
-                        <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent pt-4 pb-1 px-1 text-white text-[8px] font-bold text-center tracking-widest uppercase">{foto.data}</div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+              {historico.flatMap(v => v.fotos || []).length > 0 && (
+                <section className="pt-2 border-t border-zinc-200"><h3 className="text-xs font-bold text-zinc-800 pb-3 flex items-center gap-1"><Camera size={14} className="text-pink-500" /> Imagens do Local</h3><div className="grid grid-cols-4 gap-2">{historico.flatMap(v => (v.fotos || []).map(f => ({src: f, data: v.d}))).map((foto, i) => (<div key={i} className="aspect-square rounded-md overflow-hidden relative border bg-zinc-200 shadow-sm"><img src={foto.src} className="w-full h-full object-cover" /><div className="absolute bottom-0 left-0 w-full bg-black/60 text-white text-[7px] font-bold text-center py-0.5">{foto.data}</div></div>))}</div></section>
               )}
             </div>
-            
-            <footer className="bg-zinc-900 text-white p-6 text-center mt-2 relative overflow-hidden">
-               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-sky-500 to-teal-500"></div>
-               <p className="text-sm font-bold mb-1.5 text-zinc-100">Obrigado pela confiança!</p>
-               <p className="text-[9px] text-zinc-500 mb-5 font-medium">Documento auditado pelo sistema Mão Na Água.</p>
-               <div className="flex justify-center gap-5 text-[9px] text-zinc-400 font-bold uppercase tracking-widest border-t border-zinc-800 pt-4">
-                  <span className="flex items-center gap-1.5"><Phone size={11} className="text-sky-400"/> Atendimento Premium</span>
-               </div>
-            </footer>
+            <footer className="bg-zinc-800 text-white p-5 text-center mt-2"><p className="text-sm font-bold mb-1">Obrigado pela confiança!</p><p className="text-[9px] text-zinc-400 mb-4">Mão Na Água - Gestão Profissional</p></footer>
           </div>
-          
-          <button onClick={() => excluirCliente(clienteExibicao.id)} className="w-full mt-8 bg-transparent border-2 border-rose-200 dark:border-rose-900/50 text-rose-500 dark:text-rose-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
-            <Trash2 size={18} /> Encerrar Contrato (Excluir)
-          </button>
-          
         </div>
       </div>
     );
   }
-
   return null;
 }

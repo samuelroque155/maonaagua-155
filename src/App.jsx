@@ -23,7 +23,7 @@ export default function App() {
   const dataHojeStr = new Date().toDateString();
 
   const [clientes, setClientes] = useState(() => {
-    const salvo = localStorage.getItem('maonagua_v7');
+    const salvo = localStorage.getItem('maonagua_v8');
     return salvo ? JSON.parse(salvo) : [
       { id: 1, nome: 'Dona Maria', endereco: 'Centro', diasVisita: [1, 4], adiadoPara: null, ultimaVisita: null, ultimosProdutosFaltando: [], historicoVisitas: [] },
       { id: 2, nome: 'Condomínio Solar', endereco: 'Bairro das Acácias', diasVisita: [diaAtual], adiadoPara: null, ultimaVisita: null, ultimosProdutosFaltando: [], historicoVisitas: [] }
@@ -31,7 +31,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('maonagua_v7', JSON.stringify(clientes));
+    localStorage.setItem('maonagua_v8', JSON.stringify(clientes));
   }, [clientes]);
 
   const [clienteAtual, setClienteAtual] = useState(null);
@@ -140,7 +140,7 @@ export default function App() {
       return;
     }
     
-    // --- A ÚNICA ALTERAÇÃO FOI FEITA AQUI (TEMPO) ---
+    // --- TEMPO CORRIGIDO E COMPUTADO AQUI ---
     const tempoMsTotal = Date.now() - (horaInicioVisita || Date.now());
     const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
@@ -156,7 +156,7 @@ export default function App() {
       p: ph, 
       al: alcalinidade, 
       t: tempoFormatado,
-      tMs: tempoMsTotal, // Salva o tempo real em milissegundos
+      tMs: tempoMsTotal, // Salva o tempo real em milissegundos para não zerar na edição
       fotos: fotosVisita, 
       fotoA: fotoAlerta, 
       txtA: textoAlerta
@@ -200,7 +200,7 @@ export default function App() {
     
     setProdutosFaltando(clienteParaEditar.ultimosProdutosFaltando || []);
     
-    // --- E AQUI FOI A SEGUNDA ALTERAÇÃO (COMPENSAR O TEMPO) ---
+    // --- TEMPO SENDO COMPENSADO AQUI ---
     setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
     
     const novoHistorico = historico.slice(0, -1);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
@@ -211,11 +211,16 @@ export default function App() {
     setMostrarAdiarId(null);
   };
 
+  const irParaNovoCliente = () => {
+    setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]);
+    setTela('novo_cliente');
+  };
+
   const adicionarCliente = () => {
     if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
       const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
       atualizarE_SalvarClientes([...clientes, { 
-        id: Date.now(), nome: novoNome, endereco: enderecoCompleto, diasVisita: novosDias,
+        id: Date.now(), nome: novoNome, endereco: enderecoCompleto, rua: novaRua, numero: novoNumero, bairro: novoBairro, diasVisita: novosDias,
         adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
       }]);
       setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setTela('lista');
@@ -223,6 +228,37 @@ export default function App() {
       alert("Preencha nome, rua, bairro e selecione pelo menos um dia da semana.");
     }
   };
+
+  // --- NOVAS FUNÇÕES PARA EDITAR CLIENTE ---
+  const abrirEdicaoCliente = (cliente) => {
+    setClienteAtual(cliente);
+    setNovoNome(cliente.nome);
+    setNovaRua(cliente.rua || cliente.endereco || ''); 
+    setNovoNumero(cliente.numero || '');
+    setNovoBairro(cliente.bairro || '');
+    setNovosDias(cliente.diasVisita || []);
+    setTela('editar_cliente');
+  };
+
+  const salvarEdicaoCliente = () => {
+    if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
+      const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
+      
+      atualizarE_SalvarClientes(clientes.map(c => 
+        c.id === clienteAtual.id 
+          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias } 
+          : c
+      ));
+      
+      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); 
+      setClienteAtual(null);
+      setTela('relatorio'); // Retorna para a lista de relatórios
+      alert("✅ Cadastro atualizado com sucesso!");
+    } else {
+      alert("Preencha nome, rua, bairro e selecione pelo menos um dia da semana.");
+    }
+  };
+  // ----------------------------------------
 
   const alternarDiaNovoCliente = (diaIndex) => {
     setNovosDias(novosDias.includes(diaIndex) ? novosDias.filter(d => d !== diaIndex) : [...novosDias, diaIndex]);
@@ -507,7 +543,7 @@ export default function App() {
         </div>
 
         <button onClick={() => setTela('relatorio')} className="fixed bottom-6 left-6 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 px-6 py-4 rounded-full shadow-xl border border-zinc-200 dark:border-zinc-800 flex items-center gap-3 z-50 hover:scale-105 transition-transform"><FileText size={20} className="text-teal-500" /> <span className="font-bold text-xs uppercase tracking-wider">Relatórios</span></button>
-        <button onClick={() => setTela('novo_cliente')} className={`fixed bottom-6 right-6 p-4 rounded-full shadow-xl z-50 hover:rotate-90 transition-transform ${gradBtn}`}><Plus size={28} /></button>
+        <button onClick={irParaNovoCliente} className={`fixed bottom-6 right-6 p-4 rounded-full shadow-xl z-50 hover:rotate-90 transition-transform ${gradBtn}`}><Plus size={28} /></button>
       </div>
     );
   }
@@ -593,7 +629,6 @@ export default function App() {
                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
              </label>
              
-             {/* NOVO: OPÇÃO DE EXCLUIR A FOTO DE PROBLEMA */}
              {fotoAlerta && (
                <div className="ml-3 mr-3 mt-4 space-y-4">
                  <div className="relative">
@@ -708,6 +743,35 @@ export default function App() {
           </div>
           
           <button onClick={adicionarCliente} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>CADASTRAR CLIENTE</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (tela === 'editar_cliente') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans pb-10 transition-colors duration-300">
+        <header className="flex items-center gap-4 mb-10 mt-2"><button onClick={() => setTela('ver_relatorio')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Editar Cadastro</h2></header>
+        <div className="space-y-6">
+          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Nome Completo</span><input placeholder="Ex: Samuel Silva" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          
+          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Rua</span><input placeholder="Ex: Rua das Flores" value={novaRua} onChange={e => setNovaRua(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          
+          <div className="flex gap-3">
+            <div className="space-y-2 flex-1"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Número</span><input placeholder="Ex: 123" value={novoNumero} onChange={e => setNovoNumero(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+            <div className="space-y-2 flex-[2]"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Bairro</span><input placeholder="Ex: Setor Central" value={novoBairro} onChange={e => setNovoBairro(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          </div>
+          
+          <div className="pt-4">
+            <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>
+            <div className="grid grid-cols-4 gap-2.5">
+              {diasDaSemanaNomes.map((d, i) => (
+                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
+              ))}
+            </div>
+          </div>
+          
+          <button onClick={salvarEdicaoCliente} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>SALVAR ALTERAÇÕES</button>
         </div>
       </div>
     );
@@ -894,9 +958,14 @@ export default function App() {
             </footer>
           </div>
           
-          <button onClick={() => excluirCliente(clienteExibicao.id)} className="w-full mt-8 bg-transparent border-2 border-rose-200 dark:border-rose-900/50 text-rose-500 dark:text-rose-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
-            <Trash2 size={18} /> Encerrar Contrato (Excluir)
-          </button>
+          <div className="flex flex-col gap-3 mt-8">
+            <button onClick={() => abrirEdicaoCliente(clienteExibicao)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors shadow-sm">
+              <Pencil size={18} /> Editar Cadastro do Cliente
+            </button>
+            <button onClick={() => excluirCliente(clienteExibicao.id)} className="w-full bg-transparent border-2 border-rose-200 dark:border-rose-900/50 text-rose-500 dark:text-rose-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
+              <Trash2 size={18} /> Encerrar Contrato (Excluir)
+            </button>
+          </div>
           
         </div>
       </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
@@ -117,7 +117,9 @@ export default function App() {
   const [mostrarAdiarId, setMostrarAdiarId] = useState(null);
   
   const [novoNome, setNovoNome] = useState('');
-  const [novoEndereco, setNovoEndereco] = useState('');
+  const [novoBairro, setNovoBairro] = useState('');
+  const [novaRua, setNovaRua] = useState('');
+  const [novoNumero, setNovoNumero] = useState('');
   const [novosDias, setNovosDias] = useState([]);
 
   const piscinasDeHoje = clientes.filter(c => c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual);
@@ -210,14 +212,15 @@ export default function App() {
   };
 
   const adicionarCliente = () => {
-    if (novoNome && novoEndereco && novosDias.length > 0) {
+    if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
+      const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
       atualizarE_SalvarClientes([...clientes, { 
-        id: Date.now(), nome: novoNome, endereco: novoEndereco, diasVisita: novosDias,
+        id: Date.now(), nome: novoNome, endereco: enderecoCompleto, diasVisita: novosDias,
         adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
       }]);
-      setNovoNome(''); setNovoEndereco(''); setNovosDias([]); setTela('lista');
+      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setTela('lista');
     } else {
-      alert("Preencha nome, endereço e selecione pelo menos um dia da semana.");
+      alert("Preencha nome, rua, bairro e selecione pelo menos um dia da semana.");
     }
   };
 
@@ -465,7 +468,16 @@ export default function App() {
                   <h3 className={`font-bold text-lg ${foiFinalizadoHoje ? 'ml-2 text-zinc-900 dark:text-zinc-100' : 'text-zinc-900 dark:text-zinc-100'}`}>{c.nome}</h3>
                   {badgeSelo}
                 </div>
-                <p className={`text-xs text-zinc-500 dark:text-zinc-400 mb-5 flex items-center gap-1.5 ${foiFinalizadoHoje ? 'ml-2' : ''}`}><MapPin size={14} className="text-sky-400"/> {c.endereco}</p>
+                
+                <div className={`mb-5 ${foiFinalizadoHoje ? 'ml-2' : ''}`}>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5"><MapPin size={14} className="text-sky-400"/> {c.endereco}</p>
+                  <button 
+                    onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.endereco + ', Jataí - GO')}`, '_blank')} 
+                    className="text-[10px] font-bold text-sky-500 dark:text-sky-400 hover:text-sky-600 dark:hover:text-sky-300 flex items-center gap-1 mt-1.5 ml-5 transition-colors"
+                  >
+                    <Navigation size={10} /> Abrir Rota no Maps
+                  </button>
+                </div>
                 
                 {mostrarAdiarId === c.id ? (
                   <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
@@ -669,7 +681,13 @@ export default function App() {
         <header className="flex items-center gap-4 mb-10 mt-2"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Novo Cliente</h2></header>
         <div className="space-y-6">
           <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Nome Completo</span><input placeholder="Ex: Samuel Silva" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
-          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Endereço / Referência</span><input placeholder="Ex: Setor Central" value={novoEndereco} onChange={e => setNovoEndereco(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          
+          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Rua</span><input placeholder="Ex: Rua das Flores" value={novaRua} onChange={e => setNovaRua(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          
+          <div className="flex gap-3">
+            <div className="space-y-2 flex-1"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Número</span><input placeholder="Ex: 123" value={novoNumero} onChange={e => setNovoNumero(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+            <div className="space-y-2 flex-[2]"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Bairro</span><input placeholder="Ex: Setor Central" value={novoBairro} onChange={e => setNovoBairro(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          </div>
           
           <div className="pt-4">
             <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>

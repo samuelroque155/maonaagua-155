@@ -554,7 +554,7 @@ export default function App() {
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleNovaFoto} />
             </label>
             
-            {/* NOVO: EXIBIR MINIATURAS DAS FOTOS COM BOTÃO DE EXCLUIR */}
+            {/* MINIATURAS E EXCLUSÃO DE FOTOS */}
             {fotosVisita.length > 0 && (
               <div className="flex gap-3 overflow-x-auto mt-5 pb-2 scrollbar-hide">
                 {fotosVisita.map((foto, index) => (
@@ -785,16 +785,18 @@ export default function App() {
             <div className="p-6 space-y-8">
               <section>
                 <h3 className="text-xs font-bold text-zinc-800 border-b border-zinc-200 pb-2 mb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-sky-100 text-sky-600"><Droplets size={12}/></div> Histórico de Parâmetros</h3>
-                <div className="overflow-x-auto rounded-xl border border-zinc-200 shadow-sm">
-                  <table className="w-full text-[9px] text-left">
-                    <thead className="bg-slate-50 text-zinc-500 font-bold uppercase tracking-wider">
+                
+                {/* TABELA DE PARÂMETROS CORRIGIDA E ADAPTADA PARA CABER PERFEITAMENTE NO PDF */}
+                <div className="overflow-hidden rounded-xl border border-zinc-200 shadow-sm w-full">
+                  <table className="w-full text-[10px] text-center table-fixed">
+                    <thead className="bg-slate-50 text-zinc-500 font-bold uppercase tracking-tighter text-[9px]">
                       <tr>
-                        <th className="p-2 border-b">Data</th>
-                        <th className="p-2 border-b text-center">Aspecto</th>
-                        <th className="p-2 border-b text-center text-teal-600">Horário / Tempo</th>
-                        <th className="p-2 border-b text-center">Cloro</th>
-                        <th className="p-2 border-b text-center">pH</th>
-                        <th className="p-2 border-b text-center">Alc</th>
+                        <th className="px-1 py-2 border-b w-[16%]">Data</th>
+                        <th className="px-1 py-2 border-b w-[22%]">Aspecto</th>
+                        <th className="px-1 py-2 border-b text-teal-600 w-[26%]">Tempo</th>
+                        <th className="px-1 py-2 border-b w-[12%]">Cl</th>
+                        <th className="px-1 py-2 border-b w-[12%]">pH</th>
+                        <th className="px-1 py-2 border-b w-[12%]">Alc</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
@@ -803,23 +805,24 @@ export default function App() {
                       ) : (
                          historicoDoRelatorio.map((v, i) => (
                            <tr key={i} className="hover:bg-slate-50 transition-colors">
-                             <td className="p-2 font-bold text-zinc-800 whitespace-nowrap">{v.d}</td>
-                             <td className={`p-2 text-center font-bold ${v.a === 'Cristalina' ? 'text-emerald-500' : 'text-yellow-500'}`}>{v.a}</td>
-                             <td className="p-2 text-center font-bold text-zinc-500">
-                               <div className="flex flex-col items-center justify-center gap-0.5">
-                                 <span className="text-[9px] whitespace-nowrap text-zinc-600 dark:text-zinc-400">{v.h || '--'}</span>
-                                 <span className="flex items-center gap-1 text-[10px]"><Clock size={9} className="text-teal-500"/> {v.t || '--'}</span>
+                             <td className="px-1 py-2 font-black text-zinc-800 tracking-tight">{v.d}</td>
+                             <td className={`px-1 py-2 font-bold text-[9px] uppercase tracking-wider ${v.a === 'Cristalina' ? 'text-emerald-500' : 'text-yellow-500'}`}>{v.a}</td>
+                             <td className="px-1 py-2 font-bold text-zinc-500">
+                               <div className="flex flex-col items-center justify-center">
+                                 <span className="text-[9px] text-zinc-700">{v.h || '--'}</span>
+                                 <span className="flex items-center gap-0.5 text-[8px] text-teal-600 mt-0.5"><Clock size={8}/> {v.t || '--'}</span>
                                </div>
                              </td>
-                             <td className="p-2 text-center text-zinc-700">{v.c}</td>
-                             <td className="p-2 text-center text-zinc-700">{v.p}</td>
-                             <td className="p-2 text-center text-zinc-700">{v.al}</td>
+                             <td className="px-1 py-2 font-bold text-zinc-700">{v.c}</td>
+                             <td className="px-1 py-2 font-bold text-zinc-700">{v.p}</td>
+                             <td className="px-1 py-2 font-bold text-zinc-700">{v.al}</td>
                            </tr>
                          ))
                       )}
                     </tbody>
                   </table>
                 </div>
+
               </section>
 
               {visitasComAlerta.length > 0 && (

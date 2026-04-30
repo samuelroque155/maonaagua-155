@@ -229,7 +229,6 @@ export default function App() {
     }
   };
 
-  // --- NOVAS FUNÇÕES PARA EDITAR CLIENTE ---
   const abrirEdicaoCliente = (cliente) => {
     setClienteAtual(cliente);
     setNovoNome(cliente.nome);
@@ -252,13 +251,12 @@ export default function App() {
       
       setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); 
       setClienteAtual(null);
-      setTela('relatorio'); // Retorna para a lista de relatórios
+      setTela('relatorio'); 
       alert("✅ Cadastro atualizado com sucesso!");
     } else {
       alert("Preencha nome, rua, bairro e selecione pelo menos um dia da semana.");
     }
   };
-  // ----------------------------------------
 
   const alternarDiaNovoCliente = (diaIndex) => {
     setNovosDias(novosDias.includes(diaIndex) ? novosDias.filter(d => d !== diaIndex) : [...novosDias, diaIndex]);
@@ -317,7 +315,7 @@ export default function App() {
           ...c, 
           ultimaVisita: dataHojeStr, 
           visitaEmAndamentoData: null, 
-          adiadoPara: null,
+          adiadoPara: null, // Limpa qualquer antecipação/adiamento automático
           ultimosProdutosFaltando: [...produtosFaltando],
           historicoVisitas: [...historicoBase, novaVisita]
         };
@@ -517,7 +515,7 @@ export default function App() {
                 
                 {mostrarAdiarId === c.id ? (
                   <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                    <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 uppercase tracking-wider">Adiar para qual dia?</p>
+                    <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 uppercase tracking-wider">Mover visita para qual dia?</p>
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                       {diasDaSemanaNomes.map((dia, index) => index !== diaAtual && (
                         <button key={index} onClick={() => adiarVisita(c.id, index)} className="text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-2.5 rounded-xl whitespace-nowrap text-zinc-700 dark:text-zinc-300 hover:border-teal-400 transition-colors">{dia}</button>
@@ -534,7 +532,7 @@ export default function App() {
                     <button onClick={() => iniciarVisita(c)} className={`flex-1 py-3.5 rounded-xl font-bold text-sm ${emAndamentoHoje ? 'bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-md' : gradBtn}`}>
                       {emAndamentoHoje ? 'Continuar Limpeza' : 'Iniciar Limpeza'}
                     </button>
-                    <button onClick={() => setMostrarAdiarId(c.id)} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-5 py-3.5 rounded-xl text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">Adiar</button>
+                    <button onClick={() => setMostrarAdiarId(c.id)} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-5 py-3.5 rounded-xl text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">Remarcar</button>
                   </div>
                 )}
               </div>
@@ -562,7 +560,7 @@ export default function App() {
                   {clientesDoDia.length === 0 ? (
                     <p className="text-sm text-zinc-400 dark:text-zinc-600 italic">Livre.</p>
                   ) : clientesDoDia.map(c => (
-                    <div key={c.id} className="flex items-center justify-between"><span className="text-zinc-700 dark:text-zinc-200 font-medium text-sm">{c.nome}</span>{c.adiadoPara === index && <span className="text-[10px] text-teal-600 bg-teal-100 dark:text-teal-400 dark:bg-teal-900/40 px-2.5 py-1 rounded-md font-bold tracking-wider uppercase border border-teal-200 dark:border-teal-800">Adiado</span>}</div>
+                    <div key={c.id} className="flex items-center justify-between"><span className="text-zinc-700 dark:text-zinc-200 font-medium text-sm">{c.nome}</span>{c.adiadoPara === index && <span className="text-[10px] text-teal-600 bg-teal-100 dark:text-teal-400 dark:bg-teal-900/40 px-2.5 py-1 rounded-md font-bold tracking-wider uppercase border border-teal-200 dark:border-teal-800">Remarcado</span>}</div>
                   ))}
                 </div>
               </div>
@@ -714,35 +712,6 @@ export default function App() {
           </section>
 
           <button onClick={salvarVisita} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>SALVAR E FINALIZAR</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (tela === 'novo_cliente') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans pb-10 transition-colors duration-300">
-        <header className="flex items-center gap-4 mb-10 mt-2"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Novo Cliente</h2></header>
-        <div className="space-y-6">
-          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Nome Completo</span><input placeholder="Ex: Samuel Silva" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
-          
-          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Rua</span><input placeholder="Ex: Rua das Flores" value={novaRua} onChange={e => setNovaRua(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
-          
-          <div className="flex gap-3">
-            <div className="space-y-2 flex-1"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Número</span><input placeholder="Ex: 123" value={novoNumero} onChange={e => setNovoNumero(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
-            <div className="space-y-2 flex-[2]"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Bairro</span><input placeholder="Ex: Setor Central" value={novoBairro} onChange={e => setNovoBairro(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
-          </div>
-          
-          <div className="pt-4">
-            <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>
-            <div className="grid grid-cols-4 gap-2.5">
-              {diasDaSemanaNomes.map((d, i) => (
-                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
-              ))}
-            </div>
-          </div>
-          
-          <button onClick={adicionarCliente} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>CADASTRAR CLIENTE</button>
         </div>
       </div>
     );
@@ -957,8 +926,36 @@ export default function App() {
                </div>
             </footer>
           </div>
+
+          {/* NOVA SEÇÃO: AÇÕES RÁPIDAS (VISITA EXTRA E REMARCAR) */}
+          <div className="mt-8 bg-white dark:bg-zinc-900 rounded-[1.5rem] p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+             <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
+               <CalendarDays size={16} className="text-teal-500" /> Ações Rápidas da Agenda
+             </h3>
+             <div className="flex flex-col gap-3">
+               <button onClick={() => iniciarVisita(clienteExibicao)} className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all ${gradBtn}`}>
+                 <Plus size={18} /> Iniciar Visita Extra Agora
+               </button>
+
+               {mostrarAdiarId === clienteExibicao.id ? (
+                  <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 mt-2">
+                    <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 uppercase tracking-wider">Mover próxima visita para:</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                      {diasDaSemanaNomes.map((dia, index) => (
+                        <button key={index} onClick={() => { adiarVisita(clienteExibicao.id, index); alert(`Visita remarcada para ${dia}!`); }} className="text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-2.5 rounded-xl whitespace-nowrap text-zinc-700 dark:text-zinc-300 hover:border-teal-400 transition-colors">{dia}</button>
+                      ))}
+                    </div>
+                    <button onClick={() => setMostrarAdiarId(null)} className="w-full mt-2 text-xs text-rose-500 font-bold p-2 text-center hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors">Cancelar</button>
+                  </div>
+               ) : (
+                  <button onClick={() => setMostrarAdiarId(clienteExibicao.id)} className="w-full bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/40 active:scale-95 transition-all">
+                    <CalendarDays size={18} /> Antecipar / Remarcar Visita
+                  </button>
+               )}
+             </div>
+          </div>
           
-          <div className="flex flex-col gap-3 mt-8">
+          <div className="flex flex-col gap-3 mt-6">
             <button onClick={() => abrirEdicaoCliente(clienteExibicao)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors shadow-sm">
               <Pencil size={18} /> Editar Cadastro do Cliente
             </button>

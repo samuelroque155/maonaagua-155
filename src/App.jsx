@@ -111,7 +111,7 @@ export default function App() {
   const [fotosContagem, setFotosContagem] = useState(0);
   const [fotosVisita, setFotosVisita] = useState([]);
   const [horaInicioVisita, setHoraInicioVisita] = useState(null);
-  const [fotoAlerta, setFotoAlerta] = useState(null);
+  const [fotosAlerta, setFotosAlerta] = useState([]); // MUDADO: De única string para lista
   const [textoAlerta, setTextoAlerta] = useState('');
   const [produtosFaltando, setProdutosFaltando] = useState([]);
   const [mostrarAdiarId, setMostrarAdiarId] = useState(null);
@@ -190,8 +190,12 @@ export default function App() {
   };
 
   const handleFotoAlerta = (e) => processarFotoComprimida(e, (base64) => {
-    setFotoAlerta(base64);
+    setFotosAlerta(prev => [...prev, base64]); // MUDADO: Adiciona na lista
   });
+
+  const removerFotoAlerta = (indexToRemove) => {
+    setFotosAlerta(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
 
   const toggleProduto = (nome) => {
     const existe = produtosFaltando.find(p => p.nome === nome);
@@ -304,7 +308,7 @@ export default function App() {
       t: tempoFormatado,
       tMs: tempoMsTotal, 
       fotos: fotosVisita, 
-      fotoA: fotoAlerta, 
+      fotosA: fotosAlerta, // MUDADO: Envia a lista
       txtA: textoAlerta
     };
     
@@ -336,7 +340,8 @@ export default function App() {
     
     setAspecto(ultimaVisitaReal.a || ''); setPh(ultimaVisitaReal.p || ''); setCloro(ultimaVisitaReal.c || ''); setAlcalinidade(ultimaVisitaReal.al || '');
     setFotosVisita(ultimaVisitaReal.fotos || []); setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
-    setFotoAlerta(ultimaVisitaReal.fotoA || null); setTextoAlerta(ultimaVisitaReal.txtA || '');
+    setFotosAlerta(ultimaVisitaReal.fotosA || []); // MUDADO: Reabre a lista
+    setTextoAlerta(ultimaVisitaReal.txtA || '');
     setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []); 
     
     setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
@@ -360,7 +365,8 @@ export default function App() {
   const resetarFormulario = () => {
     setAspecto(''); setPh(''); setCloro(''); setAlcalinidade('');
     setFotosContagem(0); setFotosVisita([]); setHoraInicioVisita(null); 
-    setFotoAlerta(null); setTextoAlerta(''); setProdutosFaltando([]); setClienteAtual(null);
+    setFotosAlerta([]); // MUDADO: Limpa a lista
+    setTextoAlerta(''); setProdutosFaltando([]); setClienteAtual(null);
   };
 
   const enviarAvisoWhatsApp = (cliente, historicoProdutos = []) => {
@@ -592,7 +598,7 @@ export default function App() {
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-sky-400/10 to-transparent rounded-bl-full pointer-events-none"></div>
             <div className="flex justify-between items-center mb-5">
-              <h3 className="font-bold flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><Camera size={16} /></div> Fotos Principais</h3>
+              <h3 className="font-bold flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><Camera size={16} /></div> Fotos Principais (Mín. 3)</h3>
               <span className={`text-xs px-2.5 py-1 rounded-md font-bold uppercase tracking-wider ${fotosContagem >= 3 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>{fotosContagem}/3</span>
             </div>
             <label className="w-full bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-teal-300/50 dark:border-teal-700/50 py-10 rounded-[1.25rem] flex flex-col items-center gap-3 text-teal-500 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/10 transition-colors">
@@ -600,7 +606,7 @@ export default function App() {
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleNovaFoto} />
             </label>
             
-            {/* MINIATURAS E EXCLUSÃO DE FOTOS */}
+            {/* MINIATURAS E EXCLUSÃO DE FOTOS PRINCIPAIS */}
             {fotosVisita.length > 0 && (
               <div className="flex gap-3 overflow-x-auto mt-5 pb-2 scrollbar-hide">
                 {fotosVisita.map((foto, index) => (
@@ -618,34 +624,42 @@ export default function App() {
             )}
           </section>
 
+          {/* MUDADO: SEÇÃO RELATAR PROBLEMA ATUALIZADA PARA MÚLTIPLAS FOTOS */}
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-rose-200 dark:border-rose-900/30 relative overflow-hidden transition-colors shadow-sm">
              <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-400 to-rose-600"></div>
              <h3 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2.5 mb-4 ml-3"><div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-900/30 text-rose-500"><AlertTriangle size={16} /></div> Relatar Problema</h3>
              
-             <label className={`ml-3 w-[calc(100%-12px)] flex items-center justify-center gap-2.5 py-4 rounded-[1.25rem] font-bold text-sm cursor-pointer border transition-colors ${fotoAlerta ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400' : 'bg-slate-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-rose-300'}`}>
-               <Camera size={20} />{fotoAlerta ? 'Foto Anexada com Sucesso!' : 'Anexar Foto do Defeito'}
+             <label className={`ml-3 w-[calc(100%-12px)] bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-rose-300/50 dark:border-rose-700/50 py-8 rounded-[1.25rem] flex flex-col items-center gap-3 text-rose-500 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors`}>
+               <Camera size={30} className="text-rose-400" /> 
+               <span className="text-sm font-bold tracking-wide">Anexar Foto do Defeito</span>
                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
              </label>
              
-             {fotoAlerta && (
-               <div className="ml-3 mr-3 mt-4 space-y-4">
-                 <div className="relative">
-                   <img src={fotoAlerta} className="w-full h-48 object-cover rounded-[1.25rem] border border-rose-200 dark:border-rose-800 shadow-sm" alt="Problema" />
-                   <button 
-                     onClick={() => setFotoAlerta(null)}
-                     className="absolute top-2 right-2 bg-rose-500/90 text-white rounded-lg p-2 shadow-sm hover:bg-rose-600 transition-colors backdrop-blur-sm"
-                   >
-                     <Trash2 size={16} />
-                   </button>
-                 </div>
+             {/* NOVO: MINIATURAS E EXCLUSÃO DE FOTOS DE DEFEITO */}
+             {fotosAlerta.length > 0 && (
+              <div className="ml-3 mr-3 flex gap-3 overflow-x-auto mt-5 pb-2 scrollbar-hide border-b border-zinc-100 dark:border-zinc-800">
+                {fotosAlerta.map((foto, index) => (
+                  <div key={index} className="relative min-w-[80px] h-20 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm flex-shrink-0">
+                    <img src={foto} className="w-full h-full object-cover" alt={`Defeito ${index + 1}`} />
+                    <button 
+                      onClick={() => removerFotoAlerta(index)}
+                      className="absolute top-1 right-1 bg-rose-500/90 text-white rounded-md p-1 shadow-sm hover:bg-rose-600 transition-colors backdrop-blur-sm"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+             <div className="ml-3 mr-3 mt-4 space-y-4">
                  <textarea 
                    placeholder="Descreva a peça partida, vazamento..." 
                    value={textoAlerta}
                    onChange={e => setTextoAlerta(e.target.value)}
-                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 text-zinc-800 dark:text-zinc-200 min-h-[100px] transition-all"
+                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 text-zinc-800 dark:text-zinc-200 min-h-[100px] transition-all shadow-inner"
                  />
                </div>
-             )}
           </section>
 
           <section className="space-y-4">
@@ -717,6 +731,35 @@ export default function App() {
     );
   }
 
+  if (tela === 'novo_cliente') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans pb-10 transition-colors duration-300">
+        <header className="flex items-center gap-4 mb-10 mt-2"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Novo Cliente</h2></header>
+        <div className="space-y-6">
+          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Nome Completo</span><input placeholder="Ex: Samuel Silva" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          
+          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Rua</span><input placeholder="Ex: Rua das Flores" value={novaRua} onChange={e => setNovaRua(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          
+          <div className="flex gap-3">
+            <div className="space-y-2 flex-1"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Número</span><input placeholder="Ex: 123" value={novoNumero} onChange={e => setNovoNumero(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+            <div className="space-y-2 flex-[2]"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Bairro</span><input placeholder="Ex: Setor Central" value={novoBairro} onChange={e => setNovoBairro(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          </div>
+          
+          <div className="pt-4">
+            <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>
+            <div className="grid grid-cols-4 gap-2.5">
+              {diasDaSemanaNomes.map((d, i) => (
+                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
+              ))}
+            </div>
+          </div>
+          
+          <button onClick={adicionarCliente} className={`w-full py-5 rounded-[1.25rem] font-bold text-lg mt-8 ${gradBtn}`}>CADASTRAR CLIENTE</button>
+        </div>
+      </div>
+    );
+  }
+
   if (tela === 'editar_cliente') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans pb-10 transition-colors duration-300">
@@ -767,7 +810,8 @@ export default function App() {
     const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
     const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
     const fotosDoMes = historicoDoRelatorio.flatMap(v => v.fotos || []).map(f => ({ src: f, data: historicoDoRelatorio.find(x => x.fotos?.includes(f)).d }));
-    const visitasComAlerta = historicoDoRelatorio.filter(v => v.fotoA || v.txtA);
+    // MUDADO: Processa a lista fotosA de todas as visitas
+    const visitasComAlerta = historicoDoRelatorio.filter(v => (v.fotosA && v.fotosA.length > 0) || v.txtA);
     const ultimaVisitaReal = historicoDoRelatorio.length > 0 ? historicoDoRelatorio[historicoDoRelatorio.length - 1] : null;
     const foiVisitadoHoje = clienteExibicao.ultimaVisita === dataHojeStr;
 
@@ -775,17 +819,31 @@ export default function App() {
       <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 max-w-md mx-auto pb-10 font-sans relative overflow-x-hidden transition-colors duration-300">
         
         {/* GERADOR DE PDF/IMAGEM (FUNDO BRANCO OBRIGATÓRIO PARA IMPRESSÃO) */}
-        {foiVisitadoHoje && ultimaVisitaReal?.fotoA && (
+        {/* MUDADO: O PDF só imprime alertas se houver FOTOS do defeito */}
+        {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
           <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -50, pointerEvents: 'none' }}>
             <div id="alerta-print" className="bg-white w-[400px] p-8">
               <div className="border-l-4 border-rose-500 pl-5 mb-6">
                 <h2 className="text-3xl font-black text-rose-600 tracking-tight">🚨 Atenção Técnica</h2>
                 <p className="text-xs font-bold text-zinc-500 mt-1 uppercase tracking-widest">{clienteExibicao.nome} • {ultimaVisitaReal.d}</p>
               </div>
-              <img src={ultimaVisitaReal.fotoA} className="w-full h-72 object-cover rounded-2xl mb-6 border-2 border-rose-100" alt="Problema" />
-              <div className="bg-rose-50 p-5 rounded-2xl border border-rose-100">
+              
+              {/* NOVO: Imprime a primeira foto grande no PDF */}
+              <img src={ultimaVisitaReal.fotosA[0]} className="w-full h-72 object-cover rounded-2xl mb-6 border-2 border-rose-100" alt="ProblemaPrincipal" />
+              
+              <div className="bg-rose-50 p-5 rounded-2xl border border-rose-100 mb-6">
                 <p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap leading-relaxed">{ultimaVisitaReal.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
               </div>
+
+              {/* NOVO: Imprime as outras fotos pequenas no PDF */}
+              {ultimaVisitaReal.fotosA.length > 1 && (
+                <div className="grid grid-cols-3 gap-3">
+                  {ultimaVisitaReal.fotosA.slice(1).map((foto, index) => (
+                    <img key={index} src={foto} className="aspect-square w-full object-cover rounded-lg border-2 border-rose-100" alt={`ProblemaExtra ${index + 1}`} />
+                  ))}
+                </div>
+              )}
+
               <div className="mt-8 pt-4 border-t border-zinc-100 text-center">
                  <p className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] font-bold">Mão Na Água • Relatório Automático</p>
               </div>
@@ -811,7 +869,8 @@ export default function App() {
             <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF</button>
           </div>
 
-          {foiVisitadoHoje && ultimaVisitaReal?.fotoA && (
+          {/* MUDADO: O PDF de alerta só é gerado se houver FOTOS */}
+          {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
             <button onClick={() => compartilharAlertaSeparado(ultimaVisitaReal)} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
               <AlertTriangle size={18} /> Enviar Alerta do Defeito
             </button>
@@ -891,7 +950,8 @@ export default function App() {
                   <div className="space-y-3">
                     {visitasComAlerta.map((v, i) => (
                       <div key={i} className="flex gap-3 bg-rose-50/50 p-3 rounded-xl border border-rose-100/50 items-start">
-                        {v.fotoA && <img src={v.fotoA} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-rose-200" alt="Alerta" />}
+                        {/* NOVO: Imprime apenas a primeira foto do defeito no PDF do mês */}
+                        {v.fotosA && v.fotosA.length > 0 && <img src={v.fotosA[0]} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-rose-200" alt="AlertaBase" />}
                         <div className="flex-1">
                           <p className="text-[9px] font-black text-rose-800 mb-1 tracking-wider uppercase">{v.d}</p>
                           <p className="text-[10px] text-zinc-700 leading-relaxed font-medium">{v.txtA || 'Alerta visual gerado sem anotação em texto.'}</p>

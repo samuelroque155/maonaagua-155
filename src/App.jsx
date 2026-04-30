@@ -22,6 +22,7 @@ export default function App() {
   const diaAtual = new Date().getDay(); 
   const dataHojeStr = new Date().toDateString();
 
+  // --- MEMÓRIA PERMANENTE ---
   const [clientes, setClientes] = useState(() => {
     const salvo = localStorage.getItem('maonagua_v4');
     return salvo ? JSON.parse(salvo) : [
@@ -34,22 +35,19 @@ export default function App() {
     localStorage.setItem('maonagua_v4', JSON.stringify(clientes));
   }, [clientes]);
 
+  // --- ESTADOS DO FORMULÁRIO ---
   const [clienteAtual, setClienteAtual] = useState(null);
   const [aspecto, setAspecto] = useState(''); 
   const [ph, setPh] = useState('');
   const [cloro, setCloro] = useState('');
   const [alcalinidade, setAlcalinidade] = useState('');
-  
   const [fotosContagem, setFotosContagem] = useState(0);
   const [fotosVisita, setFotosVisita] = useState([]);
   const [horaInicioVisita, setHoraInicioVisita] = useState(null);
-  
   const [fotoAlerta, setFotoAlerta] = useState(null);
   const [textoAlerta, setTextoAlerta] = useState('');
-
   const [produtosFaltando, setProdutosFaltando] = useState([]);
   const [mostrarAdiarId, setMostrarAdiarId] = useState(null);
-  
   const [novoNome, setNovoNome] = useState('');
   const [novoEndereco, setNovoEndereco] = useState('');
   const [novosDias, setNovosDias] = useState([]);
@@ -133,7 +131,6 @@ export default function App() {
       return;
     }
     
-    // CORREÇÃO DO TEMPO: Cálculo do tempo total em milissegundos para salvar no histórico
     const tempoMsTotal = Date.now() - (horaInicioVisita || Date.now());
     const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
@@ -146,7 +143,7 @@ export default function App() {
       d: `${diaFormatado}/${meses[dateObj.getMonth()]}`,
       a: aspecto, c: cloro, p: ph, al: alcalinidade, 
       t: tempoFormatado,
-      tMs: tempoMsTotal, // Guardamos os milissegundos reais para a conta do "Reabrir"
+      tMs: tempoMsTotal,
       fotos: fotosVisita, fotoA: fotoAlerta, txtA: textoAlerta
     };
     
@@ -182,8 +179,7 @@ export default function App() {
     setTextoAlerta(ultimaVisitaReal.txtA || '');
     setProdutosFaltando(clienteParaEditar.ultimosProdutosFaltando || []);
     
-    // CORREÇÃO MÁGICA: Ajustamos a "hora de início" para o passado
-    // Se gastaste 30min antes, a nova hora de início será "Agora - 30min"
+    // CORREÇÃO DO TEMPO: Ajustamos o início para manter o tempo anterior
     setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
     
     const novoHistorico = historico.slice(0, -1);
@@ -198,11 +194,13 @@ export default function App() {
     setFotoAlerta(null); setTextoAlerta(''); setProdutosFaltando([]); setClienteAtual(null);
   };
 
-  const enviarAvisoWhatsApp = (cliente, listaProdutos = [], relatoProblema = '') => {
+  const enviarAvisoWhatsApp = (cliente, historicoProdutos = []) => {
     let mensagem = `Olá, ${cliente.nome}! 🌊\nPassando para avisar que a manutenção da sua piscina foi concluída com sucesso.\n\n`;
-    if (listaProdutos.length > 0) {
+    if (historicoProdutos.length > 0) {
        mensagem += `⚠️ *Produtos Faltando:*\n`;
-       listaProdutos.forEach(p => { mensagem += `- ${p.qtd}x ${p.nome}\n`; });
+       historicoProdutos.forEach(p => {
+         mensagem += `- ${p.qtd}x ${p.nome}\n`;
+       });
        mensagem += `\n`;
     }
     mensagem += `Qualquer dúvida, estou à disposição!\n*Mão Na Água - Gestão Profissional*`;
@@ -245,12 +243,13 @@ export default function App() {
           const a = document.createElement('a');
           a.href = url; a.download = file.name; a.click();
           URL.revokeObjectURL(url);
+          alert("Imagem salva no dispositivo.");
         }
       }, 'image/png');
     } catch(e) { alert('Erro ao processar imagem.'); }
   };
 
-  // --- RENDERIZAÇÃO ---
+  // --- INTERFACE (MANTIDA IGUAL ÀS MELHORES VERSÕES) ---
 
   if (tela === 'lista') return (
     <div className="min-h-screen bg-zinc-950 p-4 max-w-md mx-auto text-zinc-100 pb-24 font-sans">
@@ -316,7 +315,7 @@ export default function App() {
       <div className="p-5 space-y-8">
         <section><label className="block text-sm font-bold text-zinc-500 mb-3 uppercase">Aspecto da Água:</label><div className="grid grid-cols-3 gap-3">{['Cristalina', 'Turva', 'Verde'].map(opt => (<button key={opt} onClick={() => setAspecto(opt)} className={`py-4 rounded-2xl font-bold text-xs ${aspecto === opt ? gradBtn : 'bg-zinc-900 text-zinc-600 border border-zinc-800'}`}>{opt}</button>))}</div></section>
         <section className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800"><div className="flex justify-between items-center mb-4"><h3 className="font-bold flex items-center gap-2"><Camera size={18} className="text-yellow-500"/> Fotos Principais</h3><span className={`text-xs font-bold ${fotosContagem >= 3 ? 'text-emerald-500' : 'text-rose-500'}`}>{fotosContagem}/3</span></div><label className="w-full bg-zinc-950 border-2 border-dashed border-zinc-700 py-8 rounded-2xl flex flex-col items-center gap-3 text-pink-400 cursor-pointer"><Camera size={32} /> <span className="text-sm font-bold">Adicionar Foto</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleNovaFoto} /></label></section>
-        <section className="bg-zinc-900 p-5 rounded-3xl border border-rose-900/30 relative overflow-hidden"><div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-500 to-orange-500"></div><h3 className="font-bold text-zinc-200 flex items-center gap-2 mb-2 ml-3"><AlertTriangle size={18} className="text-rose-500"/> Relatar Problema</h3><label className={`ml-3 w-[calc(100%-12px)] flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm cursor-pointer border ${fotoAlerta ? 'bg-rose-500/20 border-rose-500 text-rose-400' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}><Camera size={20} />{fotoAlerta ? 'Foto Anexada!' : 'Foto do Problema'}<input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} /></label>{fotoAlerta && (<div className="ml-3 mr-3 mt-3 space-y-3"><img src={fotoAlerta} className="w-full h-40 object-cover rounded-xl border border-zinc-700" /><textarea placeholder="Descreva o problema aqui..." value={textoAlerta} onChange={e => setTextoAlerta(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-xl text-sm outline-none focus:border-rose-500 text-zinc-200 min-h-[80px]"/></div>)}</section>
+        <section className="bg-zinc-900 p-5 rounded-3xl border border-rose-900/30 relative overflow-hidden"><div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-500 to-orange-500"></div><h3 className="font-bold text-zinc-200 flex items-center gap-2 mb-2 ml-3"><AlertTriangle size={18} className="text-rose-500"/> Relatar Problema</h3><label className={`ml-3 w-[calc(100%-12px)] flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm cursor-pointer border ${fotoAlerta ? 'bg-rose-500/20 border-rose-500 text-rose-400' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}><Camera size={20} />{fotoAlerta ? 'Foto Anexada!' : 'Foto do Problema'}<input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} /></label>{fotoAlerta && (<div className="ml-3 mr-3 mt-3 space-y-3"><img src={fotoAlerta} className="w-full h-40 object-cover rounded-xl border border-zinc-700" alt="Problema" /><textarea placeholder="Descreva o problema aqui..." value={textoAlerta} onChange={e => setTextoAlerta(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-xl text-sm outline-none focus:border-rose-500 text-zinc-200 min-h-[80px]"/></div>)}</section>
         <section className="space-y-4"><p className="text-xs font-bold text-zinc-500 uppercase">Parâmetros da Água</p><div className="grid grid-cols-3 gap-2"><div className="flex flex-col gap-1"><span className="text-[10px] text-zinc-500 text-center font-bold">pH</span><input type="number" step="0.1" value={ph} onChange={e => setPh(e.target.value)} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center focus:border-pink-500 outline-none text-pink-500 font-bold" /></div><div className="flex flex-col gap-1"><span className="text-[10px] text-zinc-500 text-center font-bold">CLORO</span><input type="number" step="0.1" value={cloro} onChange={e => setCloro(e.target.value)} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center focus:border-pink-500 outline-none text-pink-500 font-bold" /></div><div className="flex flex-col gap-1"><span className="text-[10px] text-zinc-500 text-center font-bold">ALC</span><input type="number" value={alcalinidade} onChange={e => setAlcalinidade(e.target.value)} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center focus:border-pink-500 outline-none text-pink-500 font-bold" /></div></div></section>
         <section className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800"><p className="font-bold text-sm mb-4 flex items-center gap-2 text-yellow-500"><ShoppingCart size={18}/> Produtos Faltando</p><div className="space-y-3">{listaQuimica.map(q => { const item = produtosFaltando.find(p => p.nome === q); return (<div key={q} className={`flex flex-col p-3 rounded-2xl border ${item ? 'bg-pink-900/10 border-pink-500' : 'bg-zinc-950 border-zinc-800'}`}><div className="flex items-center justify-between"><button onClick={() => toggleProduto(q)} className="flex items-center gap-3 flex-1 text-left"><div className={`w-6 h-6 rounded flex items-center justify-center border ${item ? 'bg-pink-500 border-pink-500' : 'border-zinc-700'}`}>{item && <Check size={16}/>}</div><span className={`text-sm font-bold ${item ? 'text-zinc-100' : 'text-zinc-500'}`}>{q}</span></button>{item && (<div className="flex items-center gap-3 bg-zinc-900 rounded-xl p-1 border border-zinc-800"><button onClick={() => updateQtdProduto(q, -1)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg"><Minus size={16} /></button><span className="font-bold text-sm w-4 text-center">{item.qtd}</span><button onClick={() => updateQtdProduto(q, 1)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg"><Plus size={16} /></button></div>)}</div></div>);})}</div></section>
         <button onClick={salvarVisita} className={`w-full py-5 rounded-2xl font-bold text-lg shadow-2xl ${gradBtn}`}>SALVAR E FINALIZAR</button>
@@ -350,19 +349,20 @@ export default function App() {
           <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -50, pointerEvents: 'none' }}>
             <div id="alerta-print" className="bg-white w-[400px] p-6">
               <div className="border-l-4 border-rose-500 pl-4 mb-4"><h2 className="text-2xl font-black text-rose-600">🚨 Atenção Técnica</h2><p className="text-sm font-bold text-zinc-500">Cliente: {clienteExibicao.nome} • {ultimaVisitaReal.d}</p></div>
-              <img src={ultimaVisitaReal.fotoA} className="w-full h-64 object-cover rounded-xl mb-4 border border-zinc-200" /><div className="bg-rose-50 p-4 rounded-xl border border-rose-100"><p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap">{ultimaVisitaReal.txtA || 'Nenhum detalhe adicional.'}</p></div>
+              <img src={ultimaVisitaReal.fotoA} className="w-full h-64 object-cover rounded-xl mb-4 border border-zinc-200" alt="Problema" /><div className="bg-rose-50 p-4 rounded-xl border border-rose-100"><p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap">{ultimaVisitaReal.txtA || 'Nenhum detalhe adicional.'}</p></div>
               <p className="text-[10px] text-zinc-400 mt-6 text-center uppercase tracking-widest">Mão Na Água - Gestão Profissional</p>
             </div>
           </div>
         )}
         <header className="p-4 flex items-center gap-4 bg-white border-b border-zinc-200 sticky top-0 z-10 shadow-sm"><button onClick={() => setTela('relatorio')} className="text-zinc-400 p-2"><ArrowLeft /></button><h2 className="font-bold text-lg text-zinc-800">Visualizar Documento</h2></header>
         <div className="p-4 mt-2">
-          {foiVisitadoHoje && <button onClick={reabrirTarefa} className="w-full mb-6 bg-blue-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg"><RotateCcw size={18} /> Reabrir Visita de Hoje</button>}
+          {foiVisitadoHoje && <button onClick={reabrirTarefa} className="w-full mb-6 bg-blue-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"><RotateCcw size={18} /> Reabrir Visita de Hoje</button>}
           <div className="flex gap-2 mb-4">
-            <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, clienteExibicao.ultimosProdutosFaltando)} className="flex-1 bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm"><MessageSquare size={18} /> Texto</button>
-            <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm"><Share2 size={18} /> Imagem PDF</button>
+            <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, clienteExibicao.ultimosProdutosFaltando)} className="flex-1 bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"><MessageSquare size={18} /> Texto</button>
+            <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"><Share2 size={18} /> Imagem PDF</button>
           </div>
-          {foiVisitadoHoje && ultimaVisitaReal?.fotoA && <button onClick={() => compartilharAlertaSeparado(ultimaVisitaReal)} className="w-full mb-6 bg-rose-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg"><AlertTriangle size={18} /> Enviar Relato do Problema</button>}
+          {foiVisitadoHoje && ultimaVisitaReal?.fotoA && <button onClick={() => compartilharAlertaSeparado(ultimaVisitaReal)} className="w-full mb-6 bg-rose-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"><AlertTriangle size={18} /> Enviar Relato do Problema</button>}
+          
           <div id="relatorio-print" className="bg-white w-full shadow-lg rounded-sm overflow-hidden border border-zinc-200">
             <header className="p-5 border-b-4 border-b-transparent relative" style={{ borderImage: 'linear-gradient(to right, #facc15, #ec4899, #9333ea) 1' }}>
               <div className="flex justify-between items-start"><div><h1 className="text-2xl font-black tracking-tight text-pink-600 mb-0.5">Mão Na Água</h1><p className="text-[10px] text-zinc-400 font-medium tracking-widest uppercase">Gestão Profissional</p></div><div className="text-right"><h2 className="text-xs font-bold text-zinc-800">Relatório Mensal</h2><p className="text-[10px] text-zinc-500 font-semibold">Abril / 2026</p></div></div>
@@ -370,16 +370,16 @@ export default function App() {
             </header>
             <div className="p-5 space-y-6">
               <section><h3 className="text-xs font-bold text-zinc-800 border-b border-zinc-200 pb-1 mb-2 flex items-center gap-1"><Droplets size={14} className="text-pink-500" /> Histórico de Parâmetros</h3>
-                <div className="overflow-x-auto rounded border border-zinc-200"><table className="w-full text-[8px] text-left"><thead className="bg-zinc-50 text-zinc-500 font-bold uppercase"><tr><th className="p-1.5 border-b">Data</th><th className="p-1.5 border-b text-center">Aspecto</th><th className="p-1.5 border-b text-center text-pink-600">Tempo</th><th className="p-1.5 border-b text-center">Cloro</th><th className="p-1.5 border-b text-center">pH</th><th className="p-1.5 border-b text-center">Alc</th></tr></thead><tbody className="divide-y divide-zinc-200">{historico.length === 0 ? <tr><td colSpan="6" className="p-3 text-center text-xs text-zinc-500">Nenhum histórico.</td></tr> : historico.map((v, i) => (<tr key={i} className="hover:bg-zinc-50"><td className="p-1.5 font-bold text-zinc-800">{v.d}</td><td className={`p-1.5 text-center font-bold ${v.a === 'Cristalina' ? 'text-green-600' : 'text-yellow-600'}`}>{v.a}</td><td className="p-1.5 text-center font-bold text-zinc-600 flex items-center justify-center gap-0.5"><Clock size={8}/> {v.t || '--'}</td><td className="p-1.5 text-center">{v.c}</td><td className="p-1.5 text-center">{v.p}</td><td className="p-1.5 text-center">{v.al}</td></tr>))}</tbody></table></div>
+                <div className="overflow-x-auto rounded border border-zinc-200"><table className="w-full text-[8px] text-left"><thead className="bg-zinc-50 text-zinc-500 font-bold uppercase"><tr><th className="p-1.5 border-b">Data</th><th className="p-1.5 border-b text-center">Aspecto</th><th className="p-1.5 border-b text-center text-pink-600">Tempo</th><th className="p-1.5 border-b text-center">Cloro</th><th className="p-1.5 border-b text-center">pH</th><th className="p-1.5 border-b text-center">Alc</th></tr></thead><tbody className="divide-y divide-zinc-200">{historico.length === 0 ? <tr><td colSpan="6" className="p-3 text-center text-xs text-zinc-500">Nenhum histórico registrado ainda.</td></tr> : historico.map((v, i) => (<tr key={i} className="hover:bg-zinc-50"><td className="p-1.5 font-bold text-zinc-800">{v.d}</td><td className={`p-1.5 text-center font-bold ${v.a === 'Cristalina' ? 'text-green-600' : 'text-yellow-600'}`}>{v.a}</td><td className="p-1.5 text-center font-bold text-zinc-600 flex items-center justify-center gap-0.5"><Clock size={8}/> {v.t || '--'}</td><td className="p-1.5 text-center">{v.c}</td><td className="p-1.5 text-center">{v.p}</td><td className="p-1.5 text-center">{v.al}</td></tr>))}</tbody></table></div>
               </section>
               {historico.filter(v => v.fotoA).length > 0 && (
-                <section className="pt-2 border-t border-zinc-200"><h3 className="text-xs font-bold text-rose-600 pb-2 flex items-center gap-1"><AlertTriangle size={14} /> Ocorrências Registradas</h3><div className="space-y-3">{historico.filter(v => v.fotoA).map((v, i) => (<div key={i} className="flex gap-3 bg-rose-50 p-2 rounded-lg border border-rose-100 items-start"><img src={v.fotoA} className="w-16 h-16 object-cover rounded shadow-sm" /><div className="flex-1"><p className="text-[8px] font-bold text-rose-800 mb-0.5">{v.d}</p><p className="text-[9px] text-zinc-700 leading-tight">{v.txtA || 'Sem descrição.'}</p></div></div>))}</div></section>
+                <section className="pt-2 border-t border-zinc-200"><h3 className="text-xs font-bold text-rose-600 pb-2 flex items-center gap-1"><AlertTriangle size={14} /> Ocorrências Registradas</h3><div className="space-y-3">{historico.filter(v => v.fotoA).map((v, i) => (<div key={i} className="flex gap-3 bg-rose-50 p-2 rounded-lg border border-rose-100 items-start"><img src={v.fotoA} className="w-16 h-16 object-cover rounded shadow-sm" alt="Ocorrência" /><div className="flex-1"><p className="text-[8px] font-bold text-rose-800 mb-0.5">{v.d}</p><p className="text-[9px] text-zinc-700 leading-tight">{v.txtA || 'Sem descrição.'}</p></div></div>))}</div></section>
               )}
               {historico.flatMap(v => v.fotos || []).length > 0 && (
-                <section className="pt-2 border-t border-zinc-200"><h3 className="text-xs font-bold text-zinc-800 pb-3 flex items-center gap-1"><Camera size={14} className="text-pink-500" /> Imagens do Local</h3><div className="grid grid-cols-4 gap-2">{historico.flatMap(v => (v.fotos || []).map(f => ({src: f, data: v.d}))).map((foto, i) => (<div key={i} className="aspect-square rounded-md overflow-hidden relative border bg-zinc-200 shadow-sm"><img src={foto.src} className="w-full h-full object-cover" /><div className="absolute bottom-0 left-0 w-full bg-black/60 text-white text-[7px] font-bold text-center py-0.5">{foto.data}</div></div>))}</div></section>
+                <section className="pt-2 border-t border-zinc-200"><h3 className="text-xs font-bold text-zinc-800 pb-3 flex items-center gap-1"><Camera size={14} className="text-pink-500" /> Imagens do Local</h3><div className="grid grid-cols-4 gap-2">{historico.flatMap(v => (v.fotos || []).map(f => ({src: f, data: v.d}))).map((foto, i) => (<div key={i} className="aspect-square rounded-md overflow-hidden relative border bg-zinc-200 shadow-sm"><img src={foto.src} className="w-full h-full object-cover" alt="Visita" /><div className="absolute bottom-0 left-0 w-full bg-black/60 text-white text-[7px] font-bold text-center py-0.5 tracking-wider">{foto.data}</div></div>))}</div></section>
               )}
             </div>
-            <footer className="bg-zinc-800 text-white p-5 text-center mt-2"><p className="text-sm font-bold mb-1">Obrigado pela confiança!</p><p className="text-[9px] text-zinc-400 mb-4">Mão Na Água - Gestão Profissional</p></footer>
+            <footer className="bg-zinc-800 text-white p-5 text-center mt-2"><p className="text-sm font-bold mb-1">Obrigado pela confiança no meu trabalho!</p><p className="text-[9px] text-zinc-400 mb-4">Documento gerado pelo sistema Mão Na Água.</p><div className="flex justify-center gap-4 text-[9px] text-zinc-300 border-t border-zinc-700 pt-3"><span className="flex items-center gap-1"><Phone size={10} className="text-yellow-400"/> Atendimento Técnico</span></div></footer>
           </div>
         </div>
       </div>

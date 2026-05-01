@@ -7,7 +7,7 @@ import { toPng } from 'html-to-image';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db } from './firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 // --- CONFIGURAÇÕES DOS PRODUTOS E ACESSÓRIOS ---
@@ -111,7 +111,7 @@ export default function App() {
   const [fotosContagem, setFotosContagem] = useState(0);
   const [fotosVisita, setFotosVisita] = useState([]);
   const [horaInicioVisita, setHoraInicioVisita] = useState(null);
-  const [fotosAlerta, setFotosAlerta] = useState([]); // MUDADO: De única string para lista
+  const [fotosAlerta, setFotosAlerta] = useState([]); 
   const [textoAlerta, setTextoAlerta] = useState('');
   const [produtosFaltando, setProdutosFaltando] = useState([]);
   const [mostrarAdiarId, setMostrarAdiarId] = useState(null);
@@ -129,7 +129,7 @@ export default function App() {
     try {
       await signInWithEmailAndPassword(auth, emailLogin, senhaLogin);
     } catch (error) {
-      alert("Erro ao entrar: Verifique o e-mail e a senha.");
+      alert("Erro ao entrar: Verifique se o e-mail e a senha estão corretos.");
     }
   };
 
@@ -140,6 +140,19 @@ export default function App() {
       await createUserWithEmailAndPassword(auth, emailLogin, senhaLogin);
     } catch (error) {
       alert("Erro ao cadastrar: " + error.message);
+    }
+  };
+
+  // --- NOVA FUNÇÃO: RECUPERAR SENHA ---
+  const handleRecuperarSenha = async () => {
+    if(!emailLogin) {
+      return alert("Para redefinir a senha, primeiro digite o seu e-mail no campo acima e depois clique aqui.");
+    }
+    try {
+      await sendPasswordResetEmail(auth, emailLogin);
+      alert("✅ E-mail de recuperação enviado!\n\nVerifique sua caixa de entrada (e a pasta de Spam) para criar uma nova senha.");
+    } catch (error) {
+      alert("Erro ao enviar e-mail: Verifique se o e-mail foi digitado corretamente.");
     }
   };
 
@@ -190,7 +203,7 @@ export default function App() {
   };
 
   const handleFotoAlerta = (e) => processarFotoComprimida(e, (base64) => {
-    setFotosAlerta(prev => [...prev, base64]); // MUDADO: Adiciona na lista
+    setFotosAlerta(prev => [...prev, base64]); 
   });
 
   const removerFotoAlerta = (indexToRemove) => {
@@ -287,7 +300,6 @@ export default function App() {
     const dataFim = new Date();
     const dataInicio = new Date(horaInicioVisita || Date.now());
     
-    // FORMATANDO A HORA (EX: 14:30)
     const formataHora = (data) => `${data.getHours().toString().padStart(2, '0')}:${data.getMinutes().toString().padStart(2, '0')}`;
     const horarioVisita = `${formataHora(dataInicio)} - ${formataHora(dataFim)}`;
 
@@ -308,7 +320,7 @@ export default function App() {
       t: tempoFormatado,
       tMs: tempoMsTotal, 
       fotos: fotosVisita, 
-      fotosA: fotosAlerta, // MUDADO: Envia a lista
+      fotosA: fotosAlerta, 
       txtA: textoAlerta
     };
     
@@ -319,7 +331,7 @@ export default function App() {
           ...c, 
           ultimaVisita: dataHojeStr, 
           visitaEmAndamentoData: null, 
-          adiadoPara: null, // Limpa qualquer antecipação/adiamento automático
+          adiadoPara: null,
           ultimosProdutosFaltando: [...produtosFaltando],
           historicoVisitas: [...historicoBase, novaVisita]
         };
@@ -340,7 +352,7 @@ export default function App() {
     
     setAspecto(ultimaVisitaReal.a || ''); setPh(ultimaVisitaReal.p || ''); setCloro(ultimaVisitaReal.c || ''); setAlcalinidade(ultimaVisitaReal.al || '');
     setFotosVisita(ultimaVisitaReal.fotos || []); setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
-    setFotosAlerta(ultimaVisitaReal.fotosA || []); // MUDADO: Reabre a lista
+    setFotosAlerta(ultimaVisitaReal.fotosA || []); 
     setTextoAlerta(ultimaVisitaReal.txtA || '');
     setProdutosFaltando(clienteAlvo.ultimosProdutosFaltando || []); 
     
@@ -365,7 +377,7 @@ export default function App() {
   const resetarFormulario = () => {
     setAspecto(''); setPh(''); setCloro(''); setAlcalinidade('');
     setFotosContagem(0); setFotosVisita([]); setHoraInicioVisita(null); 
-    setFotosAlerta([]); // MUDADO: Limpa a lista
+    setFotosAlerta([]); 
     setTextoAlerta(''); setProdutosFaltando([]); setClienteAtual(null);
   };
 
@@ -448,10 +460,17 @@ export default function App() {
               </button>
             </div>
 
-            <div className="mt-8 text-center">
+            <div className="mt-8 flex flex-col items-center gap-3">
               <button onClick={() => setIsRegistering(!isRegistering)} className="text-sm text-zinc-400 font-medium hover:text-teal-400 transition-colors">
                 {isRegistering ? 'Já tem uma conta? Faça login' : 'Não tem conta? Cadastre-se'}
               </button>
+              
+              {/* NOVO: BOTÃO DE ESQUECI A SENHA */}
+              {!isRegistering && (
+                <button onClick={handleRecuperarSenha} className="text-xs text-zinc-500 font-medium hover:text-sky-400 transition-colors underline underline-offset-4">
+                  Esqueci minha senha
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -624,7 +643,6 @@ export default function App() {
             )}
           </section>
 
-          {/* MUDADO: SEÇÃO RELATAR PROBLEMA ATUALIZADA PARA MÚLTIPLAS FOTOS */}
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-rose-200 dark:border-rose-900/30 relative overflow-hidden transition-colors shadow-sm">
              <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-400 to-rose-600"></div>
              <h3 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2.5 mb-4 ml-3"><div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-900/30 text-rose-500"><AlertTriangle size={16} /></div> Relatar Problema</h3>
@@ -635,7 +653,7 @@ export default function App() {
                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
              </label>
              
-             {/* NOVO: MINIATURAS E EXCLUSÃO DE FOTOS DE DEFEITO */}
+             {/* MINIATURAS E EXCLUSÃO DE FOTOS DE DEFEITO */}
              {fotosAlerta.length > 0 && (
               <div className="ml-3 mr-3 flex gap-3 overflow-x-auto mt-5 pb-2 scrollbar-hide border-b border-zinc-100 dark:border-zinc-800">
                 {fotosAlerta.map((foto, index) => (
@@ -810,7 +828,6 @@ export default function App() {
     const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
     const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
     const fotosDoMes = historicoDoRelatorio.flatMap(v => v.fotos || []).map(f => ({ src: f, data: historicoDoRelatorio.find(x => x.fotos?.includes(f)).d }));
-    // MUDADO: Processa a lista fotosA de todas as visitas
     const visitasComAlerta = historicoDoRelatorio.filter(v => (v.fotosA && v.fotosA.length > 0) || v.txtA);
     const ultimaVisitaReal = historicoDoRelatorio.length > 0 ? historicoDoRelatorio[historicoDoRelatorio.length - 1] : null;
     const foiVisitadoHoje = clienteExibicao.ultimaVisita === dataHojeStr;
@@ -819,7 +836,6 @@ export default function App() {
       <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 max-w-md mx-auto pb-10 font-sans relative overflow-x-hidden transition-colors duration-300">
         
         {/* GERADOR DE PDF/IMAGEM (FUNDO BRANCO OBRIGATÓRIO PARA IMPRESSÃO) */}
-        {/* MUDADO: O PDF só imprime alertas se houver FOTOS do defeito */}
         {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
           <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -50, pointerEvents: 'none' }}>
             <div id="alerta-print" className="bg-white w-[400px] p-8">
@@ -828,14 +844,12 @@ export default function App() {
                 <p className="text-xs font-bold text-zinc-500 mt-1 uppercase tracking-widest">{clienteExibicao.nome} • {ultimaVisitaReal.d}</p>
               </div>
               
-              {/* NOVO: Imprime a primeira foto grande no PDF */}
               <img src={ultimaVisitaReal.fotosA[0]} className="w-full h-72 object-cover rounded-2xl mb-6 border-2 border-rose-100" alt="ProblemaPrincipal" />
               
               <div className="bg-rose-50 p-5 rounded-2xl border border-rose-100 mb-6">
                 <p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap leading-relaxed">{ultimaVisitaReal.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
               </div>
 
-              {/* NOVO: Imprime as outras fotos pequenas no PDF */}
               {ultimaVisitaReal.fotosA.length > 1 && (
                 <div className="grid grid-cols-3 gap-3">
                   {ultimaVisitaReal.fotosA.slice(1).map((foto, index) => (
@@ -869,7 +883,6 @@ export default function App() {
             <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF</button>
           </div>
 
-          {/* MUDADO: O PDF de alerta só é gerado se houver FOTOS */}
           {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
             <button onClick={() => compartilharAlertaSeparado(ultimaVisitaReal)} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
               <AlertTriangle size={18} /> Enviar Alerta do Defeito
@@ -950,7 +963,6 @@ export default function App() {
                   <div className="space-y-3">
                     {visitasComAlerta.map((v, i) => (
                       <div key={i} className="flex gap-3 bg-rose-50/50 p-3 rounded-xl border border-rose-100/50 items-start">
-                        {/* NOVO: Imprime apenas a primeira foto do defeito no PDF do mês */}
                         {v.fotosA && v.fotosA.length > 0 && <img src={v.fotosA[0]} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-rose-200" alt="AlertaBase" />}
                         <div className="flex-1">
                           <p className="text-[9px] font-black text-rose-800 mb-1 tracking-wider uppercase">{v.d}</p>

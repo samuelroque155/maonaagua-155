@@ -3,8 +3,6 @@ import {
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
   AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db } from './firebase';
@@ -56,6 +54,9 @@ export default function App() {
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
   
+  // NOVO: Estado que controla o que será impresso nativamente
+  const [modoImpressao, setModoImpressao] = useState(null);
+
   const dateObj = new Date();
   const diaAtual = dateObj.getDay(); 
   const dataHojeStr = dateObj.toDateString();
@@ -392,50 +393,28 @@ export default function App() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
-  // --- PDF: AGORA USANDO APENAS HTML2CANVAS E JSPDF ---
-  const compartilharRelatorioVisual = async () => {
-    const elemento = document.getElementById('relatorio-print');
-    if (!elemento) return;
-    try {
-      const canvas = await html2canvas(elemento, { 
-        scale: 2, 
-        backgroundColor: '#ffffff',
-        useCORS: true // Ajuda a carregar as imagens no PDF
-      });
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Relatorio_${clienteRelatorio.nome}.pdf`);
-      alert("✅ PDF salvo com sucesso!");
-    } catch (error) { 
-      alert("Erro ao processar PDF: " + error.message); 
+  // --- O SEGREDO MESTRE: GERADOR NATIVO DE PDF (Sem travar cores) ---
+  useEffect(() => {
+    if (modoImpressao) {
+      // O app dá uma fração de segundo para a tela esconder os botões...
+      const timer = setTimeout(() => {
+        // E abre a tela nativa do celular para Salvar em PDF
+        window.print();
+        // Quando você termina de salvar, a tela volta ao normal sozinha
+        setModoImpressao(null);
+      }, 300);
+      return () => clearTimeout(timer);
     }
+  }, [modoImpressao]);
+
+  const compartilharRelatorioVisual = () => {
+    setModoImpressao('relatorio');
   };
 
-  const compartilharAlertaSeparado = async (visita) => {
-    const elemento = document.getElementById('alerta-print');
-    if (!elemento) return;
-    try {
-      const canvas = await html2canvas(elemento, { 
-        scale: 2, 
-        backgroundColor: '#ffffff',
-        useCORS: true 
-      });
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Alerta_${clienteRelatorio.nome}.pdf`);
-      alert("✅ PDF de Alerta salvo com sucesso!");
-    } catch(e) { alert('Erro ao processar PDF do relato: ' + e.message); }
+  const compartilharAlertaSeparado = () => {
+    setModoImpressao('alerta');
   };
+  // ------------------------------------------------------------------
 
   if (authLoading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-teal-400 font-bold">A conectar ao Firebase...</div>;
@@ -635,7 +614,6 @@ export default function App() {
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleNovaFoto} />
             </label>
             
-            {/* MINIATURAS E EXCLUSÃO DE FOTOS PRINCIPAIS */}
             {fotosVisita.length > 0 && (
               <div className="flex gap-3 overflow-x-auto mt-5 pb-2 scrollbar-hide">
                 {fotosVisita.map((foto, index) => (
@@ -663,7 +641,6 @@ export default function App() {
                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
              </label>
              
-             {/* MINIATURAS E EXCLUSÃO DE FOTOS DE DEFEITO */}
              {fotosAlerta.length > 0 && (
               <div className="ml-3 mr-3 flex gap-3 overflow-x-auto mt-5 pb-2 scrollbar-hide border-b border-zinc-100 dark:border-zinc-800">
                 {fotosAlerta.map((foto, index) => (
@@ -847,64 +824,76 @@ export default function App() {
     const foiVisitadoHoje = clienteExibicao.ultimaVisita === dataHojeStr;
 
     return (
-      <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 max-w-md mx-auto pb-10 font-sans relative overflow-x-hidden transition-colors duration-300">
+      <div className={`min-h-screen font-sans relative overflow-x-hidden transition-colors duration-300 ${modoImpressao ? 'bg-white text-black' : 'bg-slate-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 pb-10 max-w-md mx-auto'}`}>
         
-        {/* GERADOR DE PDF/IMAGEM (FUNDO BRANCO OBRIGATÓRIO PARA IMPRESSÃO) */}
+        {/* ESTILOS NATIVOS DE IMPRESSÃO (O segredo do PDF perfeito) */}
+        <style>{`
+          @media print {
+            @page { margin: 0; size: auto; }
+            body, html { background-color: #ffffff !important; margin: 0 !important; padding: 0 !important; }
+            .no-print { display: none !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          }
+        `}</style>
+
+        {/* --- TELA NORMAL (Escondida no PDF) --- */}
+        <div className={modoImpressao ? 'hidden no-print' : 'block'}>
+          <header className="p-4 flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10 shadow-sm transition-colors">
+            <button onClick={() => setTela('relatorio')} className="text-zinc-500 dark:text-zinc-400 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl"><ArrowLeft size={20}/></button>
+            <h2 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">Dossiê do Cliente</h2>
+          </header>
+          
+          <div className="p-4 mt-2">
+            {foiVisitadoHoje && (
+              <button onClick={reabrirTarefa} className="w-full mb-6 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-sky-500/20 active:scale-95 transition-all">
+                <RotateCcw size={18} /> Editar Limpeza de Hoje
+              </button>
+            )}
+
+            <div className="flex gap-3 mb-6">
+              <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, produtosDoRelatorio)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><MessageSquare size={18} /> WhatsApp</button>
+              <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF</button>
+            </div>
+
+            {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
+              <button onClick={compartilharAlertaSeparado} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
+                <AlertTriangle size={18} /> Enviar Alerta do Defeito
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* --- ÁREA DE IMPRESSÃO: ALERTA (Só aparece se modo for 'alerta') --- */}
         {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
-          <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -50, pointerEvents: 'none' }}>
-            <div id="alerta-print" className="bg-white w-[400px] p-8">
-              <div className="border-l-4 border-rose-500 pl-5 mb-6">
-                <h2 className="text-3xl font-black text-rose-600 tracking-tight">🚨 Atenção Técnica</h2>
-                <p className="text-xs font-bold text-zinc-500 mt-1 uppercase tracking-widest">{clienteExibicao.nome} • {ultimaVisitaReal.d}</p>
-              </div>
-              
-              <img src={ultimaVisitaReal.fotosA[0]} className="w-full h-72 object-cover rounded-2xl mb-6 border-2 border-rose-100" alt="ProblemaPrincipal" />
-              
-              <div className="bg-rose-50 p-5 rounded-2xl border border-rose-100 mb-6">
-                <p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap leading-relaxed">{ultimaVisitaReal.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
-              </div>
+          <div className={`${modoImpressao === 'alerta' ? 'block' : 'hidden no-print'} bg-white w-full max-w-2xl mx-auto p-8`}>
+            <div className="border-l-4 border-rose-500 pl-5 mb-6">
+              <h2 className="text-3xl font-black text-rose-600 tracking-tight">🚨 Atenção Técnica</h2>
+              <p className="text-xs font-bold text-zinc-500 mt-1 uppercase tracking-widest">{clienteExibicao.nome} • {ultimaVisitaReal.d}</p>
+            </div>
+            
+            <img src={ultimaVisitaReal.fotosA[0]} className="w-full h-72 object-cover rounded-2xl mb-6 border-2 border-rose-100" alt="ProblemaPrincipal" />
+            
+            <div className="bg-rose-50 p-5 rounded-2xl border border-rose-100 mb-6">
+              <p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap leading-relaxed">{ultimaVisitaReal.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
+            </div>
 
-              {ultimaVisitaReal.fotosA.length > 1 && (
-                <div className="grid grid-cols-3 gap-3">
-                  {ultimaVisitaReal.fotosA.slice(1).map((foto, index) => (
-                    <img key={index} src={foto} className="aspect-square w-full object-cover rounded-lg border-2 border-rose-100" alt={`ProblemaExtra ${index + 1}`} />
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-8 pt-4 border-t border-zinc-100 text-center">
-                 <p className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] font-bold">Mão Na Água • Relatório Automático</p>
+            {ultimaVisitaReal.fotosA.length > 1 && (
+              <div className="grid grid-cols-3 gap-3">
+                {ultimaVisitaReal.fotosA.slice(1).map((foto, index) => (
+                  <img key={index} src={foto} className="aspect-square w-full object-cover rounded-lg border-2 border-rose-100" alt={`ProblemaExtra ${index + 1}`} />
+                ))}
               </div>
+            )}
+
+            <div className="mt-8 pt-4 border-t border-zinc-100 text-center">
+                <p className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] font-bold">Mão Na Água • Relatório Automático</p>
             </div>
           </div>
         )}
 
-        <header className="p-4 flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10 shadow-sm transition-colors">
-          <button onClick={() => setTela('relatorio')} className="text-zinc-500 dark:text-zinc-400 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl"><ArrowLeft size={20}/></button>
-          <h2 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">Dossiê do Cliente</h2>
-        </header>
-        
-        <div className="p-4 mt-2">
-          
-          {foiVisitadoHoje && (
-            <button onClick={reabrirTarefa} className="w-full mb-6 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-sky-500/20 active:scale-95 transition-all">
-              <RotateCcw size={18} /> Editar Limpeza de Hoje
-            </button>
-          )}
-
-          <div className="flex gap-3 mb-6">
-            <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, produtosDoRelatorio)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><MessageSquare size={18} /> WhatsApp</button>
-            <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF</button>
-          </div>
-
-          {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
-            <button onClick={() => compartilharAlertaSeparado(ultimaVisitaReal)} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
-              <AlertTriangle size={18} /> Enviar Alerta do Defeito
-            </button>
-          )}
-
-          {/* ÁREA DE IMPRESSÃO DO RELATÓRIO MENSAL */}
-          <div id="relatorio-print" className="bg-white w-full shadow-2xl rounded-2xl overflow-hidden border border-zinc-200 text-zinc-900 relative">
+        {/* --- ÁREA DE IMPRESSÃO: RELATÓRIO MENSAL (Aparece na tela normal E no modo 'relatorio') --- */}
+        <div className={`${modoImpressao === 'alerta' ? 'hidden no-print' : 'block'} ${modoImpressao === 'relatorio' ? 'px-0' : 'px-4'}`}>
+          <div id="relatorio-print" className="bg-white w-full max-w-2xl mx-auto shadow-2xl rounded-2xl overflow-hidden border border-zinc-200 text-zinc-900 relative">
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"></div>
             
             <header className="p-6 pt-8 relative">
@@ -1025,7 +1014,10 @@ export default function App() {
                </div>
             </footer>
           </div>
+        </div>
 
+        {/* --- TELA NORMAL (Botões e Ações Rápidas - Escondidos no PDF) --- */}
+        <div className={modoImpressao ? 'hidden no-print' : 'block px-4'}>
           <div className="mt-8 bg-white dark:bg-zinc-900 rounded-[1.5rem] p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
              <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
                <CalendarDays size={16} className="text-teal-500" /> Ações Rápidas da Agenda
@@ -1061,8 +1053,8 @@ export default function App() {
               <Trash2 size={18} /> Encerrar Contrato (Excluir)
             </button>
           </div>
-          
         </div>
+
       </div>
     );
   }

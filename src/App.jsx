@@ -465,7 +465,6 @@ export default function App() {
                 {isRegistering ? 'Já tem uma conta? Faça login' : 'Não tem conta? Cadastre-se'}
               </button>
               
-              {/* NOVO: BOTÃO DE ESQUECI A SENHA */}
               {!isRegistering && (
                 <button onClick={handleRecuperarSenha} className="text-xs text-zinc-500 font-medium hover:text-sky-400 transition-colors underline underline-offset-4">
                   Esqueci minha senha
@@ -918,7 +917,6 @@ export default function App() {
               <section>
                 <h3 className="text-xs font-bold text-zinc-800 border-b border-zinc-200 pb-2 mb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-sky-100 text-sky-600"><Droplets size={12}/></div> Histórico de Parâmetros</h3>
                 
-                {/* TABELA DE PARÂMETROS CORRIGIDA E ADAPTADA PARA CABER PERFEITAMENTE NO PDF */}
                 <div className="overflow-hidden rounded-xl border border-zinc-200 shadow-sm w-full">
                   <table className="w-full text-[10px] text-center table-fixed">
                     <thead className="bg-slate-50 text-zinc-500 font-bold uppercase tracking-tighter text-[9px]">
@@ -962,12 +960,22 @@ export default function App() {
                   <h3 className="text-xs font-bold text-rose-600 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-rose-100 text-rose-600"><AlertTriangle size={12} /></div> Ocorrências Técnicas</h3>
                   <div className="space-y-3">
                     {visitasComAlerta.map((v, i) => (
-                      <div key={i} className="flex gap-3 bg-rose-50/50 p-3 rounded-xl border border-rose-100/50 items-start">
-                        {v.fotosA && v.fotosA.length > 0 && <img src={v.fotosA[0]} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-rose-200" alt="AlertaBase" />}
-                        <div className="flex-1">
-                          <p className="text-[9px] font-black text-rose-800 mb-1 tracking-wider uppercase">{v.d}</p>
-                          <p className="text-[10px] text-zinc-700 leading-relaxed font-medium">{v.txtA || 'Alerta visual gerado sem anotação em texto.'}</p>
+                      <div key={i} className="flex gap-3 bg-rose-50/50 p-3 rounded-xl border border-rose-100/50 items-start flex-col">
+                        <div className="flex items-start gap-3 w-full">
+                          <div className="flex-1">
+                            <p className="text-[9px] font-black text-rose-800 mb-1 tracking-wider uppercase">{v.d}</p>
+                            <p className="text-[10px] text-zinc-700 leading-relaxed font-medium">{v.txtA || 'Alerta visual gerado sem anotação em texto.'}</p>
+                          </div>
                         </div>
+                        
+                        {/* MUDADO: AGORA MOSTRA TODAS AS FOTOS DO DEFEITO LADO A LADO NO PDF MENSAL */}
+                        {v.fotosA && v.fotosA.length > 0 && (
+                          <div className="flex gap-2 flex-wrap mt-1 w-full">
+                            {v.fotosA.map((foto, fIndex) => (
+                              <img key={fIndex} src={foto} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-rose-200" alt={`Alerta ${fIndex + 1}`} />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -999,7 +1007,6 @@ export default function App() {
             </footer>
           </div>
 
-          {/* NOVA SEÇÃO: AÇÕES RÁPIDAS (VISITA EXTRA E REMARCAR) */}
           <div className="mt-8 bg-white dark:bg-zinc-900 rounded-[1.5rem] p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
              <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
                <CalendarDays size={16} className="text-teal-500" /> Ações Rápidas da Agenda

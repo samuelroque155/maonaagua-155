@@ -3,6 +3,8 @@ import {
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
   AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { toPng } from 'html-to-image';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
@@ -42,7 +44,7 @@ const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', '
 // --- O SEU NOVO TEMA AQUÁTICO EM GRADIENTE ---
 const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
 const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
-const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; // Usado em separadores especiais
+const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
 const gradIconBg = "bg-gradient-to-br from-sky-100 to-emerald-100 dark:from-sky-900/30 dark:to-emerald-900/30 text-teal-600 dark:text-teal-400";
 
 export default function App() {
@@ -143,7 +145,6 @@ export default function App() {
     }
   };
 
-  // --- NOVA FUNÇÃO: RECUPERAR SENHA ---
   const handleRecuperarSenha = async () => {
     if(!emailLogin) {
       return alert("Para redefinir a senha, primeiro digite o seu e-mail no campo acima e depois clique aqui.");
@@ -392,38 +393,41 @@ export default function App() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
+  // --- NOVA FUNÇÃO GERAÇÃO REAL DE PDF COM jspdf ---
   const compartilharRelatorioVisual = async () => {
     const elemento = document.getElementById('relatorio-print');
     if (!elemento) return;
     try {
-      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], `Relatorio_${clienteRelatorio.nome}.png`, { type: 'image/png' });
+      const canvas = await html2canvas(elemento, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
       
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ title: 'Relatório Mão Na Água', files: [file] });
-      } else {
-        const a = document.createElement('a'); a.href = dataUrl; a.download = file.name; a.click();
-        alert("Imagem salva na sua galeria/downloads!");
-      }
-    } catch (error) { alert("Erro ao processar PDF: " + error.message); }
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Relatorio_${clienteRelatorio.nome}.pdf`);
+      alert("✅ PDF salvo com sucesso!");
+    } catch (error) { 
+      alert("Erro ao processar PDF: " + error.message); 
+    }
   };
 
   const compartilharAlertaSeparado = async (visita) => {
     const elemento = document.getElementById('alerta-print');
     if (!elemento) return;
     try {
-      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], `Alerta_${clienteRelatorio.nome}.png`, { type: 'image/png' });
+      const canvas = await html2canvas(elemento, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
       
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Atenção Técnica' });
-      } else {
-        alert("Baixando a foto de alerta para você enviar no WhatsApp.");
-        const a = document.createElement('a'); a.href = dataUrl; a.download = file.name; a.click();
-      }
-    } catch(e) { alert('Erro ao processar a imagem do relato: ' + e.message); }
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Alerta_${clienteRelatorio.nome}.pdf`);
+      alert("✅ PDF de Alerta salvo com sucesso!");
+    } catch(e) { alert('Erro ao processar PDF do relato: ' + e.message); }
   };
 
   if (authLoading) {
@@ -826,7 +830,12 @@ export default function App() {
     const clienteExibicao = clientes.find(c => c.id === clienteRelatorio.id) || clienteRelatorio;
     const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
     const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
-    const fotosDoMes = historicoDoRelatorio.flatMap(v => v.fotos || []).map(f => ({ src: f, data: historicoDoRelatorio.find(x => x.fotos?.includes(f)).d }));
+    
+    // --- MUDADO: Filtro Inteligente. Puxa apenas a 1ª foto de cada visita ---
+    const fotosDoMes = historicoDoRelatorio
+      .filter(v => v.fotos && v.fotos.length > 0)
+      .map(v => ({ src: v.fotos[0], data: v.d }));
+      
     const visitasComAlerta = historicoDoRelatorio.filter(v => (v.fotosA && v.fotosA.length > 0) || v.txtA);
     const ultimaVisitaReal = historicoDoRelatorio.length > 0 ? historicoDoRelatorio[historicoDoRelatorio.length - 1] : null;
     const foiVisitadoHoje = clienteExibicao.ultimaVisita === dataHojeStr;
@@ -968,7 +977,6 @@ export default function App() {
                           </div>
                         </div>
                         
-                        {/* MUDADO: AGORA MOSTRA TODAS AS FOTOS DO DEFEITO LADO A LADO NO PDF MENSAL */}
                         {v.fotosA && v.fotosA.length > 0 && (
                           <div className="flex gap-2 flex-wrap mt-1 w-full">
                             {v.fotosA.map((foto, fIndex) => (
@@ -982,9 +990,10 @@ export default function App() {
                 </section>
               )}
 
+              {/* MUDADO: Puxando apenas as 1ªs fotos através da variável fotosDoMes criada lá em cima */}
               {fotosDoMes.length > 0 && (
                 <section className="pt-2 border-t border-zinc-100">
-                  <h3 className="text-xs font-bold text-zinc-800 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-teal-100 text-teal-600"><Camera size={12}/></div> Registo Fotográfico</h3>
+                  <h3 className="text-xs font-bold text-zinc-800 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-teal-100 text-teal-600"><Camera size={12}/></div> Resumo Fotográfico (Visitas)</h3>
                   <div className="grid grid-cols-4 gap-2">
                     {fotosDoMes.map((foto, i) => (
                       <div key={i} className="aspect-square rounded-lg overflow-hidden relative border border-zinc-200 bg-zinc-100 shadow-sm">
@@ -1001,6 +1010,12 @@ export default function App() {
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-sky-500 to-teal-500"></div>
                <p className="text-sm font-bold mb-1.5 text-zinc-100">Obrigado pela confiança!</p>
                <p className="text-[9px] text-zinc-500 mb-5 font-medium">Documento auditado pelo sistema Mão Na Água.</p>
+               
+               {/* MUDADO: Aviso de galeria completa */}
+               <div className="bg-zinc-800/50 p-2 rounded-lg mb-4 inline-block">
+                 <p className="text-[8px] text-zinc-400 font-medium">Para visualizar a galeria fotográfica completa em alta resolução, solicite acesso à sua pasta virtual.</p>
+               </div>
+
                <div className="flex justify-center gap-5 text-[9px] text-zinc-400 font-bold uppercase tracking-widest border-t border-zinc-800 pt-4">
                   <span className="flex items-center gap-1.5"><Phone size={11} className="text-sky-400"/> Atendimento Premium</span>
                </div>

@@ -4,7 +4,7 @@ import {
   AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import { toPng } from 'html-to-image';
+import html2canvas from 'html2canvas';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db } from './firebase';
@@ -392,20 +392,23 @@ export default function App() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
-  // --- FUNÇÕES DE PDF CORRIGIDAS (Usando toPng + jsPDF) ---
+  // --- PDF: AGORA USANDO APENAS HTML2CANVAS E JSPDF ---
   const compartilharRelatorioVisual = async () => {
     const elemento = document.getElementById('relatorio-print');
     if (!elemento) return;
     try {
-      // 1. Usa o toPng (que entende o design perfeitamente) para criar a imagem
-      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
+      const canvas = await html2canvas(elemento, { 
+        scale: 2, 
+        backgroundColor: '#ffffff',
+        useCORS: true // Ajuda a carregar as imagens no PDF
+      });
+      const imgData = canvas.toDataURL('image/png');
       
-      // 2. Coloca a imagem gerada dentro de uma folha de PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (elemento.offsetHeight * pdfWidth) / elemento.offsetWidth;
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
-      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Relatorio_${clienteRelatorio.nome}.pdf`);
       alert("✅ PDF salvo com sucesso!");
     } catch (error) { 
@@ -417,13 +420,18 @@ export default function App() {
     const elemento = document.getElementById('alerta-print');
     if (!elemento) return;
     try {
-      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
+      const canvas = await html2canvas(elemento, { 
+        scale: 2, 
+        backgroundColor: '#ffffff',
+        useCORS: true 
+      });
+      const imgData = canvas.toDataURL('image/png');
       
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (elemento.offsetHeight * pdfWidth) / elemento.offsetWidth;
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
-      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Alerta_${clienteRelatorio.nome}.pdf`);
       alert("✅ PDF de Alerta salvo com sucesso!");
     } catch(e) { alert('Erro ao processar PDF do relato: ' + e.message); }

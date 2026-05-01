@@ -4,7 +4,6 @@ import {
   AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { toPng } from 'html-to-image';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
@@ -393,19 +392,20 @@ export default function App() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
-  // --- NOVA FUNÇÃO GERAÇÃO REAL DE PDF COM jspdf ---
+  // --- FUNÇÕES DE PDF CORRIGIDAS (Usando toPng + jsPDF) ---
   const compartilharRelatorioVisual = async () => {
     const elemento = document.getElementById('relatorio-print');
     if (!elemento) return;
     try {
-      const canvas = await html2canvas(elemento, { scale: 2, backgroundColor: '#ffffff' });
-      const imgData = canvas.toDataURL('image/png');
+      // 1. Usa o toPng (que entende o design perfeitamente) para criar a imagem
+      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
       
+      // 2. Coloca a imagem gerada dentro de uma folha de PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfHeight = (elemento.offsetHeight * pdfWidth) / elemento.offsetWidth;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Relatorio_${clienteRelatorio.nome}.pdf`);
       alert("✅ PDF salvo com sucesso!");
     } catch (error) { 
@@ -417,14 +417,13 @@ export default function App() {
     const elemento = document.getElementById('alerta-print');
     if (!elemento) return;
     try {
-      const canvas = await html2canvas(elemento, { scale: 2, backgroundColor: '#ffffff' });
-      const imgData = canvas.toDataURL('image/png');
+      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2 });
       
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfHeight = (elemento.offsetHeight * pdfWidth) / elemento.offsetWidth;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Alerta_${clienteRelatorio.nome}.pdf`);
       alert("✅ PDF de Alerta salvo com sucesso!");
     } catch(e) { alert('Erro ao processar PDF do relato: ' + e.message); }
@@ -831,7 +830,6 @@ export default function App() {
     const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
     const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
     
-    // --- MUDADO: Filtro Inteligente. Puxa apenas a 1ª foto de cada visita ---
     const fotosDoMes = historicoDoRelatorio
       .filter(v => v.fotos && v.fotos.length > 0)
       .map(v => ({ src: v.fotos[0], data: v.d }));
@@ -990,7 +988,6 @@ export default function App() {
                 </section>
               )}
 
-              {/* MUDADO: Puxando apenas as 1ªs fotos através da variável fotosDoMes criada lá em cima */}
               {fotosDoMes.length > 0 && (
                 <section className="pt-2 border-t border-zinc-100">
                   <h3 className="text-xs font-bold text-zinc-800 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-teal-100 text-teal-600"><Camera size={12}/></div> Resumo Fotográfico (Visitas)</h3>
@@ -1011,7 +1008,6 @@ export default function App() {
                <p className="text-sm font-bold mb-1.5 text-zinc-100">Obrigado pela confiança!</p>
                <p className="text-[9px] text-zinc-500 mb-5 font-medium">Documento auditado pelo sistema Mão Na Água.</p>
                
-               {/* MUDADO: Aviso de galeria completa */}
                <div className="bg-zinc-800/50 p-2 rounded-lg mb-4 inline-block">
                  <p className="text-[8px] text-zinc-400 font-medium">Para visualizar a galeria fotográfica completa em alta resolução, solicite acesso à sua pasta virtual.</p>
                </div>

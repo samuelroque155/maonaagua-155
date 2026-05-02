@@ -622,7 +622,7 @@ export default function App() {
             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-sky-400/10 to-transparent rounded-bl-full pointer-events-none"></div>
             <div className="flex justify-between items-center mb-5">
               <h3 className="font-bold flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><Camera size={16} /></div> Fotos Principais (Mín. 3)</h3>
-              <span className={`text-xs px-2.5 py-1 rounded-md font-bold uppercase tracking-wider ${fotosContagem >= 3 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>{fotosContagem}/3</span>
+              <span className={`text-xs px-2.5 py-1 rounded-md font-bold uppercase tracking-wider ${fotosContagem >= 3 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}`}>{fotosContagem}/3</span>
             </div>
             <label className="w-full bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-teal-300/50 dark:border-teal-700/50 py-10 rounded-[1.25rem] flex flex-col items-center gap-3 text-teal-500 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/10 transition-colors">
               <Camera size={36} className="text-teal-400" /> <span className="text-sm font-bold tracking-wide">Adicionar Foto da Piscina</span>
@@ -636,7 +636,7 @@ export default function App() {
                     <img src={foto} className="w-full h-full object-cover" alt={`Foto ${index + 1}`} />
                     <button 
                       onClick={() => removerFoto(index)}
-                      className="absolute top-1 right-1 bg-rose-500/90 text-white rounded-md p-1 shadow-sm hover:bg-rose-600 transition-colors backdrop-blur-sm"
+                      className="absolute top-1 right-1 bg-teal-500/90 text-white rounded-md p-1 shadow-sm hover:bg-teal-600 transition-colors backdrop-blur-sm"
                     >
                       <Trash2 size={12} />
                     </button>
@@ -646,12 +646,12 @@ export default function App() {
             )}
           </section>
 
-          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-rose-200 dark:border-rose-900/30 relative overflow-hidden transition-colors shadow-sm">
-             <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-400 to-rose-600"></div>
-             <h3 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2.5 mb-4 ml-3"><div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-900/30 text-rose-500"><AlertTriangle size={16} /></div> Relatar Problema</h3>
+          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-teal-200 dark:border-teal-900/30 relative overflow-hidden transition-colors shadow-sm">
+             <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-400 to-teal-600"></div>
+             <h3 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2.5 mb-4 ml-3"><div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-900/30 text-teal-600"><AlertTriangle size={16} /></div> Relatar Problema</h3>
              
-             <label className={`ml-3 w-[calc(100%-12px)] bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-rose-300/50 dark:border-rose-700/50 py-8 rounded-[1.25rem] flex flex-col items-center gap-3 text-rose-500 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors`}>
-               <Camera size={30} className="text-rose-400" /> 
+             <label className={`ml-3 w-[calc(100%-12px)] bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-teal-300/50 dark:border-teal-700/50 py-8 rounded-[1.25rem] flex flex-col items-center gap-3 text-teal-600 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/10 transition-colors`}>
+               <Camera size={30} className="text-teal-400" /> 
                <span className="text-sm font-bold tracking-wide">Anexar Foto do Defeito</span>
                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
              </label>
@@ -663,7 +663,7 @@ export default function App() {
                     <img src={foto} className="w-full h-full object-cover" alt={`Defeito ${index + 1}`} />
                     <button 
                       onClick={() => removerFotoAlerta(index)}
-                      className="absolute top-1 right-1 bg-rose-500/90 text-white rounded-md p-1 shadow-sm hover:bg-rose-600 transition-colors backdrop-blur-sm"
+                      className="absolute top-1 right-1 bg-teal-500/90 text-white rounded-md p-1 shadow-sm hover:bg-teal-600 transition-colors backdrop-blur-sm"
                     >
                       <Trash2 size={12} />
                     </button>
@@ -677,7 +677,7 @@ export default function App() {
                    placeholder="Descreva a peça partida, vazamento..." 
                    value={textoAlerta}
                    onChange={e => setTextoAlerta(e.target.value)}
-                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 text-zinc-800 dark:text-zinc-200 min-h-[100px] transition-all shadow-inner"
+                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-800 dark:text-zinc-200 min-h-[100px] transition-all shadow-inner"
                  />
                </div>
           </section>
@@ -1047,7 +1047,7 @@ export default function App() {
              <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
                <CalendarDays size={16} className="text-teal-500" /> Ações Rápidas da Agenda
              </h3>
-             <div className="flex flex-col gap-3">
+             <div className="flex col-gap-3">
                <button onClick={() => iniciarVisita(clienteExibicao)} className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all ${gradBtn}`}>
                  <Plus size={18} /> Iniciar Visita Extra Agora
                </button>
@@ -1070,7 +1070,7 @@ export default function App() {
              </div>
           </div>
           
-          <div className="flex flex-col gap-3 mt-6">
+          <div className="flex col-gap-3 mt-6">
             <button onClick={() => abrirEdicaoCliente(clienteExibicao)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors shadow-sm">
               <Pencil size={18} /> Editar Cadastro do Cliente
             </button>

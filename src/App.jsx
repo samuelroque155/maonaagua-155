@@ -39,7 +39,7 @@ const listaAcessorios = [
 
 const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-// --- O SEU NOVO TEMA AQUÁTICO EM GRADIENTE ---
+// --- O SEU TEMA AQUÁTICO EM GRADIENTE ---
 const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
 const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
 const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
@@ -392,27 +392,28 @@ export default function App() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
-
   // =========================================================================
-  // 1. RELATÓRIO PDF (NATIVO E COMPLETO - SEM CORTAR FOTOS)
+  // 1. RELATÓRIO PDF NATIVO
   // =========================================================================
   const compartilharRelatorioVisual = () => {
     setModoImpressao('relatorio');
     setTimeout(() => {
       window.print();
-      setModoImpressao(null);
-    }, 500); 
+      // O timer longo garante que o celular tenha tempo de capturar a tela limpa
+      setTimeout(() => {
+        setModoImpressao(null);
+      }, 3000); 
+    }, 300); 
   };
 
   // =========================================================================
-  // 2. ALERTA DE DEFEITO (FOTO PNG - HEX CORES SEM BUGS OKLCH)
+  // 2. ALERTA DE DEFEITO (FOTO PNG, MANTIDO INTACTO)
   // =========================================================================
   const compartilharAlertaSeparado = async () => {
     const elemento = document.getElementById('alerta-print-foto');
     if (!elemento) return;
     
     try {
-      // Cria a imagem usando o toPng, lendo a div escondida que foi feita 100% livre de Tailwind bugado
       const dataUrl = await toPng(elemento, { 
         backgroundColor: '#ffffff', 
         pixelRatio: 2,
@@ -829,9 +830,15 @@ export default function App() {
     const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
     const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
     
-    const fotosDoMes = historicoDoRelatorio
-      .filter(v => v.fotos && v.fotos.length > 0)
-      .map(v => ({ src: v.fotos[0], data: v.d }));
+    // --- NOVO FILTRO: Adiciona TODAS as fotos de todas as visitas ---
+    const fotosDoMes = [];
+    historicoDoRelatorio.forEach(v => {
+      if (v.fotos && v.fotos.length > 0) {
+        v.fotos.forEach(foto => {
+          fotosDoMes.push({ src: foto, data: v.d });
+        });
+      }
+    });
       
     const visitasComAlerta = historicoDoRelatorio.filter(v => (v.fotosA && v.fotosA.length > 0) || v.txtA);
     const ultimaVisitaReal = historicoDoRelatorio.length > 0 ? historicoDoRelatorio[historicoDoRelatorio.length - 1] : null;
@@ -840,12 +847,13 @@ export default function App() {
     return (
       <div className={`min-h-screen font-sans relative overflow-x-hidden transition-colors duration-300 ${modoImpressao ? 'bg-white text-black' : 'bg-slate-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 pb-10 max-w-md mx-auto'}`}>
         
-        {/* CSS PARA OCULTAR BOTÕES NO MOMENTO DO PDF NATIVO */}
+        {/* CSS PODEROSO PARA OCULTAR BOTÕES NO MOMENTO DO PDF NATIVO */}
         <style>{`
           @media print {
             @page { margin: 0; size: auto; }
             body, html { background-color: #ffffff !important; margin: 0 !important; padding: 0 !important; }
             .no-print { display: none !important; }
+            .print\\:hidden { display: none !important; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           }
         `}</style>
@@ -880,8 +888,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* --- TELA NORMAL (Botões do Topo - Ocultos na Impressão) --- */}
-        <div className={modoImpressao ? 'hidden no-print' : 'block'}>
+        {/* --- TELA NORMAL (Botões do Topo - Ocultos na Impressão com print:hidden no-print) --- */}
+        <div className={`print:hidden no-print ${modoImpressao ? 'hidden' : 'block'}`}>
           <header className="p-4 flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10 shadow-sm transition-colors">
             <button onClick={() => setTela('relatorio')} className="text-zinc-500 dark:text-zinc-400 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl"><ArrowLeft size={20}/></button>
             <h2 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">Dossiê do Cliente</h2>
@@ -1033,8 +1041,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* --- TELA NORMAL (Ações Rápidas da Agenda - Ocultas na Impressão) --- */}
-        <div className={modoImpressao ? 'hidden no-print' : 'block px-4'}>
+        {/* --- TELA NORMAL (Ações Rápidas da Agenda - Ocultas na Impressão com print:hidden no-print) --- */}
+        <div className={`print:hidden no-print px-4 ${modoImpressao ? 'hidden' : 'block'}`}>
           <div className="mt-8 bg-white dark:bg-zinc-900 rounded-[1.5rem] p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
              <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
                <CalendarDays size={16} className="text-teal-500" /> Ações Rápidas da Agenda

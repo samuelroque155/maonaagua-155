@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, Send
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
@@ -55,11 +55,15 @@ export default function App() {
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
   const [modoImpressao, setModoImpressao] = useState(null);
+  
+  // ESTADO: Controle da Fila de Fechamento do Mês
+  const [modoFilaEnvio, setModoFilaEnvio] = useState(false);
 
   const dateObj = new Date();
   const diaAtual = dateObj.getDay(); 
   const dataHojeStr = dateObj.toDateString();
   const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const mesAtualCurto = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][dateObj.getMonth()];
   const mesEscrito = mesesCompletos[dateObj.getMonth()];
   const anoEscrito = dateObj.getFullYear();
 
@@ -308,10 +312,9 @@ export default function App() {
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
     
     const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
-    const mesesCurtos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     
     const novaVisita = {
-      d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
+      d: `${diaFormatado}/${mesAtualCurto}`,
       h: horarioVisita, 
       a: aspecto, 
       c: cloro, 
@@ -392,44 +395,34 @@ export default function App() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
-  // =========================================================================
-  // 1. RELATÓRIO PDF NATIVO
-  // =========================================================================
+  // --- IMPRESSÃO NATIVA SEM BUGS DE BOTÕES ---
+  useEffect(() => {
+    if (modoImpressao === 'relatorio') {
+      const timer = setTimeout(() => {
+        window.print();
+        setTimeout(() => { setModoImpressao(null); }, 3000); 
+      }, 300); 
+      return () => clearTimeout(timer);
+    }
+  }, [modoImpressao]);
+
   const compartilharRelatorioVisual = () => {
     setModoImpressao('relatorio');
-    setTimeout(() => {
-      window.print();
-      // O timer longo garante que o celular tenha tempo de capturar a tela limpa
-      setTimeout(() => {
-        setModoImpressao(null);
-      }, 3000); 
-    }, 300); 
   };
 
-  // =========================================================================
-  // 2. ALERTA DE DEFEITO (FOTO PNG, MANTIDO INTACTO)
-  // =========================================================================
+  // --- FOTO PNG DO ALERTA ---
   const compartilharAlertaSeparado = async () => {
     const elemento = document.getElementById('alerta-print-foto');
     if (!elemento) return;
-    
     try {
-      const dataUrl = await toPng(elemento, { 
-        backgroundColor: '#ffffff', 
-        pixelRatio: 2,
-        useCORS: true 
-      });
-      
+      const dataUrl = await toPng(elemento, { backgroundColor: '#ffffff', pixelRatio: 2, useCORS: true });
       const a = document.createElement('a');
       a.href = dataUrl;
       a.download = `Alerta_${clienteRelatorio.nome}.png`;
       a.click();
-      alert("✅ Foto do Alerta de Defeito salva na sua galeria/downloads!");
-    } catch(e) { 
-      alert('Erro ao gerar a foto do relato: ' + e.message); 
-    }
+      alert("✅ Foto do Alerta salva na sua galeria!");
+    } catch(e) { alert('Erro ao gerar a foto: ' + e.message); }
   };
-
 
   if (authLoading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-teal-400 font-bold">A conectar ao Firebase...</div>;
@@ -810,9 +803,63 @@ export default function App() {
   }
 
   if (tela === 'relatorio') {
+    if (modoFilaEnvio) {
+      const clientesComVisitaEsteMes = clientes.filter(c => 
+        c.historicoVisitas?.some(v => v.d.includes(mesAtualCurto))
+      );
+
+      return (
+        <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300 pb-20">
+          <header className="flex items-center gap-4 mb-8 mt-2">
+            <button onClick={() => setModoFilaEnvio(false)} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button>
+            <h2 className={`text-xl font-black ${gradText}`}>Fechamento do Mês</h2>
+          </header>
+          
+          {/* EXPLICAÇÃO CLARA SOBRE A REGRA DO WHATSAPP */}
+          <div className="bg-sky-50 dark:bg-sky-900/20 p-5 rounded-[1.25rem] border border-sky-200 dark:border-sky-800 mb-6 shadow-sm">
+            <p className="text-xs text-sky-800 dark:text-sky-300 font-medium leading-relaxed">
+              Estes são os clientes atendidos em <b>{mesEscrito}</b>. <br/><br/>
+              <b>⚠️ Regra do WhatsApp (Importante):</b> Por questões de segurança contra vírus, o WhatsApp bloqueia o envio automático de arquivos (PDF) em links gratuitos.<br/><br/>
+              <b>1º Passo:</b> Clique em "1. Ver e Salvar PDF" e salve no seu celular.<br/>
+              <b>2º Passo:</b> Clique em "2. Enviar Zap". O WhatsApp vai abrir com o texto pronto.<br/>
+              <b>3º Passo:</b> No WhatsApp, clique no clipe (📎), anexe o PDF e mande!
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {clientesComVisitaEsteMes.length === 0 ? (
+              <p className="text-center text-zinc-400 text-sm py-10 italic">Nenhuma manutenção registrada neste mês ainda.</p>
+            ) : clientesComVisitaEsteMes.map(c => (
+              <div key={c.id} className="w-full bg-white dark:bg-zinc-900 p-5 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 flex flex-col gap-4 shadow-sm">
+                <div>
+                  <p className="font-bold text-lg text-zinc-800 dark:text-zinc-200">{c.nome}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setClienteRelatorio(c); setModoFilaEnvio(false); setTela('ver_relatorio'); }} className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-wider hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+                    <FileText size={14} /> 1. Ver e Salvar PDF
+                  </button>
+                  <button onClick={() => {
+                    let msg = `Olá, ${c.nome}! 🌊\nPassando para informar que o relatório mensal de manutenção da sua piscina já está pronto.\n\nEstou enviando o arquivo PDF em anexo para você conferir o histórico do tratamento da água este mês!\n\nQualquer dúvida, estou à disposição.\n*Mão Na Água - Gestão Profissional*`;
+                    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                  }} className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-wider transition-colors shadow-md">
+                    <Send size={14} /> 2. Enviar Zap
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300">
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300 pb-20">
         <header className="flex items-center gap-4 mb-8 mt-2"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Meus Clientes</h2></header>
+        
+        <button onClick={() => setModoFilaEnvio(true)} className={`w-full mb-8 py-5 rounded-[1.25rem] font-black text-sm flex items-center justify-center gap-2 shadow-lg ${gradBtn}`}>
+          <Share2 size={20} /> INICIAR FECHAMENTO DO MÊS
+        </button>
+
         <div className="space-y-3.5">
           {clientes.map(c => (
             <button key={c.id} onClick={() => { setClienteRelatorio(c); setTela('ver_relatorio'); }} className="w-full bg-white dark:bg-zinc-900 p-5 rounded-[1.25rem] border border-zinc-200 dark:border-zinc-800 text-left flex justify-between items-center hover:border-teal-300 dark:hover:border-teal-700 shadow-sm transition-all group">
@@ -830,7 +877,7 @@ export default function App() {
     const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
     const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
     
-    // --- NOVO FILTRO: Adiciona TODAS as fotos de todas as visitas ---
+    // --- FILTRO: Adiciona TODAS as fotos de todas as visitas do mês ---
     const fotosDoMes = [];
     historicoDoRelatorio.forEach(v => {
       if (v.fotos && v.fotos.length > 0) {
@@ -903,7 +950,7 @@ export default function App() {
             )}
 
             <div className="flex gap-3 mb-6">
-              <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, produtosDoRelatorio)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><MessageSquare size={18} /> WhatsApp</button>
+              <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, produtosDoRelatorio)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><MessageSquare size={18} /> WhatsApp Rápido</button>
               <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF Completo</button>
             </div>
 
@@ -936,7 +983,7 @@ export default function App() {
               </div>
 
               <div className="mt-6 bg-slate-50 rounded-xl p-4 border border-zinc-100 shadow-inner">
-                 <p className="text-[10px] text-zinc-400 font-bold uppercase mb-1 tracking-wider">Proprietário / Local</p>
+                 <p className="text-[10px] text-zinc-400 font-bold uppercase mb-1 tracking-wider">Proprietário</p>
                  <p className="text-lg font-black text-zinc-800">{clienteExibicao.nome}</p>
                  <div className="mt-3 inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase"><CheckCircle2 size={12} /> Água Equilibrada (Mês Atual)</div>
               </div>

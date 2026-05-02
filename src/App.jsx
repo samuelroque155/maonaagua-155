@@ -3,6 +3,7 @@ import {
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
   AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db } from './firebase';
@@ -38,7 +39,7 @@ const listaAcessorios = [
 
 const diasDaSemanaNomes = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-// --- O SEU TEMA AQUÁTICO EM GRADIENTE ---
+// --- O SEU NOVO TEMA AQUÁTICO EM GRADIENTE ---
 const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 text-white border-none shadow-[0_4px_14px_0_rgba(56,189,248,0.39)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.23)] hover:scale-[1.02] transition-all duration-200";
 const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
 const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
@@ -53,8 +54,6 @@ export default function App() {
 
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
-  
-  // NOVO: Estado para gerenciar a impressão nativa
   const [modoImpressao, setModoImpressao] = useState(null);
 
   const dateObj = new Date();
@@ -393,19 +392,43 @@ export default function App() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
-  // --- NOVA FUNÇÃO: IMPRESSÃO NATIVA SEM ERROS ---
-  useEffect(() => {
-    if (modoImpressao) {
-      const timer = setTimeout(() => {
-        window.print();
-        setModoImpressao(null);
-      }, 500); // Aguarda meio segundo para a tela "limpar" os botões
-      return () => clearTimeout(timer);
-    }
-  }, [modoImpressao]);
 
-  const compartilharRelatorioVisual = () => setModoImpressao('relatorio');
-  const compartilharAlertaSeparado = () => setModoImpressao('alerta');
+  // =========================================================================
+  // 1. RELATÓRIO PDF (NATIVO E COMPLETO - SEM CORTAR FOTOS)
+  // =========================================================================
+  const compartilharRelatorioVisual = () => {
+    setModoImpressao('relatorio');
+    setTimeout(() => {
+      window.print();
+      setModoImpressao(null);
+    }, 500); 
+  };
+
+  // =========================================================================
+  // 2. ALERTA DE DEFEITO (FOTO PNG - HEX CORES SEM BUGS OKLCH)
+  // =========================================================================
+  const compartilharAlertaSeparado = async () => {
+    const elemento = document.getElementById('alerta-print-foto');
+    if (!elemento) return;
+    
+    try {
+      // Cria a imagem usando o toPng, lendo a div escondida que foi feita 100% livre de Tailwind bugado
+      const dataUrl = await toPng(elemento, { 
+        backgroundColor: '#ffffff', 
+        pixelRatio: 2,
+        useCORS: true 
+      });
+      
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `Alerta_${clienteRelatorio.nome}.png`;
+      a.click();
+      alert("✅ Foto do Alerta de Defeito salva na sua galeria/downloads!");
+    } catch(e) { 
+      alert('Erro ao gerar a foto do relato: ' + e.message); 
+    }
+  };
+
 
   if (authLoading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-teal-400 font-bold">A conectar ao Firebase...</div>;
@@ -827,6 +850,36 @@ export default function App() {
           }
         `}</style>
 
+        {/* --- ÁREA DO ALERTA ESCONDIDA (USADA PARA GERAR A FOTO PNG SEM BUG DE COR) --- */}
+        <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -50 }}>
+          <div id="alerta-print-foto" style={{ width: '400px', padding: '32px', backgroundColor: '#ffffff', fontFamily: 'sans-serif' }}>
+            <div style={{ borderLeft: '4px solid #f43f5e', paddingLeft: '20px', marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '30px', fontWeight: '900', color: '#e11d48', margin: 0, letterSpacing: '-0.05em' }}>🚨 Atenção Técnica</h2>
+              <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#71717a', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{clienteExibicao.nome} • {ultimaVisitaReal?.d}</p>
+            </div>
+            
+            {ultimaVisitaReal?.fotosA?.[0] && (
+               <img src={ultimaVisitaReal.fotosA[0]} style={{ width: '100%', height: '288px', objectFit: 'cover', borderRadius: '16px', marginBottom: '24px', border: '2px solid #ffe4e6' }} alt="ProblemaPrincipal" />
+            )}
+            
+            <div style={{ backgroundColor: '#fff1f2', padding: '20px', borderRadius: '16px', border: '1px solid #ffe4e6', marginBottom: '24px' }}>
+              <p style={{ fontSize: '14px', color: '#27272a', fontWeight: '500', whiteSpace: 'pre-wrap', lineHeight: '1.6', margin: 0 }}>{ultimaVisitaReal?.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
+            </div>
+
+            {ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 1 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                {ultimaVisitaReal.fotosA.slice(1).map((foto, index) => (
+                  <img key={index} src={foto} style={{ aspectRatio: '1/1', width: '100%', objectFit: 'cover', borderRadius: '8px', border: '2px solid #ffe4e6' }} alt={`ProblemaExtra ${index + 1}`} />
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid #f4f4f5', textAlign: 'center' }}>
+                <p style={{ fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 'bold', margin: 0 }}>Mão Na Água • Relatório Automático</p>
+            </div>
+          </div>
+        </div>
+
         {/* --- TELA NORMAL (Botões do Topo - Ocultos na Impressão) --- */}
         <div className={modoImpressao ? 'hidden no-print' : 'block'}>
           <header className="p-4 flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10 shadow-sm transition-colors">
@@ -843,47 +896,20 @@ export default function App() {
 
             <div className="flex gap-3 mb-6">
               <button onClick={() => enviarAvisoWhatsApp(clienteExibicao, produtosDoRelatorio)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><MessageSquare size={18} /> WhatsApp</button>
-              <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF</button>
+              <button onClick={compartilharRelatorioVisual} className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-white font-bold py-3.5 rounded-[1rem] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"><Share2 size={18} /> Salvar PDF Completo</button>
             </div>
 
             {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
               <button onClick={compartilharAlertaSeparado} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
-                <AlertTriangle size={18} /> Enviar Alerta do Defeito
+                <AlertTriangle size={18} /> Baixar Foto do Alerta de Defeito
               </button>
             )}
           </div>
         </div>
 
-        {/* --- ÁREA DE IMPRESSÃO DO ALERTA SEPARADO --- */}
-        {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
-          <div className={`${modoImpressao === 'alerta' ? 'block' : 'hidden no-print'} bg-white w-[400px] p-8 mx-auto`}>
-            <div className="border-l-4 border-rose-500 pl-5 mb-6">
-              <h2 className="text-3xl font-black text-rose-600 tracking-tight">🚨 Atenção Técnica</h2>
-              <p className="text-xs font-bold text-zinc-500 mt-1 uppercase tracking-widest">{clienteExibicao.nome} • {ultimaVisitaReal.d}</p>
-            </div>
-            
-            <img src={ultimaVisitaReal.fotosA[0]} className="w-full h-72 object-cover rounded-2xl mb-6 border-2 border-rose-100" alt="ProblemaPrincipal" />
-            
-            <div className="bg-rose-50 p-5 rounded-2xl border border-rose-100 mb-6">
-              <p className="text-sm text-zinc-800 font-medium whitespace-pre-wrap leading-relaxed">{ultimaVisitaReal.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
-            </div>
 
-            {ultimaVisitaReal.fotosA.length > 1 && (
-              <div className="grid grid-cols-3 gap-3">
-                {ultimaVisitaReal.fotosA.slice(1).map((foto, index) => (
-                  <img key={index} src={foto} className="aspect-square w-full object-cover rounded-lg border-2 border-rose-100" alt={`ProblemaExtra ${index + 1}`} />
-                ))}
-              </div>
-            )}
-
-            <div className="mt-8 pt-4 border-t border-zinc-100 text-center">
-               <p className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] font-bold">Mão Na Água • Relatório Automático</p>
-            </div>
-          </div>
-        )}
-
-        {/* --- ÁREA DE IMPRESSÃO DO RELATÓRIO MENSAL (COMPLETO) --- */}
-        <div className={`${modoImpressao === 'alerta' ? 'hidden no-print' : 'block'} ${modoImpressao === 'relatorio' ? 'px-0' : 'px-4'}`}>
+        {/* --- ÁREA DE IMPRESSÃO DO RELATÓRIO MENSAL (COMPLETO E NATIVO) --- */}
+        <div className={`${modoImpressao === 'relatorio' ? 'px-0 block' : 'px-4'}`}>
           <div id="relatorio-print" className="bg-white w-full shadow-2xl rounded-2xl overflow-hidden border border-zinc-200 text-zinc-900 relative">
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"></div>
             

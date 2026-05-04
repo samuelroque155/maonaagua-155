@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, Send
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
@@ -60,7 +60,6 @@ export default function App() {
   const diaAtual = dateObj.getDay(); 
   const dataHojeStr = dateObj.toDateString();
   const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-  const mesAtualCurto = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][dateObj.getMonth()];
   const mesEscrito = mesesCompletos[dateObj.getMonth()];
   const anoEscrito = dateObj.getFullYear();
 
@@ -79,46 +78,6 @@ export default function App() {
   }, [modoEscuro]);
 
   const [clientes, setClientes] = useState([]);
-
-  // --- NOVO: PEDE PERMISSÃO DE NOTIFICAÇÃO AO ABRIR O APP ---
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  // --- NOVO: MOTOR DE NOTIFICAÇÃO AUTOMÁTICA (Checa a cada 30 segundos) ---
-  useEffect(() => {
-    const intervaloNotificacao = setInterval(() => {
-      const agora = new Date();
-      const diaDaSemana = agora.getDay();
-      const horaAtual = agora.getHours().toString().padStart(2, '0') + ':' + agora.getMinutes().toString().padStart(2, '0');
-
-      clientes.forEach(c => {
-        // Se o cliente tem limpeza hoje E o horário marcado é o horário exato de agora
-        if (c.diasVisita.includes(diaDaSemana) && c.horarioPadrao === horaAtual) {
-          const idNotificacao = `lembrete_${c.id}_${dataHojeStr}`;
-          
-          // Verifica se já enviou a notificação hoje para não ficar repetindo
-          if (!localStorage.getItem(idNotificacao)) {
-            localStorage.setItem(idNotificacao, 'enviado');
-            
-            if ("Notification" in window && Notification.permission === "granted") {
-              new Notification("Mão Na Água 🌊", {
-                body: `Está na hora da manutenção de: ${c.nome}!`,
-              });
-            } else {
-              // Se o cliente bloqueou notificação nativa, solta um alert na tela
-              alert(`🌊 Mão Na Água - Lembrete:\n\nChegou a hora da manutenção de: ${c.nome} (${horaAtual})!`);
-            }
-          }
-        }
-      });
-    }, 30000); 
-
-    return () => clearInterval(intervaloNotificacao);
-  }, [clientes, dataHojeStr]);
-
 
   useEffect(() => {
     const desinscrever = onAuthStateChanged(auth, async (usuarioAtual) => {
@@ -150,6 +109,7 @@ export default function App() {
   const [ph, setPh] = useState('');
   const [cloro, setCloro] = useState('');
   const [alcalinidade, setAlcalinidade] = useState('');
+  const [temperatura, setTemperatura] = useState(''); // NOVO ESTADO
   const [fotosContagem, setFotosContagem] = useState(0);
   const [fotosVisita, setFotosVisita] = useState([]);
   const [horaInicioVisita, setHoraInicioVisita] = useState(null);
@@ -163,7 +123,6 @@ export default function App() {
   const [novaRua, setNovaRua] = useState('');
   const [novoNumero, setNovoNumero] = useState('');
   const [novosDias, setNovosDias] = useState([]);
-  const [novoHorario, setNovoHorario] = useState(''); // NOVO ESTADO: Horário do Cliente
 
   const piscinasDeHoje = clientes.filter(c => c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual);
 
@@ -271,7 +230,7 @@ export default function App() {
   };
 
   const irParaNovoCliente = () => {
-    setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovoHorario('');
+    setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]);
     setTela('novo_cliente');
   };
 
@@ -279,10 +238,10 @@ export default function App() {
     if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
       const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
       atualizarE_SalvarClientes([...clientes, { 
-        id: Date.now(), nome: novoNome, endereco: enderecoCompleto, rua: novaRua, numero: novoNumero, bairro: novoBairro, diasVisita: novosDias, horarioPadrao: novoHorario,
+        id: Date.now(), nome: novoNome, endereco: enderecoCompleto, rua: novaRua, numero: novoNumero, bairro: novoBairro, diasVisita: novosDias,
         adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
       }]);
-      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovoHorario(''); setTela('lista');
+      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setTela('lista');
     } else {
       alert("Preencha nome, rua, bairro e selecione pelo menos um dia da semana.");
     }
@@ -295,7 +254,6 @@ export default function App() {
     setNovoNumero(cliente.numero || '');
     setNovoBairro(cliente.bairro || '');
     setNovosDias(cliente.diasVisita || []);
-    setNovoHorario(cliente.horarioPadrao || '');
     setTela('editar_cliente');
   };
 
@@ -305,11 +263,11 @@ export default function App() {
       
       atualizarE_SalvarClientes(clientes.map(c => 
         c.id === clienteAtual.id 
-          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias, horarioPadrao: novoHorario } 
+          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias } 
           : c
       ));
       
-      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovoHorario(''); 
+      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); 
       setClienteAtual(null);
       setTela('relatorio'); 
       alert("✅ Cadastro atualizado com sucesso!");
@@ -351,14 +309,16 @@ export default function App() {
     const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
     
     const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
+    const mesesCurtos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     
     const novaVisita = {
-      d: `${diaFormatado}/${mesAtualCurto}`,
+      d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
       h: horarioVisita, 
       a: aspecto, 
       c: cloro, 
       p: ph, 
       al: alcalinidade, 
+      temp: temperatura, // NOVO CAMPO SALVO
       t: tempoFormatado,
       tMs: tempoMsTotal, 
       fotos: fotosVisita, 
@@ -393,6 +353,7 @@ export default function App() {
     const ultimaVisitaReal = historico[historico.length - 1];
     
     setAspecto(ultimaVisitaReal.a || ''); setPh(ultimaVisitaReal.p || ''); setCloro(ultimaVisitaReal.c || ''); setAlcalinidade(ultimaVisitaReal.al || '');
+    setTemperatura(ultimaVisitaReal.temp || ''); // REABRE COM TEMPERATURA
     setFotosVisita(ultimaVisitaReal.fotos || []); setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
     setFotosAlerta(ultimaVisitaReal.fotosA || []); 
     setTextoAlerta(ultimaVisitaReal.txtA || '');
@@ -417,7 +378,7 @@ export default function App() {
   const reabrirTarefa = () => executarReabertura(clientes.find(c => c.id === clienteRelatorio.id));
 
   const resetarFormulario = () => {
-    setAspecto(''); setPh(''); setCloro(''); setAlcalinidade('');
+    setAspecto(''); setPh(''); setCloro(''); setAlcalinidade(''); setTemperatura('');
     setFotosContagem(0); setFotosVisita([]); setHoraInicioVisita(null); 
     setFotosAlerta([]); 
     setTextoAlerta(''); setProdutosFaltando([]); setClienteAtual(null);
@@ -441,6 +402,7 @@ export default function App() {
     setModoImpressao('relatorio');
     setTimeout(() => {
       window.print();
+      // O timer longo garante que o celular tenha tempo de capturar a tela limpa
       setTimeout(() => {
         setModoImpressao(null);
       }, 3000); 
@@ -448,7 +410,7 @@ export default function App() {
   };
 
   // =========================================================================
-  // 2. ALERTA DE DEFEITO (FOTO PNG COM CORES MÃO NA ÁGUA)
+  // 2. ALERTA DE DEFEITO (FOTO PNG, MANTIDO INTACTO)
   // =========================================================================
   const compartilharAlertaSeparado = async () => {
     const elemento = document.getElementById('alerta-print-foto');
@@ -575,14 +537,6 @@ export default function App() {
                 
                 <div className={`mb-5 ${foiFinalizadoHoje ? 'ml-2' : ''}`}>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5"><MapPin size={14} className="text-sky-400"/> {c.endereco}</p>
-                  
-                  {/* NOVO: MOSTRAR HORÁRIO DA LIMPEZA SE TIVER */}
-                  {c.horarioPadrao && (
-                    <p className="text-[10px] font-bold text-teal-600 dark:text-teal-400 flex items-center gap-1.5 mt-1.5 ml-5">
-                      <Clock size={12}/> Agendado para as {c.horarioPadrao}
-                    </p>
-                  )}
-
                   <button 
                     onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.endereco + ', Jataí - GO')}`, '_blank')} 
                     className="text-[10px] font-bold text-sky-500 dark:text-sky-400 hover:text-sky-600 dark:hover:text-sky-300 flex items-center gap-1 mt-1.5 ml-5 transition-colors"
@@ -695,12 +649,12 @@ export default function App() {
             )}
           </section>
 
-          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-teal-200 dark:border-teal-900/30 relative overflow-hidden transition-colors shadow-sm">
-             <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-400 to-teal-600"></div>
-             <h3 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2.5 mb-4 ml-3"><div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-900/30 text-teal-600"><AlertTriangle size={16} /></div> Relatar Problema</h3>
+          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-rose-200 dark:border-rose-900/30 relative overflow-hidden transition-colors shadow-sm">
+             <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-rose-400 to-rose-600"></div>
+             <h3 className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2.5 mb-4 ml-3"><div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-900/30 text-rose-500"><AlertTriangle size={16} /></div> Relatar Problema</h3>
              
-             <label className={`ml-3 w-[calc(100%-12px)] bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-teal-300/50 dark:border-teal-700/50 py-8 rounded-[1.25rem] flex flex-col items-center gap-3 text-teal-600 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/10 transition-colors`}>
-               <Camera size={30} className="text-teal-400" /> 
+             <label className={`ml-3 w-[calc(100%-12px)] bg-slate-50 dark:bg-zinc-950 border-2 border-dashed border-rose-300/50 dark:border-rose-700/50 py-8 rounded-[1.25rem] flex flex-col items-center gap-3 text-rose-500 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors`}>
+               <Camera size={30} className="text-rose-400" /> 
                <span className="text-sm font-bold tracking-wide">Anexar Foto do Defeito</span>
                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoAlerta} />
              </label>
@@ -712,7 +666,7 @@ export default function App() {
                     <img src={foto} className="w-full h-full object-cover" alt={`Defeito ${index + 1}`} />
                     <button 
                       onClick={() => removerFotoAlerta(index)}
-                      className="absolute top-1 right-1 bg-teal-500/90 text-white rounded-md p-1 shadow-sm hover:bg-teal-600 transition-colors backdrop-blur-sm"
+                      className="absolute top-1 right-1 bg-rose-500/90 text-white rounded-md p-1 shadow-sm hover:bg-rose-600 transition-colors backdrop-blur-sm"
                     >
                       <Trash2 size={12} />
                     </button>
@@ -726,7 +680,7 @@ export default function App() {
                    placeholder="Descreva a peça partida, vazamento..." 
                    value={textoAlerta}
                    onChange={e => setTextoAlerta(e.target.value)}
-                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-800 dark:text-zinc-200 min-h-[100px] transition-all shadow-inner"
+                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 text-zinc-800 dark:text-zinc-200 min-h-[100px] transition-all shadow-inner"
                  />
                </div>
           </section>
@@ -737,6 +691,12 @@ export default function App() {
               <div className="flex flex-col gap-1.5"><span className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center font-bold tracking-widest">pH</span><input type="number" placeholder="7.2" value={ph} onChange={e => setPh(e.target.value)} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-center focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 outline-none text-teal-600 dark:text-teal-400 font-bold text-lg shadow-sm transition-all" /></div>
               <div className="flex flex-col gap-1.5"><span className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center font-bold tracking-widest">CLORO</span><input type="number" placeholder="2.0" value={cloro} onChange={e => setCloro(e.target.value)} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-center focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none text-sky-600 dark:text-sky-400 font-bold text-lg shadow-sm transition-all" /></div>
               <div className="flex flex-col gap-1.5"><span className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center font-bold tracking-widest">ALC</span><input type="number" placeholder="100" value={alcalinidade} onChange={e => setAlcalinidade(e.target.value)} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] text-center focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none text-emerald-600 dark:text-emerald-400 font-bold text-lg shadow-sm transition-all" /></div>
+            </div>
+            
+            {/* NOVO CAMPO: TEMPERATURA DA ÁGUA */}
+            <div className="mt-4">
+              <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-bold tracking-widest block mb-1.5 ml-2 uppercase">Temperatura da Água (°C)</span>
+              <input type="number" placeholder="28" value={temperatura} onChange={e => setTemperatura(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none text-orange-600 dark:text-orange-400 font-bold text-lg shadow-sm transition-all" />
             </div>
           </section>
 
@@ -768,7 +728,7 @@ export default function App() {
           </section>
           
           <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-sky-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
             <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Acessórios a Repor</p>
             <div className="space-y-3">
               {listaAcessorios.map(q => {
@@ -814,17 +774,11 @@ export default function App() {
             <div className="space-y-2 flex-[2]"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Bairro</span><input placeholder="Ex: Setor Central" value={novoBairro} onChange={e => setNovoBairro(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
           </div>
           
-          {/* NOVO: CAMPO DE HORÁRIO NA CRIAÇÃO DO CLIENTE */}
-          <div className="pt-2">
-            <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Horário da Limpeza</p>
-            <input type="time" value={novoHorario} onChange={e => setNovoHorario(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" />
-          </div>
-
-          <div className="pt-2">
+          <div className="pt-4">
             <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>
             <div className="grid grid-cols-4 gap-2.5">
               {diasDaSemanaNomes.map((d, i) => (
-                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
+                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
               ))}
             </div>
           </div>
@@ -842,24 +796,18 @@ export default function App() {
         <div className="space-y-6">
           <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Nome Completo</span><input placeholder="Ex: Samuel Silva" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
           
-          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Rua</span><input placeholder="Ex: Rua das Flores" value={novaRua} onChange={e => setNovaRua(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          <div className="space-y-2"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Rua</span><input placeholder="Ex: Rua das Flores" value={novaRua} onChange={e => setNovoNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
           
           <div className="flex gap-3">
             <div className="space-y-2 flex-1"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Número</span><input placeholder="Ex: 123" value={novoNumero} onChange={e => setNovoNumero(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
             <div className="space-y-2 flex-[2]"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Bairro</span><input placeholder="Ex: Setor Central" value={novoBairro} onChange={e => setNovoBairro(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
           </div>
-
-          {/* NOVO: CAMPO DE HORÁRIO NA EDIÇÃO DO CLIENTE */}
-          <div className="pt-2">
-            <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Horário da Limpeza</p>
-            <input type="time" value={novoHorario} onChange={e => setNovoHorario(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" />
-          </div>
           
-          <div className="pt-2">
+          <div className="pt-4">
             <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>
             <div className="grid grid-cols-4 gap-2.5">
               {diasDaSemanaNomes.map((d, i) => (
-                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
+                <button key={i} onClick={() => alternarDiaNovoCliente(i)} className={`py-3.5 rounded-[1rem] text-xs font-bold border transition-all ${novosDias.includes(i) ? gradBtn + " shadow-md" : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-teal-300'}`}>{d.substring(0, 3)}</button>
               ))}
             </div>
           </div>
@@ -919,26 +867,26 @@ export default function App() {
           }
         `}</style>
 
-        {/* --- ÁREA DO ALERTA ESCONDIDA (FOTO PNG COM CORES MÃO NA ÁGUA) --- */}
+        {/* --- ÁREA DO ALERTA ESCONDIDA (USADA PARA GERAR A FOTO PNG SEM BUG DE COR) --- */}
         <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -50 }}>
           <div id="alerta-print-foto" style={{ width: '400px', padding: '32px', backgroundColor: '#ffffff', fontFamily: 'sans-serif' }}>
-            <div style={{ borderLeft: '4px solid #0ea5e9', paddingLeft: '20px', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '30px', fontWeight: '900', color: '#0369a1', margin: 0, letterSpacing: '-0.05em' }}>🚨 Atenção Técnica</h2>
+            <div style={{ borderLeft: '4px solid #f43f5e', paddingLeft: '20px', marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '30px', fontWeight: '900', color: '#e11d48', margin: 0, letterSpacing: '-0.05em' }}>🚨 Atenção Técnica</h2>
               <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#71717a', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{clienteExibicao.nome} • {ultimaVisitaReal?.d}</p>
             </div>
             
             {ultimaVisitaReal?.fotosA?.[0] && (
-               <img src={ultimaVisitaReal.fotosA[0]} style={{ width: '100%', height: '288px', objectFit: 'cover', borderRadius: '16px', marginBottom: '24px', border: '2px solid #bae6fd' }} alt="ProblemaPrincipal" />
+               <img src={ultimaVisitaReal.fotosA[0]} style={{ width: '100%', height: '288px', objectFit: 'cover', borderRadius: '16px', marginBottom: '24px', border: '2px solid #ffe4e6' }} alt="ProblemaPrincipal" />
             )}
             
-            <div style={{ backgroundColor: '#f0f9ff', padding: '20px', borderRadius: '16px', border: '1px solid #bae6fd', marginBottom: '24px' }}>
+            <div style={{ backgroundColor: '#fff1f2', padding: '20px', borderRadius: '16px', border: '1px solid #ffe4e6', marginBottom: '24px' }}>
               <p style={{ fontSize: '14px', color: '#27272a', fontWeight: '500', whiteSpace: 'pre-wrap', lineHeight: '1.6', margin: 0 }}>{ultimaVisitaReal?.txtA || 'Nenhuma descrição técnica adicionada ao relato visual.'}</p>
             </div>
 
             {ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 1 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                 {ultimaVisitaReal.fotosA.slice(1).map((foto, index) => (
-                  <img key={index} src={foto} style={{ aspectRatio: '1/1', width: '100%', objectFit: 'cover', borderRadius: '8px', border: '2px solid #bae6fd' }} alt={`ProblemaExtra ${index + 1}`} />
+                  <img key={index} src={foto} style={{ aspectRatio: '1/1', width: '100%', objectFit: 'cover', borderRadius: '8px', border: '2px solid #ffe4e6' }} alt={`ProblemaExtra ${index + 1}`} />
                 ))}
               </div>
             )}
@@ -969,7 +917,7 @@ export default function App() {
             </div>
 
             {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
-              <button onClick={compartilharAlertaSeparado} className="w-full mb-6 bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-teal-500/20 active:scale-95 transition-all">
+              <button onClick={compartilharAlertaSeparado} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
                 <AlertTriangle size={18} /> Baixar Foto do Alerta de Defeito
               </button>
             )}
@@ -1011,17 +959,18 @@ export default function App() {
                   <table className="w-full text-[10px] text-center table-fixed">
                     <thead className="bg-slate-50 text-zinc-500 font-bold uppercase tracking-tighter text-[9px]">
                       <tr>
-                        <th className="px-1 py-2 border-b w-[16%]">Data</th>
-                        <th className="px-1 py-2 border-b w-[22%]">Aspecto</th>
-                        <th className="px-1 py-2 border-b text-teal-600 w-[26%]">Tempo</th>
-                        <th className="px-1 py-2 border-b w-[12%]">Cl</th>
-                        <th className="px-1 py-2 border-b w-[12%]">pH</th>
-                        <th className="px-1 py-2 border-b w-[12%]">Alc</th>
+                        <th className="px-1 py-2 border-b w-[14%]">Data</th>
+                        <th className="px-1 py-2 border-b w-[18%]">Aspecto</th>
+                        <th className="px-1 py-2 border-b text-teal-600 w-[22%]">Tempo</th>
+                        <th className="px-1 py-2 border-b w-[11.5%]">Cl</th>
+                        <th className="px-1 py-2 border-b w-[11.5%]">pH</th>
+                        <th className="px-1 py-2 border-b w-[11.5%]">Alc</th>
+                        <th className="px-1 py-2 border-b w-[11.5%]">Temp</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
                       {historicoDoRelatorio.length === 0 ? (
-                         <tr><td colSpan="6" className="p-4 text-center text-xs text-zinc-400 italic">Nenhuma manutenção registada este mês.</td></tr>
+                         <tr><td colSpan="7" className="p-4 text-center text-xs text-zinc-400 italic">Nenhuma manutenção registada este mês.</td></tr>
                       ) : (
                          historicoDoRelatorio.map((v, i) => (
                            <tr key={i} className="hover:bg-slate-50 transition-colors">
@@ -1036,6 +985,7 @@ export default function App() {
                              <td className="px-1 py-2 font-bold text-zinc-700">{v.c}</td>
                              <td className="px-1 py-2 font-bold text-zinc-700">{v.p}</td>
                              <td className="px-1 py-2 font-bold text-zinc-700">{v.al}</td>
+                             <td className="px-1 py-2 font-bold text-zinc-700">{v.temp ? v.temp + '°' : '--'}</td>
                            </tr>
                          ))
                       )}
@@ -1047,13 +997,13 @@ export default function App() {
 
               {visitasComAlerta.length > 0 && (
                 <section className="pt-2 border-t border-zinc-100">
-                  <h3 className="text-xs font-bold text-teal-600 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-teal-100 text-teal-600"><AlertTriangle size={12} /></div> Ocorrências Técnicas</h3>
+                  <h3 className="text-xs font-bold text-rose-600 pb-3 flex items-center gap-2 uppercase tracking-wide"><div className="p-1 rounded bg-rose-100 text-rose-600"><AlertTriangle size={12} /></div> Ocorrências Técnicas</h3>
                   <div className="space-y-3">
                     {visitasComAlerta.map((v, i) => (
-                      <div key={i} className="flex gap-3 bg-teal-50/50 p-3 rounded-xl border border-teal-100/50 items-start flex-col">
+                      <div key={i} className="flex gap-3 bg-rose-50/50 p-3 rounded-xl border border-rose-100/50 items-start flex-col">
                         <div className="flex items-start gap-3 w-full">
                           <div className="flex-1">
-                            <p className="text-[9px] font-black text-teal-800 mb-1 tracking-wider uppercase">{v.d}</p>
+                            <p className="text-[9px] font-black text-rose-800 mb-1 tracking-wider uppercase">{v.d}</p>
                             <p className="text-[10px] text-zinc-700 leading-relaxed font-medium">{v.txtA || 'Alerta visual gerado sem anotação em texto.'}</p>
                           </div>
                         </div>
@@ -1061,7 +1011,7 @@ export default function App() {
                         {v.fotosA && v.fotosA.length > 0 && (
                           <div className="flex gap-2 flex-wrap mt-1 w-full">
                             {v.fotosA.map((foto, fIndex) => (
-                              <img key={fIndex} src={foto} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-teal-200" alt={`Alerta ${fIndex + 1}`} />
+                              <img key={fIndex} src={foto} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-rose-200" alt={`Alerta ${fIndex + 1}`} />
                             ))}
                           </div>
                         )}

@@ -533,7 +533,7 @@ export default function App() {
        historicoProdutos.forEach(p => { mensagem += `- ${p.qtd}x ${p.nome}\n`; });
        mensagem += `\n`;
     }
-    mensagem += `Qualquer dúvida, estou à disposição!\n*${perfil.empresa} - Gestão Profissional*`;
+    mensagem += `Qualquer dúvida, estou à disposição!\n\n*${perfil.empresa}*\n_Tecnologia Mão Na Água_ 🌊`;
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
@@ -602,8 +602,8 @@ export default function App() {
 
         <div className="w-full max-w-sm relative z-10">
           <div className="text-center mb-10">
-            <h1 className={`text-6xl font-black mb-2 tracking-tight ${gradText} drop-shadow-sm`}>{perfil.empresa}</h1>
-            <p className="text-teal-200/60 font-medium tracking-widest uppercase text-xs mt-3">Gestão Profissional</p>
+            <h1 className={`text-6xl font-black mb-2 tracking-tight ${gradText} drop-shadow-sm`}>Mão Na Água</h1>
+            <p className="text-teal-200/60 font-medium tracking-widest uppercase text-[10px] mt-3">Plataforma de Gestão Profissional</p>
           </div>
 
           <div className="bg-zinc-900/60 p-8 rounded-[2rem] border border-zinc-800 shadow-2xl backdrop-blur-md">
@@ -666,8 +666,8 @@ export default function App() {
         )}
         <header className="flex justify-between items-start mb-6 pb-2 relative">
           <div>
-            <h1 className={`text-4xl font-black ${gradText}`}>{perfil.empresa}</h1>
-            <p className="text-teal-600/70 dark:text-teal-400/60 font-medium text-sm mt-1">Hoje é {diasDaSemanaNomes[diaAtual]}</p>
+            <h1 className={`text-3xl font-black ${gradText}`}>Mão Na Água</h1>
+            <p className="text-teal-600/70 dark:text-teal-400/60 font-bold text-[10px] uppercase tracking-widest mt-0.5">{perfil.empresa}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
@@ -1083,7 +1083,7 @@ export default function App() {
             )}
 
             <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid #f4f4f5', textAlign: 'center' }}>
-                <p style={{ fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 'bold', margin: 0 }}>{perfil.empresa} • Relatório Automático</p>
+                <p style={{ fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 'bold', margin: 0 }}>Tecnologia Mão Na Água • {perfil.empresa}</p>
             </div>
           </div>
         </div>
@@ -1124,8 +1124,8 @@ export default function App() {
             <header className="p-6 pt-8 relative">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-teal-500 mb-1">{perfil.empresa}</h1>
-                  <p className="text-[10px] font-black text-zinc-500 tracking-widest uppercase">Gestão Profissional</p>
+                  <h1 className="text-2xl font-black tracking-tight text-zinc-800 mb-0">{perfil.empresa}</h1>
+                  <p className="text-[9px] font-black text-teal-600 tracking-widest uppercase">Certificado Padrão Mão Na Água</p>
                 </div>
                 <div className="text-right flex flex-col items-end">
                   <h2 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Relatório Mensal</h2>
@@ -1230,7 +1230,7 @@ export default function App() {
             <footer className="bg-zinc-900 text-white p-6 text-center mt-2 relative overflow-hidden">
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-sky-500 to-teal-500"></div>
                <p className="text-sm font-bold mb-1.5 text-zinc-100">Obrigado pela confiança!</p>
-               <p className="text-[9px] text-zinc-500 mb-5 font-medium">Documento auditado pelo sistema {perfil.empresa}.</p>
+               <p className="text-[9px] text-zinc-500 mb-5 font-medium">Este serviço utiliza a tecnologia e o padrão de qualidade **Mão Na Água**.</p>
                
                <div className="bg-zinc-800/50 p-2 rounded-lg mb-4 inline-block">
                  <p className="text-[8px] text-zinc-400 font-medium">Para visualizar a galeria fotográfica completa em alta resolução, solicite acesso à sua pasta virtual.</p>

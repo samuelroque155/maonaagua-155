@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, BellRing
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
@@ -123,8 +123,65 @@ export default function App() {
   const [novaRua, setNovaRua] = useState('');
   const [novoNumero, setNovoNumero] = useState('');
   const [novosDias, setNovosDias] = useState([]);
+  const [novaHora, setNovaHora] = useState('');
+
+  const [notificacoesAtivas, setNotificacoesAtivas] = useState([]);
+  const notificadosHojeRef = React.useRef(new Set());
 
   const piscinasDeHoje = clientes.filter(c => c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual);
+
+  useEffect(() => {
+    if (!user || clientes.length === 0) return;
+
+    if (typeof Notification !== 'undefined' && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    const checarNotificacoes = () => {
+      const agora = new Date();
+      const diaAtualLocal = agora.getDay();
+      const horaStr = agora.getHours().toString().padStart(2, '0') + ':' + agora.getMinutes().toString().padStart(2, '0');
+      const dataKey = agora.toDateString(); 
+
+      const clientesParaNotificar = clientes.filter(c => {
+        const hojeE_DiaVisita = c.diasVisita?.includes(diaAtualLocal) || c.adiadoPara === diaAtualLocal;
+        if (!hojeE_DiaVisita) return false;
+        if (!c.horaVisita) return false;
+        
+        const jaNotificadoKey = `${c.id}-${dataKey}-${c.horaVisita}`;
+        if (notificadosHojeRef.current.has(jaNotificadoKey)) return false;
+
+        return c.horaVisita === horaStr;
+      });
+
+      if (clientesParaNotificar.length > 0) {
+        const novasNots = [];
+        clientesParaNotificar.forEach(c => {
+          const jaNotificadoKey = `${c.id}-${dataKey}-${c.horaVisita}`;
+          notificadosHojeRef.current.add(jaNotificadoKey);
+
+          if (typeof Notification !== 'undefined' && Notification.permission === "granted") {
+             try {
+               new Notification("Mão Na Água", {
+                 body: `Chegou a hora de limpar a piscina de ${c.nome}!`,
+               });
+             } catch (e) {
+               console.log("Erro na notificação nativa", e);
+             }
+          }
+          
+          novasNots.push({ id: Date.now() + Math.random(), clienteNome: c.nome, hora: c.horaVisita });
+        });
+        
+        setNotificacoesAtivas(prev => [...prev, ...novasNots]);
+      }
+    };
+
+    const intervalId = setInterval(checarNotificacoes, 30000); 
+    checarNotificacoes(); 
+
+    return () => clearInterval(intervalId);
+  }, [clientes, user]);
 
   const handleLogin = async () => {
     if(!emailLogin || !senhaLogin) return alert("Preencha e-mail e senha");
@@ -230,7 +287,7 @@ export default function App() {
   };
 
   const irParaNovoCliente = () => {
-    setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]);
+    setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovaHora('');
     setTela('novo_cliente');
   };
 
@@ -238,10 +295,10 @@ export default function App() {
     if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
       const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
       atualizarE_SalvarClientes([...clientes, { 
-        id: Date.now(), nome: novoNome, endereco: enderecoCompleto, rua: novaRua, numero: novoNumero, bairro: novoBairro, diasVisita: novosDias,
+        id: Date.now(), nome: novoNome, endereco: enderecoCompleto, rua: novaRua, numero: novoNumero, bairro: novoBairro, diasVisita: novosDias, horaVisita: novaHora,
         adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
       }]);
-      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setTela('lista');
+      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovaHora(''); setTela('lista');
     } else {
       alert("Preencha nome, rua, bairro e selecione pelo menos um dia da semana.");
     }
@@ -254,6 +311,7 @@ export default function App() {
     setNovoNumero(cliente.numero || '');
     setNovoBairro(cliente.bairro || '');
     setNovosDias(cliente.diasVisita || []);
+    setNovaHora(cliente.horaVisita || '');
     setTela('editar_cliente');
   };
 
@@ -263,11 +321,11 @@ export default function App() {
       
       atualizarE_SalvarClientes(clientes.map(c => 
         c.id === clienteAtual.id 
-          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias } 
+          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias, horaVisita: novaHora } 
           : c
       ));
       
-      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); 
+      setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovaHora('');
       setClienteAtual(null);
       setTela('relatorio'); 
       alert("✅ Cadastro atualizado com sucesso!");
@@ -487,7 +545,27 @@ export default function App() {
 
   if (tela === 'lista') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 pb-24 font-sans transition-colors duration-300">
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 pb-24 font-sans transition-colors duration-300 relative">
+        {notificacoesAtivas.length > 0 && (
+          <div className="fixed top-4 left-0 right-0 z-[100] px-4 pointer-events-none flex flex-col items-center gap-2">
+            {notificacoesAtivas.map(not => (
+              <div key={not.id} className="w-full max-w-md bg-zinc-900/95 dark:bg-zinc-800/95 backdrop-blur-md p-4 rounded-[1.25rem] shadow-2xl border border-zinc-700 pointer-events-auto flex justify-between items-center animate-pulse">
+                <div className="flex items-center gap-4">
+                  <div className="bg-gradient-to-br from-sky-400 to-teal-400 text-white p-2.5 rounded-[1rem] shadow-lg">
+                    <BellRing size={20} className="animate-bounce" />
+                  </div>
+                  <div>
+                    <p className="font-black text-white text-sm tracking-wide">Hora da Limpeza!</p>
+                    <p className="text-teal-300 text-xs font-bold mt-0.5">{not.clienteNome} às {not.hora}</p>
+                  </div>
+                </div>
+                <button onClick={() => setNotificacoesAtivas(prev => prev.filter(n => n.id !== not.id))} className="text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 p-2.5 rounded-xl transition-colors">
+                  <Check size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <header className="flex justify-between items-start mb-6 border-b border-zinc-200 dark:border-zinc-800 pb-4 relative">
           <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-sky-400/20 via-teal-400/50 to-transparent"></div>
           <div>
@@ -531,7 +609,10 @@ export default function App() {
                 {foiFinalizadoHoje && <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-400 to-emerald-400"></div>}
                 
                 <div className="flex justify-between items-center mb-1">
-                  <h3 className={`font-bold text-lg ${foiFinalizadoHoje ? 'ml-2 text-zinc-900 dark:text-zinc-100' : 'text-zinc-900 dark:text-zinc-100'}`}>{c.nome}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold text-lg ${foiFinalizadoHoje ? 'ml-2 text-zinc-900 dark:text-zinc-100' : 'text-zinc-900 dark:text-zinc-100'}`}>{c.nome}</h3>
+                    {c.horaVisita && <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-md flex items-center gap-1 border border-sky-100 dark:border-sky-900/50"><Clock size={10} /> {c.horaVisita}</span>}
+                  </div>
                   {badgeSelo}
                 </div>
                 
@@ -772,6 +853,11 @@ export default function App() {
           <div className="flex gap-3">
             <div className="space-y-2 flex-1"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Número</span><input placeholder="Ex: 123" value={novoNumero} onChange={e => setNovoNumero(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
             <div className="space-y-2 flex-[2]"><span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Bairro</span><input placeholder="Ex: Setor Central" value={novoBairro} onChange={e => setNovoBairro(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" /></div>
+          </div>
+          
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Hora da Visita</span>
+            <input type="time" value={novaHora} onChange={e => setNovaHora(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" />
           </div>
           
           <div className="pt-4">

@@ -140,7 +140,7 @@ export default function App() {
     const checarNotificacoes = () => {
       const agora = new Date();
       const diaAtualLocal = agora.getDay();
-      const horaStr = agora.getHours().toString().padStart(2, '0') + ':' + agora.getMinutes().toString().padStart(2, '0');
+      const tempoAtualMinutos = agora.getHours() * 60 + agora.getMinutes();
       const dataKey = agora.toDateString(); 
 
       const clientesParaNotificar = clientes.filter(c => {
@@ -148,10 +148,18 @@ export default function App() {
         if (!hojeE_DiaVisita) return false;
         if (!c.horaVisita) return false;
         
+        const [h, m] = c.horaVisita.split(':').map(Number);
+        const tempoVisitaMinutos = h * 60 + m;
+        
+        // Alarme toca exatamente 2 horas (120 minutos) antes da visita
+        const tempoAlarmeMinutos = (tempoVisitaMinutos - 120 + 1440) % 1440;
+        
+        if (tempoAtualMinutos !== tempoAlarmeMinutos) return false;
+
         const jaNotificadoKey = `${c.id}-${dataKey}-${c.horaVisita}`;
         if (notificadosHojeRef.current.has(jaNotificadoKey)) return false;
 
-        return c.horaVisita === horaStr;
+        return true;
       });
 
       if (clientesParaNotificar.length > 0) {
@@ -160,26 +168,30 @@ export default function App() {
           const jaNotificadoKey = `${c.id}-${dataKey}-${c.horaVisita}`;
           notificadosHojeRef.current.add(jaNotificadoKey);
 
-          // Tocar o som de água
+          // Tocar o som de água apenas uma vez (sem loop)
           try {
             const audio = new Audio('/agua.ogg');
-            audio.play().catch(e => console.log('Áudio bloqueado pelo navegador', e));
+            audio.play().catch(e => console.log('Áudio bloqueado', e));
           } catch(e) {}
 
           if (typeof window !== 'undefined' && 'serviceWorker' in navigator && Notification.permission === "granted") {
              navigator.serviceWorker.ready.then(registration => {
                registration.showNotification("Mão Na Água", {
-                 body: `Hora de limpar a piscina de ${c.nome}!`,
+                 body: `Lembrete: Limpeza de ${c.nome} em 2 horas!`,
                  icon: "/favicon.ico",
-                 vibrate: [200, 100, 200, 100, 200, 100, 200],
-                 tag: `limpeza-${c.id}`
+                 vibrate: [500, 250, 500, 250, 500],
+                 tag: `limpeza-${c.id}`,
+                 requireInteraction: true,
+                 actions: [
+                   { action: 'desligar', title: 'Desligar Alarme' }
+                 ]
                }).catch(() => {
-                 new Notification("Mão Na Água", { body: `Hora de limpar a piscina de ${c.nome}!` });
+                 new Notification("Mão Na Água", { body: `Limpeza de ${c.nome} em 2 horas!`, requireInteraction: true });
                });
              });
           } else if (typeof Notification !== 'undefined' && Notification.permission === "granted") {
              try {
-               new Notification("Mão Na Água", { body: `Hora de limpar a piscina de ${c.nome}!` });
+               new Notification("Mão Na Água", { body: `Limpeza de ${c.nome} em 2 horas!`, requireInteraction: true });
              } catch (e) {}
           }
           
@@ -494,13 +506,27 @@ export default function App() {
         useCORS: true 
       });
       
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = `Alerta_${clienteRelatorio.nome}.png`;
-      a.click();
-      alert("✅ Foto do Alerta de Defeito salva na sua galeria/downloads!");
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `Alerta_${clienteRelatorio.nome}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Alerta Técnico',
+          text: `Alerta Técnico - ${clienteRelatorio.nome}`
+        });
+      } else {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `Alerta_${clienteRelatorio.nome}.png`;
+        a.click();
+        alert("✅ Foto do Alerta de Defeito salva na sua galeria/downloads!");
+      }
     } catch(e) { 
-      alert('Erro ao gerar a foto do relato: ' + e.message); 
+      if (e.name !== 'AbortError') {
+        alert('Erro ao compartilhar a foto: ' + e.message); 
+      }
     }
   };
 
@@ -568,8 +594,8 @@ export default function App() {
                     <BellRing size={20} className="animate-bounce" />
                   </div>
                   <div>
-                    <p className="font-black text-white text-sm tracking-wide">Hora da Limpeza!</p>
-                    <p className="text-teal-300 text-xs font-bold mt-0.5">{not.clienteNome} às {not.hora}</p>
+                    <p className="font-black text-white text-sm tracking-wide">Lembrete de Limpeza!</p>
+                    <p className="text-teal-300 text-xs font-bold mt-0.5">{not.clienteNome} (em 2h às {not.hora})</p>
                   </div>
                 </div>
                 <button onClick={() => setNotificacoesAtivas(prev => prev.filter(n => n.id !== not.id))} className="text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 p-2.5 rounded-xl transition-colors">

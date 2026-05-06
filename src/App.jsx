@@ -579,8 +579,7 @@ export default function App() {
             ))}
           </div>
         )}
-        <header className="flex justify-between items-start mb-6 border-b border-zinc-200 dark:border-zinc-800 pb-4 relative">
-          <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-sky-400/20 via-teal-400/50 to-transparent"></div>
+        <header className="flex justify-between items-start mb-6 pb-2 relative">
           <div>
             <h1 className={`text-4xl font-black ${gradText}`}>Mão Na Água</h1>
             <p className="text-teal-600/70 dark:text-teal-400/60 font-medium text-sm mt-1">Hoje é {diasDaSemanaNomes[diaAtual]}</p>

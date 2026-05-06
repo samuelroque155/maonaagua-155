@@ -6,9 +6,10 @@ import {
 import { toPng } from 'html-to-image';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
-import { auth, db } from './firebase';
+import { auth, db, storage } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 // --- CONFIGURAÇÕES DOS PRODUTOS E ACESSÓRIOS ---
 const listaQuimica = [
@@ -52,6 +53,14 @@ export default function App() {
   const [senhaLogin, setSenhaLogin] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
 
+  // --- ESTADOS DO PERFIL E ASSINATURA ---
+  const [perfil, setPerfil] = useState({
+    empresa: 'Mão Na Água',
+    cidade: 'Sua Cidade',
+    assinaturaAtiva: true, // Por padrão true para novos usuários em trial ou teste
+    whatsappSuporte: '5564999999999'
+  });
+
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
   const [modoImpressao, setModoImpressao] = useState(null);
@@ -85,11 +94,26 @@ export default function App() {
       if (usuarioAtual) {
         const docRef = doc(db, 'usuarios', usuarioAtual.uid);
         const docSnap = await getDoc(docRef);
+        
         if (docSnap.exists()) {
-          setClientes(docSnap.data().clientes || []);
+          const data = docSnap.data();
+          setClientes(data.clientes || []);
+          if (data.perfil) {
+            setPerfil(prev => ({ ...prev, ...data.perfil }));
+          }
         } else {
-          await setDoc(docRef, { clientes: [] });
+          // Novo usuário: cria documento inicial
+          const perfilInicial = {
+            empresa: 'Minha Piscina',
+            cidade: 'Brasil',
+            assinaturaAtiva: true
+          };
+          await setDoc(docRef, { 
+            clientes: [],
+            perfil: perfilInicial
+          });
           setClientes([]);
+          setPerfil(prev => ({ ...prev, ...perfilInicial }));
         }
       }
       setAuthLoading(false);
@@ -100,7 +124,26 @@ export default function App() {
   const atualizarE_SalvarClientes = async (novosClientes) => {
     setClientes(novosClientes); 
     if (user) {
-      await setDoc(doc(db, 'usuarios', user.uid), { clientes: novosClientes });
+      await updateDoc(doc(db, 'usuarios', user.uid), { clientes: novosClientes });
+    }
+  };
+
+  const salvarPerfil = async (novoPerfil) => {
+    setPerfil(novoPerfil);
+    if (user) {
+      await updateDoc(doc(db, 'usuarios', user.uid), { perfil: novoPerfil });
+    }
+  };
+
+  // --- FUNÇÃO DE UPLOAD PARA O STORAGE ---
+  const uploadImagem = async (base64, path) => {
+    try {
+      const storageRef = ref(storage, `usuarios/${user.uid}/${path}/${Date.now()}.jpg`);
+      await uploadString(storageRef, base64, 'data_url');
+      return await getDownloadURL(storageRef);
+    } catch (error) {
+      console.error("Erro no upload:", error);
+      return base64; // Fallback para base64 se falhar (não recomendado)
     }
   };
 
@@ -375,58 +418,74 @@ export default function App() {
     return fotosContagem >= 3 && ph !== '' && cloro !== '' && alcalinidade !== '' && aspecto !== '';
   };
 
-  const salvarVisita = () => {
+  const salvarVisita = async () => {
     if (!validarFecharTarefa()) {
       alert("⚠️ ATENÇÃO:\n\nPara finalizar, você precisa de:\n- No mínimo 3 fotos\n- Preencher pH, Cloro e Alc\n- Selecionar o aspecto da água.");
       return;
     }
-    
-    const dataFim = new Date();
-    const dataInicio = new Date(horaInicioVisita || Date.now());
-    
-    const formataHora = (data) => `${data.getHours().toString().padStart(2, '0')}:${data.getMinutes().toString().padStart(2, '0')}`;
-    const horarioVisita = `${formataHora(dataInicio)} - ${formataHora(dataFim)}`;
 
-    const tempoMsTotal = dataFim.getTime() - dataInicio.getTime();
-    const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
-    const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
-    
-    const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
-    const mesesCurtos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    
-    const novaVisita = {
-      d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
-      h: horarioVisita, 
-      a: aspecto, 
-      c: cloro, 
-      p: ph, 
-      al: alcalinidade, 
-      temp: temperatura, // NOVO CAMPO SALVO
-      t: tempoFormatado,
-      tMs: tempoMsTotal, 
-      fotos: fotosVisita, 
-      fotosA: fotosAlerta, 
-      txtA: textoAlerta
-    };
-    
-    atualizarE_SalvarClientes(clientes.map(c => {
-      if (c.id === clienteAtual.id) {
-        const historicoBase = c.historicoVisitas || [];
-        return { 
-          ...c, 
-          ultimaVisita: dataHojeStr, 
-          visitaEmAndamentoData: null, 
-          adiadoPara: null,
-          ultimosProdutosFaltando: [...produtosFaltando],
-          historicoVisitas: [...historicoBase, novaVisita]
-        };
-      }
-      return c;
-    }));
+    // --- NOVO: UPLOAD DAS FOTOS PARA STORAGE ---
+    setAuthLoading(true); // Usar loading enquanto sobe fotos
+    try {
+      const urlsFotosPrincipais = await Promise.all(
+        fotosVisita.map(foto => foto.startsWith('http') ? foto : uploadImagem(foto, 'visitas'))
+      );
+      
+      const urlsFotosAlerta = await Promise.all(
+        fotosAlerta.map(foto => foto.startsWith('http') ? foto : uploadImagem(foto, 'alertas'))
+      );
 
-    alert(`✅ VISITA FINALIZADA!\n\nSalvo na nuvem com sucesso. Tempo: ${tempoFormatado}`);
-    setTela('lista');
-    resetarFormulario();
+      const dataFim = new Date();
+      const dataInicio = new Date(horaInicioVisita || Date.now());
+      
+      const formataHora = (data) => `${data.getHours().toString().padStart(2, '0')}:${data.getMinutes().toString().padStart(2, '0')}`;
+      const horarioVisita = `${formataHora(dataInicio)} - ${formataHora(dataFim)}`;
+
+      const tempoMsTotal = dataFim.getTime() - dataInicio.getTime();
+      const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
+      const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
+      
+      const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
+      const mesesCurtos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      
+      const novaVisita = {
+        d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
+        h: horarioVisita, 
+        a: aspecto, 
+        c: cloro, 
+        p: ph, 
+        al: alcalinidade, 
+        temp: temperatura,
+        t: tempoFormatado,
+        tMs: tempoMsTotal, 
+        fotos: urlsFotosPrincipais, 
+        fotosA: urlsFotosAlerta, 
+        txtA: textoAlerta
+      };
+      
+      await atualizarE_SalvarClientes(clientes.map(c => {
+        if (c.id === clienteAtual.id) {
+          const historicoBase = c.historicoVisitas || [];
+          return { 
+            ...c, 
+            ultimaVisita: dataHojeStr, 
+            visitaEmAndamentoData: null, 
+            adiadoPara: null,
+            ultimosProdutosFaltando: [...produtosFaltando],
+            historicoVisitas: [...historicoBase, novaVisita]
+          };
+        }
+        return c;
+      }));
+
+      alert(`✅ VISITA FINALIZADA!\n\nSalvo na nuvem com sucesso. Tempo: ${tempoFormatado}`);
+      setTela('lista');
+      resetarFormulario();
+    } catch (e) {
+      alert("Erro ao salvar visita: " + e.message);
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const executarReabertura = (clienteAlvo) => {
@@ -474,7 +533,7 @@ export default function App() {
        historicoProdutos.forEach(p => { mensagem += `- ${p.qtd}x ${p.nome}\n`; });
        mensagem += `\n`;
     }
-    mensagem += `Qualquer dúvida, estou à disposição!\n*Mão Na Água - Gestão Profissional*`;
+    mensagem += `Qualquer dúvida, estou à disposição!\n*${perfil.empresa} - Gestão Profissional*`;
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
@@ -543,7 +602,7 @@ export default function App() {
 
         <div className="w-full max-w-sm relative z-10">
           <div className="text-center mb-10">
-            <h1 className={`text-6xl font-black mb-2 tracking-tight ${gradText} drop-shadow-sm`}>Mão Na Água</h1>
+            <h1 className={`text-6xl font-black mb-2 tracking-tight ${gradText} drop-shadow-sm`}>{perfil.empresa}</h1>
             <p className="text-teal-200/60 font-medium tracking-widest uppercase text-xs mt-3">Gestão Profissional</p>
           </div>
 
@@ -607,7 +666,7 @@ export default function App() {
         )}
         <header className="flex justify-between items-start mb-6 pb-2 relative">
           <div>
-            <h1 className={`text-4xl font-black ${gradText}`}>Mão Na Água</h1>
+            <h1 className={`text-4xl font-black ${gradText}`}>{perfil.empresa}</h1>
             <p className="text-teal-600/70 dark:text-teal-400/60 font-medium text-sm mt-1">Hoje é {diasDaSemanaNomes[diaAtual]}</p>
           </div>
           <div className="flex gap-2">
@@ -616,6 +675,9 @@ export default function App() {
             </button>
             <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
               <CalendarDays size={20} />
+            </button>
+            <button onClick={() => setTela('configuracoes')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
+              <Pencil size={20} />
             </button>
             <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-rose-500 shadow-sm hover:scale-105 transition-transform">
               <LogOut size={20} />
@@ -657,7 +719,7 @@ export default function App() {
                 <div className={`mb-5 ${foiFinalizadoHoje ? 'ml-2' : ''}`}>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5"><MapPin size={14} className="text-sky-400"/> {c.endereco}</p>
                   <button 
-                    onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.endereco + ', Jataí - GO')}`, '_blank')} 
+                    onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.endereco + ', ' + perfil.cidade)}`, '_blank')} 
                     className="text-[10px] font-bold text-sky-500 dark:text-sky-400 hover:text-sky-600 dark:hover:text-sky-300 flex items-center gap-1 mt-1.5 ml-5 transition-colors"
                   >
                     <Navigation size={10} /> Abrir Rota no Maps
@@ -1021,7 +1083,7 @@ export default function App() {
             )}
 
             <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid #f4f4f5', textAlign: 'center' }}>
-                <p style={{ fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 'bold', margin: 0 }}>Mão Na Água • Relatório Automático</p>
+                <p style={{ fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 'bold', margin: 0 }}>{perfil.empresa} • Relatório Automático</p>
             </div>
           </div>
         </div>
@@ -1062,7 +1124,7 @@ export default function App() {
             <header className="p-6 pt-8 relative">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-teal-500 mb-1">Mão Na Água</h1>
+                  <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-teal-500 mb-1">{perfil.empresa}</h1>
                   <p className="text-[10px] font-black text-zinc-500 tracking-widest uppercase">Gestão Profissional</p>
                 </div>
                 <div className="text-right flex flex-col items-end">
@@ -1168,7 +1230,7 @@ export default function App() {
             <footer className="bg-zinc-900 text-white p-6 text-center mt-2 relative overflow-hidden">
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-sky-500 to-teal-500"></div>
                <p className="text-sm font-bold mb-1.5 text-zinc-100">Obrigado pela confiança!</p>
-               <p className="text-[9px] text-zinc-500 mb-5 font-medium">Documento auditado pelo sistema Mão Na Água.</p>
+               <p className="text-[9px] text-zinc-500 mb-5 font-medium">Documento auditado pelo sistema {perfil.empresa}.</p>
                
                <div className="bg-zinc-800/50 p-2 rounded-lg mb-4 inline-block">
                  <p className="text-[8px] text-zinc-400 font-medium">Para visualizar a galeria fotográfica completa em alta resolução, solicite acesso à sua pasta virtual.</p>
@@ -1220,6 +1282,65 @@ export default function App() {
           </div>
         </div>
 
+      </div>
+    );
+  }
+
+  if (tela === 'configuracoes') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300">
+        <header className="flex items-center gap-4 mb-10"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Configurações</h2></header>
+        
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-6 flex items-center gap-2"><Pencil size={16} className="text-teal-500" /> Perfil Profissional</h3>
+            
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest ml-1">Nome da Empresa</span>
+                <input value={perfil.empresa} onChange={e => setPerfil({...perfil, empresa: e.target.value})} className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl outline-none focus:border-teal-400 text-sm font-bold" />
+              </div>
+              
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest ml-1">Sua Cidade / Estado</span>
+                <input value={perfil.cidade} onChange={e => setPerfil({...perfil, cidade: e.target.value})} placeholder="Ex: Jataí - GO" className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl outline-none focus:border-teal-400 text-sm font-bold" />
+              </div>
+            </div>
+            
+            <button onClick={() => { salvarPerfil(perfil); alert("Perfil salvo com sucesso!"); }} className={`w-full py-4 rounded-xl font-bold mt-8 ${gradBtn}`}>SALVAR ALTERAÇÕES</button>
+          </div>
+
+          <div className="bg-zinc-100 dark:bg-zinc-900/50 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 text-center">
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Status da Conta</p>
+            {perfil.assinaturaAtiva ? (
+              <div className="flex items-center justify-center gap-2 text-emerald-500 font-bold">
+                <CheckCircle2 size={18} /> Assinatura Ativa
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="text-rose-500 font-bold flex items-center gap-2"><AlertTriangle size={18} /> Assinatura Pendente</div>
+                <button className="text-xs bg-zinc-800 text-white px-4 py-2 rounded-lg font-bold">Regularizar na Kiwify</button>
+              </div>
+            )}
+          </div>
+          
+          <button onClick={handleSair} className="w-full py-4 text-rose-500 font-bold border border-rose-200 dark:border-rose-900/30 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors">SAIR DA CONTA</button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- BLOQUEIO DE ASSINATURA ---
+  if (!perfil.assinaturaAtiva && tela !== 'configuracoes') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-white font-sans text-center">
+        <div className="w-20 h-20 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-6 animate-bounce">
+          <AlertTriangle size={40} />
+        </div>
+        <h2 className="text-2xl font-black mb-4">Acesso Suspenso</h2>
+        <p className="text-zinc-400 mb-8 max-w-xs">Identificamos que sua assinatura na Kiwify está pendente ou foi cancelada. Regularize para continuar gerindo suas piscinas.</p>
+        <button onClick={() => window.open('https://kiwify.com.br', '_blank')} className={`w-full max-w-xs py-4 rounded-2xl font-bold mb-4 ${gradBtn}`}>REGULARIZAR AGORA</button>
+        <button onClick={handleSair} className="text-zinc-500 font-bold hover:text-white transition-colors">Sair da Conta</button>
       </div>
     );
   }

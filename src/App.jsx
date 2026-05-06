@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
   AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, BellRing
@@ -126,7 +126,7 @@ export default function App() {
   const [novaHora, setNovaHora] = useState('');
 
   const [notificacoesAtivas, setNotificacoesAtivas] = useState([]);
-  const notificadosHojeRef = React.useRef(new Set());
+  const notificadosHojeRef = useRef(new Set());
 
   const piscinasDeHoje = clientes.filter(c => c.diasVisita.includes(diaAtual) || c.adiadoPara === diaAtual);
 
@@ -160,14 +160,27 @@ export default function App() {
           const jaNotificadoKey = `${c.id}-${dataKey}-${c.horaVisita}`;
           notificadosHojeRef.current.add(jaNotificadoKey);
 
-          if (typeof Notification !== 'undefined' && Notification.permission === "granted") {
-             try {
-               new Notification("Mão Na Água", {
-                 body: `Chegou a hora de limpar a piscina de ${c.nome}!`,
+          // Tocar o som de água
+          try {
+            const audio = new Audio('/agua.ogg');
+            audio.play().catch(e => console.log('Áudio bloqueado pelo navegador', e));
+          } catch(e) {}
+
+          if (typeof window !== 'undefined' && 'serviceWorker' in navigator && Notification.permission === "granted") {
+             navigator.serviceWorker.ready.then(registration => {
+               registration.showNotification("Mão Na Água", {
+                 body: `Hora de limpar a piscina de ${c.nome}!`,
+                 icon: "/favicon.ico",
+                 vibrate: [200, 100, 200, 100, 200, 100, 200],
+                 tag: `limpeza-${c.id}`
+               }).catch(() => {
+                 new Notification("Mão Na Água", { body: `Hora de limpar a piscina de ${c.nome}!` });
                });
-             } catch (e) {
-               console.log("Erro na notificação nativa", e);
-             }
+             });
+          } else if (typeof Notification !== 'undefined' && Notification.permission === "granted") {
+             try {
+               new Notification("Mão Na Água", { body: `Hora de limpar a piscina de ${c.nome}!` });
+             } catch (e) {}
           }
           
           novasNots.push({ id: Date.now() + Math.random(), clienteNome: c.nome, hora: c.horaVisita });

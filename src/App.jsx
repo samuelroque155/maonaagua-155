@@ -364,7 +364,8 @@ export default function App() {
       const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
       atualizarE_SalvarClientes([...clientes, { 
         id: Date.now(), nome: novoNome, endereco: enderecoCompleto, rua: novaRua, numero: novoNumero, bairro: novoBairro, diasVisita: novosDias, horaVisita: novaHora,
-        adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [] 
+        adiadoPara: null, ultimaVisita: null, visitaEmAndamentoData: null, ultimosProdutosFaltando: [], historicoVisitas: [],
+        diaEnvioRelatorio: 5 // Padrão: dia 5 de cada mês
       }]);
       setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovaHora(''); setTela('lista');
     } else {
@@ -387,9 +388,7 @@ export default function App() {
     if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
       const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
       
-      atualizarE_SalvarClientes(clientes.map(c => 
-        c.id === clienteAtual.id 
-          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias, horaVisita: novaHora } 
+          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias, horaVisita: novaHora, diaEnvioRelatorio: c.diaEnvioRelatorio || 5 } 
           : c
       ));
       
@@ -726,6 +725,17 @@ export default function App() {
                   </button>
                 </div>
                 
+                {/* AVISO DE RELATÓRIO PENDENTE */}
+                {dateObj.getDate() >= (c.diaEnvioRelatorio || 5) && c.historicoVisitas?.length > 0 && c.ultimaVisita !== dataHojeStr && (
+                  <div className="mx-2 mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                      <FileText size={16} />
+                      <span className="text-[10px] font-bold uppercase tracking-tight">Relatório Mensal Pronto</span>
+                    </div>
+                    <button onClick={() => { setClienteRelatorio(c); setTela('ver_relatorio'); }} className="text-[10px] font-black text-amber-800 dark:text-amber-300 underline uppercase tracking-tighter">Enviar Agora</button>
+                  </div>
+                )}
+                
                 {mostrarAdiarId === c.id ? (
                   <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
                     <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 uppercase tracking-wider">Mover visita para qual dia?</p>
@@ -959,6 +969,19 @@ export default function App() {
             <span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Hora da Visita</span>
             <input type="time" value={novaHora} onChange={e => setNovaHora(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" />
           </div>
+
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Dia para Envio do Relatório</span>
+            <select 
+              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 text-zinc-900 dark:text-white transition-all shadow-sm"
+              value={clienteAtual?.diaEnvioRelatorio || 5}
+              onChange={e => setClientes(clientes.map(c => c.id === clienteAtual?.id ? {...c, diaEnvioRelatorio: parseInt(e.target.value)} : c))}
+            >
+              {[...Array(31)].map((_, i) => (
+                <option key={i+1} value={i+1}>Todo dia {i+1}</option>
+              ))}
+            </select>
+          </div>
           
           <div className="pt-4">
             <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 ml-2 uppercase tracking-wider">Dias de Limpeza Mensal</p>
@@ -992,6 +1015,19 @@ export default function App() {
           <div className="space-y-2">
             <span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Hora da Visita</span>
             <input type="time" value={novaHora} onChange={e => setNovaHora(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 text-zinc-900 dark:text-white transition-all shadow-sm" />
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Dia para Envio do Relatório</span>
+            <select 
+              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 text-zinc-900 dark:text-white transition-all shadow-sm"
+              value={clienteAtual?.diaEnvioRelatorio || 5}
+              onChange={e => setClientes(clientes.map(c => c.id === clienteAtual?.id ? {...c, diaEnvioRelatorio: parseInt(e.target.value)} : c))}
+            >
+              {[...Array(31)].map((_, i) => (
+                <option key={i+1} value={i+1}>Todo dia {i+1}</option>
+              ))}
+            </select>
           </div>
           
           <div className="pt-4">
@@ -1135,10 +1171,15 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mt-6 bg-slate-50 rounded-xl p-4 border border-zinc-100 shadow-inner">
-                 <p className="text-[10px] text-zinc-400 font-bold uppercase mb-1 tracking-wider">Proprietário</p>
-                 <p className="text-lg font-black text-zinc-800">{clienteExibicao.nome}</p>
-                 <div className="mt-3 inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase"><CheckCircle2 size={12} /> Água Equilibrada (Mês Atual)</div>
+              <div className="mt-6 bg-slate-50 rounded-2xl p-5 border border-zinc-100 shadow-sm flex justify-between items-center">
+                 <div>
+                   <p className="text-[10px] text-zinc-400 font-bold uppercase mb-1 tracking-wider">Proprietário / Local</p>
+                   <p className="text-xl font-black text-zinc-800">{clienteExibicao.nome}</p>
+                   <p className="text-[10px] text-zinc-500 font-medium flex items-center gap-1 mt-0.5"><MapPin size={10} /> {clienteExibicao.endereco}</p>
+                 </div>
+                 <div className="text-right">
+                   <div className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-xl text-[10px] font-bold tracking-wide uppercase border border-emerald-200"><CheckCircle2 size={12} /> Água Equilibrada</div>
+                 </div>
               </div>
             </header>
 
@@ -1148,15 +1189,15 @@ export default function App() {
                 
                 <div className="overflow-hidden rounded-xl border border-zinc-200 shadow-sm w-full">
                   <table className="w-full text-[10px] text-center table-fixed">
-                    <thead className="bg-slate-50 text-zinc-500 font-bold uppercase tracking-tighter text-[9px]">
+                    <thead className="bg-zinc-800 text-white font-bold uppercase tracking-tighter text-[8px]">
                       <tr>
-                        <th className="px-1 py-2 border-b w-[14%]">Data</th>
-                        <th className="px-1 py-2 border-b w-[18%]">Aspecto</th>
-                        <th className="px-1 py-2 border-b text-teal-600 w-[22%]">Tempo</th>
-                        <th className="px-1 py-2 border-b w-[11.5%]">Cl</th>
-                        <th className="px-1 py-2 border-b w-[11.5%]">pH</th>
-                        <th className="px-1 py-2 border-b w-[11.5%]">Alc</th>
-                        <th className="px-1 py-2 border-b w-[11.5%]">Temp</th>
+                        <th className="px-1 py-3 border-b border-zinc-700 w-[14%]">Data</th>
+                        <th className="px-1 py-3 border-b border-zinc-700 w-[18%]">Status</th>
+                        <th className="px-1 py-3 border-b border-zinc-700 text-sky-400 w-[22%]">Horário</th>
+                        <th className="px-1 py-3 border-b border-zinc-700 w-[11.5%]">Cl</th>
+                        <th className="px-1 py-3 border-b border-zinc-700 w-[11.5%]">pH</th>
+                        <th className="px-1 py-3 border-b border-zinc-700 w-[11.5%]">Alc</th>
+                        <th className="px-1 py-3 border-b border-zinc-700 w-[11.5%]">Temp</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">

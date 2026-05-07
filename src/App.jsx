@@ -387,11 +387,12 @@ export default function App() {
   const salvarEdicaoCliente = () => {
     if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
       const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
-      
-          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias, horaVisita: novaHora, diaEnvioRelatorio: c.diaEnvioRelatorio || 5 } 
+      atualizarE_SalvarClientes(clientes.map(c => 
+        c.id === clienteAtual.id 
+          ? { ...c, nome: novoNome, rua: novaRua, numero: novoNumero, bairro: novoBairro, endereco: enderecoCompleto, diasVisita: novosDias, horaVisita: novaHora, diaEnvioRelatorio: parseInt(c.diaEnvioRelatorio) || 5 } 
           : c
       ));
-      
+
       setNovoNome(''); setNovaRua(''); setNovoNumero(''); setNovoBairro(''); setNovosDias([]); setNovaHora('');
       setClienteAtual(null);
       setTela('relatorio'); 

@@ -9,7 +9,7 @@ import { savePendingVisit, getPendingVisits, removePendingVisit } from './db';
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db, storage } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, runTransaction } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 // --- CONFIGURAÇÕES DOS PRODUTOS E ACESSÓRIOS ---
@@ -147,45 +147,87 @@ export default function App() {
       setPendentesCount(pendentes.length);
       
       const docRef = doc(db, 'usuarios', usuarioUid);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) { setIsSyncing(false); return; }
       
-      let currentClientes = docSnap.data().clientes || [];
-      let updatedAny = false;
-      
+      // Realizar uploads primeiro (pode demorar, então não bloqueamos o estado)
+      const uploadsFeitos = [];
       for (const pendente of pendentes) {
-        const upImg = async (base64, path) => {
-          if (!base64.startsWith('data:image')) return base64;
-          const storageRef = ref(storage, `usuarios/${usuarioUid}/${path}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`);
-          await uploadString(storageRef, base64, 'data_url');
-          return await getDownloadURL(storageRef);
-        };
+        try {
+          const upImg = async (base64, path) => {
+            if (!base64.startsWith('data:image')) return base64;
+            const storageRef = ref(storage, `usuarios/${usuarioUid}/${path}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`);
+            await uploadString(storageRef, base64, 'data_url');
+            return await getDownloadURL(storageRef);
+          };
 
-        const urlsPrincipais = await Promise.all(pendente.fotosBase64.map(foto => upImg(foto, 'visitas')));
-        const urlsAlerta = await Promise.all(pendente.fotosAlertaBase64.map(foto => upImg(foto, 'alertas')));
-        
-        currentClientes = currentClientes.map(c => {
-          if (c.id === pendente.clienteId && c.historicoVisitas) {
-            return {
-              ...c,
-              historicoVisitas: c.historicoVisitas.map(v => {
-                if (v.vId === pendente.id) {
-                  return { ...v, fotos: urlsPrincipais, fotosA: urlsAlerta, pendenteSync: false };
-                }
-                return v;
-              })
-            };
-          }
-          return c;
-        });
-        await removePendingVisit(pendente.id);
-        updatedAny = true;
+          const urlsPrincipais = await Promise.all(pendente.fotosBase64.map(foto => upImg(foto, 'visitas')));
+          const urlsAlerta = await Promise.all(pendente.fotosAlertaBase64.map(foto => upImg(foto, 'alertas')));
+          
+          uploadsFeitos.push({ pendente, urlsPrincipais, urlsAlerta });
+        } catch (err) {
+          console.error("Erro no upload de visita pendente:", err);
+        }
       }
       
-      if (updatedAny) {
-        await updateDoc(docRef, { clientes: currentClientes });
-        setClientes(currentClientes);
+      // Aplicar todas as mudanças no Firestore via Transação para não sobrescrever dados recentes
+      if (uploadsFeitos.length > 0) {
+        await runTransaction(db, async (transaction) => {
+          const docSnap = await transaction.get(docRef);
+          if (!docSnap.exists()) return;
+          
+          let currentClientes = docSnap.data().clientes || [];
+          let updatedAny = false;
+          
+          uploadsFeitos.forEach(({ pendente, urlsPrincipais, urlsAlerta }) => {
+            currentClientes = currentClientes.map(c => {
+              if (c.id === pendente.clienteId && c.historicoVisitas) {
+                return {
+                  ...c,
+                  historicoVisitas: c.historicoVisitas.map(v => {
+                    if (v.vId === pendente.id) {
+                      updatedAny = true;
+                      return { ...v, fotos: urlsPrincipais, fotosA: urlsAlerta, pendenteSync: false };
+                    }
+                    return v;
+                  })
+                };
+              }
+              return c;
+            });
+          });
+          
+          if (updatedAny) {
+            transaction.update(docRef, { clientes: currentClientes });
+          }
+        });
+
+        // Atualizar estado local
+        setClientes(prev => {
+          let novoState = [...prev];
+          uploadsFeitos.forEach(({ pendente, urlsPrincipais, urlsAlerta }) => {
+            novoState = novoState.map(c => {
+              if (c.id === pendente.clienteId && c.historicoVisitas) {
+                return {
+                  ...c,
+                  historicoVisitas: c.historicoVisitas.map(v => {
+                    if (v.vId === pendente.id) {
+                      return { ...v, fotos: urlsPrincipais, fotosA: urlsAlerta, pendenteSync: false };
+                    }
+                    return v;
+                  })
+                };
+              }
+              return c;
+            });
+          });
+          return novoState;
+        });
+
+        // Remover visitas processadas do IndexedDB
+        for (const up of uploadsFeitos) {
+          await removePendingVisit(up.pendente.id);
+        }
       }
+      
       const remaining = await getPendingVisits();
       setPendentesCount(remaining.length);
     } catch (error) {
@@ -697,6 +739,12 @@ export default function App() {
     setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
     
     const novoHistorico = historico.slice(0, -1);
+    
+    // Remove da fila de pendentes para não duplicar se estava aguardando sync
+    if (ultimaVisitaReal.vId) {
+      removePendingVisit(ultimaVisitaReal.vId).catch(console.error);
+    }
+    
     atualizarE_SalvarClientes(clientes.map(c => c.id === clienteAlvo.id ? { 
       ...c, 
       ultimaVisita: null, 

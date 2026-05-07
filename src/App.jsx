@@ -66,6 +66,7 @@ export default function App() {
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
   const [modoImpressao, setModoImpressao] = useState(null);
+  const [salvandoVisita, setSalvandoVisita] = useState(false);
 
   const dateObj = new Date();
   const diaAtual = dateObj.getDay(); 
@@ -337,11 +338,15 @@ export default function App() {
   };
 
   const iniciarVisita = (cliente) => {
-    atualizarE_SalvarClientes(clientes.map(c => c.id === cliente.id ? { ...c, visitaEmAndamentoData: dataHojeStr } : c));
-    setClienteAtual(cliente);
+    let startTime = cliente.horaInicioVisitaMs;
     if (cliente.visitaEmAndamentoData !== dataHojeStr) {
-      setHoraInicioVisita(Date.now()); 
+      startTime = Date.now();
+    } else if (!startTime) {
+      startTime = Date.now();
     }
+    atualizarE_SalvarClientes(clientes.map(c => c.id === cliente.id ? { ...c, visitaEmAndamentoData: dataHojeStr, horaInicioVisitaMs: startTime } : c));
+    setClienteAtual(cliente);
+    setHoraInicioVisita(startTime);
     setTela('visita');
   };
 
@@ -474,7 +479,7 @@ export default function App() {
     }
 
     // --- NOVO: UPLOAD DAS FOTOS PARA STORAGE ---
-    setAuthLoading(true); // Usar loading enquanto sobe fotos
+    setSalvandoVisita(true); // Usar loading enquanto sobe fotos e salva
     try {
       const urlsFotosPrincipais = await Promise.all(
         fotosVisita.map(foto => foto.startsWith('http') ? foto : uploadImagem(foto, 'visitas'))
@@ -485,7 +490,7 @@ export default function App() {
       );
 
       const dataFim = new Date();
-      const dataInicio = new Date(horaInicioVisita || Date.now());
+      const dataInicio = new Date(clienteAtual.horaInicioVisitaMs || horaInicioVisita || Date.now());
       
       const formataHora = (data) => `${data.getHours().toString().padStart(2, '0')}:${data.getMinutes().toString().padStart(2, '0')}`;
       const horarioVisita = `${formataHora(dataInicio)} - ${formataHora(dataFim)}`;
@@ -519,6 +524,7 @@ export default function App() {
             ...c, 
             ultimaVisita: dataHojeStr, 
             visitaEmAndamentoData: null, 
+            horaInicioVisitaMs: null,
             adiadoPara: null,
             ultimosProdutosFaltando: [...produtosFaltando],
             historicoVisitas: [...historicoBase, novaVisita]
@@ -533,7 +539,7 @@ export default function App() {
     } catch (e) {
       alert("Erro ao salvar visita: " + e.message);
     } finally {
-      setAuthLoading(false);
+      setSalvandoVisita(false);
     }
   };
 
@@ -557,6 +563,7 @@ export default function App() {
       ...c, 
       ultimaVisita: null, 
       visitaEmAndamentoData: dataHojeStr,
+      horaInicioVisitaMs: Date.now() - (ultimaVisitaReal.tMs || 0),
       historicoVisitas: novoHistorico, 
       ultimosProdutosFaltando: [] 
     } : c));
@@ -641,6 +648,16 @@ export default function App() {
 
   if (authLoading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-teal-400 font-bold">A conectar ao Firebase...</div>;
+  }
+
+  if (salvandoVisita) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-teal-400 font-bold p-6 text-center z-50 fixed inset-0">
+        <Droplets size={48} className="animate-bounce mb-4 text-teal-400" />
+        <p className="text-xl">Enviando fotos e finalizando a limpeza...</p>
+        <p className="text-sm text-zinc-500 mt-2 font-normal">Isso pode levar alguns instantes dependendo da sua internet.</p>
+      </div>
+    );
   }
 
   if (!user) {

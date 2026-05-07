@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, BellRing
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, BellRing, ShieldCheck
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db, storage } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 // --- CONFIGURAÇÕES DOS PRODUTOS E ACESSÓRIOS ---
@@ -45,6 +45,8 @@ const gradBtn = "bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 text-
 const gradText = "bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 bg-clip-text text-transparent";
 const gradBorder = "border-transparent bg-clip-border bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400"; 
 const gradIconBg = "bg-gradient-to-br from-sky-100 to-emerald-100 dark:from-sky-900/30 dark:to-emerald-900/30 text-teal-600 dark:text-teal-400";
+
+const ADMIN_EMAIL = 'samuelroque155@gmail.com';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -98,15 +100,22 @@ export default function App() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setClientes(data.clientes || []);
-          if (data.perfil) {
-            setPerfil(prev => ({ ...prev, ...data.perfil }));
+          
+          let perfilAtual = data.perfil || {};
+          // Atualiza o email no banco caso não exista (para o Painel Admin)
+          if (!perfilAtual.email && usuarioAtual.email) {
+            perfilAtual.email = usuarioAtual.email;
+            await updateDoc(docRef, { perfil: perfilAtual });
           }
+          setPerfil(prev => ({ ...prev, ...perfilAtual }));
+          
         } else {
           // Novo usuário: cria documento inicial
           const perfilInicial = {
             empresa: 'Minha Piscina',
             cidade: 'Brasil',
-            assinaturaAtiva: true
+            assinaturaAtiva: false, // Por padrão, começa bloqueado até pagar
+            email: usuarioAtual.email
           };
           await setDoc(docRef, { 
             clientes: [],
@@ -670,8 +679,14 @@ export default function App() {
             <p className="text-teal-600/70 dark:text-teal-400/60 font-bold text-[10px] uppercase tracking-widest mt-0.5">{perfil.empresa}</p>
           </div>
           <div className="flex gap-2">
+            {user?.email === ADMIN_EMAIL && (
+              <button onClick={() => setTela('admin_panel')} className="bg-gradient-to-r from-amber-400 to-orange-500 p-2.5 rounded-xl border border-transparent text-white shadow-sm hover:scale-105 transition-transform">
+                <ShieldCheck size={20} />
+              </button>
+            )}
             <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
               {modoEscuro ? <Sun size={20} /> : <Moon size={20} />}
+
             </button>
             <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
               <CalendarDays size={20} />
@@ -1372,20 +1387,115 @@ export default function App() {
     );
   }
 
-  // --- BLOQUEIO DE ASSINATURA ---
-  if (!perfil.assinaturaAtiva && tela !== 'configuracoes') {
+  // --- TELA ADMIN ---
+  const [todosUsuarios, setTodosUsuarios] = useState([]);
+  const [carregandoAdmin, setCarregandoAdmin] = useState(false);
+
+  const carregarTodosUsuarios = async () => {
+    setCarregandoAdmin(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "usuarios"));
+      let lista = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        lista.push({ uid: docSnap.id, ...data });
+      });
+      setTodosUsuarios(lista);
+    } catch (error) {
+      alert("Erro ao carregar usuários: " + error.message + "\n\nVocê colou as Regras do Firestore corretamente?");
+    }
+    setCarregandoAdmin(false);
+  };
+
+  const alternarStatusAssinatura = async (uid, statusAtual) => {
+    try {
+      await updateDoc(doc(db, "usuarios", uid), {
+        "perfil.assinaturaAtiva": !statusAtual
+      });
+      setTodosUsuarios(todosUsuarios.map(u => 
+        u.uid === uid ? { ...u, perfil: { ...u.perfil, assinaturaAtiva: !statusAtual } } : u
+      ));
+    } catch (error) {
+      alert("Erro ao atualizar assinatura: " + error.message);
+    }
+  };
+
+  useEffect(() => {
+    if (tela === 'admin_panel' && user?.email === ADMIN_EMAIL) {
+      carregarTodosUsuarios();
+    }
+  }, [tela]);
+
+  if (tela === 'admin_panel' && user?.email === ADMIN_EMAIL) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-white font-sans text-center">
-        <div className="w-20 h-20 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-6 animate-bounce">
-          <AlertTriangle size={40} />
-        </div>
-        <h2 className="text-2xl font-black mb-4">Acesso Suspenso</h2>
-        <p className="text-zinc-400 mb-8 max-w-xs">Identificamos que sua assinatura na Kiwify está pendente ou foi cancelada. Regularize para continuar gerindo suas piscinas.</p>
-        <button onClick={() => window.open('https://kiwify.com.br', '_blank')} className={`w-full max-w-xs py-4 rounded-2xl font-bold mb-4 ${gradBtn}`}>REGULARIZAR AGORA</button>
-        <button onClick={handleSair} className="text-zinc-500 font-bold hover:text-white transition-colors">Sair da Conta</button>
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 font-sans pb-20">
+        <header className="flex items-center gap-4 mb-8 pt-2">
+          <button onClick={() => setTela('lista')} className="p-2 text-zinc-500 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800"><ArrowLeft size={20} /></button>
+          <h2 className="text-2xl font-black bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent flex items-center gap-2">Painel Admin</h2>
+        </header>
+
+        {carregandoAdmin ? (
+          <div className="text-center p-10 text-zinc-500">Carregando usuários...</div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-xl text-xs text-amber-800 dark:text-amber-300 font-medium mb-6 shadow-sm">
+              Total de Contas: <b>{todosUsuarios.length}</b>.<br/>
+              Ao alterar o status, o aplicativo do cliente será bloqueado ou liberado imediatamente.
+            </div>
+            
+            {todosUsuarios.map(u => (
+              <div key={u.uid} className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm relative overflow-hidden">
+                {u.perfil?.assinaturaAtiva ? (
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-400"></div>
+                ) : (
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500"></div>
+                )}
+                <div className="flex justify-between items-start mb-4 ml-1">
+                  <div>
+                    <h3 className="font-bold text-base text-zinc-800 dark:text-zinc-100">{u.perfil?.empresa || 'Sem Empresa'}</h3>
+                    <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-0.5">{u.perfil?.email || 'E-mail não salvo no DB'}</p>
+                  </div>
+                  {u.perfil?.assinaturaAtiva ? (
+                    <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-[10px] px-2.5 py-1 rounded-md font-black uppercase tracking-wider border border-emerald-200 dark:border-emerald-800">Ativa</span>
+                  ) : (
+                    <span className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[10px] px-2.5 py-1 rounded-md font-black uppercase tracking-wider border border-rose-200 dark:border-rose-800">Muralha</span>
+                  )}
+                </div>
+                
+                <button 
+                  onClick={() => alternarStatusAssinatura(u.uid, !!u.perfil?.assinaturaAtiva)}
+                  className={`w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-95 ml-1 ${u.perfil?.assinaturaAtiva ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/50' : 'bg-emerald-500 text-white shadow-md hover:bg-emerald-600'}`}
+                >
+                  {u.perfil?.assinaturaAtiva ? 'Suspender Acesso Agora' : 'Liberar Assinatura'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
+
+  // --- BLOQUEIO DE ASSINATURA ---
+  if (!perfil.assinaturaAtiva && tela !== 'configuracoes' && tela !== 'admin_panel') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-white font-sans text-center relative overflow-hidden">
+        {/* Fundo dinâmico da tela de bloqueio */}
+        <div className="absolute inset-0 bg-gradient-to-br from-rose-900/20 to-zinc-950 pointer-events-none"></div>
+        
+        <div className="relative z-10">
+          <div className="w-24 h-24 bg-rose-500/10 text-rose-500 rounded-[2rem] flex items-center justify-center mb-8 mx-auto animate-pulse border border-rose-500/20 shadow-[0_0_50px_rgba(244,63,94,0.15)]">
+            <AlertTriangle size={48} strokeWidth={1.5} />
+          </div>
+          <h2 className="text-3xl font-black mb-4 tracking-tight">Acesso Suspenso</h2>
+          <p className="text-zinc-400 mb-10 max-w-[280px] mx-auto text-sm leading-relaxed">Identificamos que sua assinatura está pendente ou cancelada. Regularize seu plano para voltar a gerir suas piscinas.</p>
+          <button onClick={() => window.open('https://kiwify.com.br', '_blank')} className={`w-full max-w-[280px] py-4 rounded-xl font-bold mb-6 text-sm tracking-wide ${gradBtn}`}>REGULARIZAR AGORA</button>
+          <button onClick={handleSair} className="text-zinc-500 text-sm font-bold hover:text-white transition-colors">Sair da Conta</button>
+        </div>
+      </div>
+    );
+  }
+
 
   return null;
 }

@@ -679,7 +679,7 @@ export default function App() {
             <p className="text-teal-600/70 dark:text-teal-400/60 font-bold text-[10px] uppercase tracking-widest mt-0.5">{perfil.empresa}</p>
           </div>
           <div className="flex gap-2">
-            {user?.email === ADMIN_EMAIL && (
+            {user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
               <button onClick={() => setTela('admin_panel')} className="bg-gradient-to-r from-amber-400 to-orange-500 p-2.5 rounded-xl border border-transparent text-white shadow-sm hover:scale-105 transition-transform">
                 <ShieldCheck size={20} />
               </button>
@@ -1421,12 +1421,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (tela === 'admin_panel' && user?.email === ADMIN_EMAIL) {
+    if (tela === 'admin_panel' && user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
       carregarTodosUsuarios();
     }
   }, [tela]);
 
-  if (tela === 'admin_panel' && user?.email === ADMIN_EMAIL) {
+  if (tela === 'admin_panel') {
+    if (user?.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+      return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-8 text-center font-bold">Acesso Negado. Seu e-mail é: {user?.email}</div>;
+    }
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 font-sans pb-20">
         <header className="flex items-center gap-4 mb-8 pt-2">
@@ -1497,5 +1500,16 @@ export default function App() {
   }
 
 
-  return null;
+  return (
+    <div className="min-h-screen bg-rose-500 flex flex-col items-center justify-center p-8 text-white font-sans text-center">
+      <h2 className="text-2xl font-black mb-4">Erro de Rota (Tela em Branco)</h2>
+      <p className="mb-4">Por favor, tire um print desta tela e mande para o desenvolvedor.</p>
+      <p className="font-mono text-xs text-left bg-black/20 p-4 rounded-xl w-full">
+        Tela atual: {tela}<br/>
+        Email: {user?.email}<br/>
+        Assinatura: {perfil?.assinaturaAtiva ? 'Sim' : 'Não'}
+      </p>
+      <button onClick={() => setTela('lista')} className="mt-8 bg-white text-rose-500 px-6 py-3 rounded-xl font-bold">Voltar ao Início</button>
+    </div>
+  );
 }

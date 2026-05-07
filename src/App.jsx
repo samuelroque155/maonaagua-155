@@ -781,17 +781,7 @@ export default function App() {
                   </button>
                 </div>
                 
-                {/* AVISO DE RELATÓRIO PENDENTE */}
-                {dateObj.getDate() >= (c.diaEnvioRelatorio || 5) && c.historicoVisitas?.length > 0 && c.ultimaVisita !== dataHojeStr && (
-                  <div className="mx-2 mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                      <FileText size={16} />
-                      <span className="text-[10px] font-bold uppercase tracking-tight">Relatório Mensal Pronto</span>
-                    </div>
-                    <button onClick={() => { setClienteRelatorio(c); setTela('ver_relatorio'); }} className="text-[10px] font-black text-amber-800 dark:text-amber-300 underline uppercase tracking-tighter">Enviar Agora</button>
-                  </div>
-                )}
-                
+
                 {mostrarAdiarId === c.id ? (
                   <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
                     <p className="text-xs font-bold text-teal-600 dark:text-teal-500 mb-3 uppercase tracking-wider">Mover visita para qual dia?</p>

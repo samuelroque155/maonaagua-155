@@ -1128,7 +1128,7 @@ export default function App() {
         <div className={`print:hidden no-print ${modoImpressao ? 'hidden' : 'block'}`}>
           <header className="p-4 flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10 shadow-sm transition-colors">
             <button onClick={() => setTela('relatorio')} className="text-zinc-500 dark:text-zinc-400 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl"><ArrowLeft size={20}/></button>
-            <h2 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">Dossiê do Cliente</h2>
+            <h2 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">Ficha do Cliente</h2>
           </header>
           
           <div className="p-4 mt-2">
@@ -1145,7 +1145,7 @@ export default function App() {
 
             {foiVisitadoHoje && ultimaVisitaReal?.fotosA && ultimaVisitaReal.fotosA.length > 0 && (
               <button onClick={compartilharAlertaSeparado} className="w-full mb-6 bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2.5 shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
-                <AlertTriangle size={18} /> Baixar Foto do Alerta de Defeito
+                <AlertTriangle size={18} /> Enviar Alerta de Defeito
               </button>
             )}
           </div>
@@ -1207,7 +1207,7 @@ export default function App() {
                          historicoDoRelatorio.map((v, i) => (
                            <tr key={i} className="hover:bg-slate-50 transition-colors">
                              <td className="px-1 py-2 font-black text-zinc-800 tracking-tight">{v.d}</td>
-                             <td className={`px-1 py-2 font-bold text-[9px] uppercase tracking-wider ${v.a === 'Cristalina' ? 'text-emerald-500' : 'text-yellow-500'}`}>{v.a}</td>
+                             <td className={`px-1 py-2 font-bold text-[9px] uppercase tracking-wider ${v.a === 'Cristalina' ? 'text-sky-400' : v.a === 'Verde' ? 'text-emerald-500' : 'text-slate-400'}`}>{v.a}</td>
                              <td className="px-1 py-2 font-bold text-zinc-500">
                                <div className="flex flex-col items-center justify-center">
                                  <span className="text-[9px] text-zinc-700">{v.h || '--'}</span>

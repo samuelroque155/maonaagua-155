@@ -1,7 +1,7 @@
 // Importa as funções que precisamos do Firebase
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // A SUA NOVA CHAVE DO FIREBASE
@@ -18,4 +18,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Ativar persistência offline para o Firestore
+enableIndexedDbPersistence(db).catch((err) => {
+  console.log("Erro no cache offline do firestore:", err);
+});
+
 export const storage = getStorage(app);

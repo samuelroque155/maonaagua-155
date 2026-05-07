@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Droplets, ShoppingCart, ArrowLeft, Check, MapPin, Save, FileText, Plus, 
-  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, BellRing, ShieldCheck
+  AlertTriangle, CalendarDays, CheckCircle2, Phone, MessageSquare, Minus, Share2, Clock, RotateCcw, Trash2, Sun, Moon, LogOut, Navigation, Pencil, BellRing, ShieldCheck, Cloud, CloudOff, RefreshCw
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
+import { savePendingVisit, getPendingVisits, removePendingVisit } from './db';
 
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db, storage } from './firebase';
@@ -130,6 +131,87 @@ export default function App() {
     }
   }, [tela, user]);
 
+  const [pendentesCount, setPendentesCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const processarFilaSincronizacao = async (usuarioUid, currentClientesState) => {
+    if (isSyncing || !navigator.onLine || !usuarioUid) return;
+    setIsSyncing(true);
+    try {
+      const pendentes = await getPendingVisits();
+      if (pendentes.length === 0) {
+        setPendentesCount(0);
+        setIsSyncing(false);
+        return;
+      }
+      setPendentesCount(pendentes.length);
+      
+      const docRef = doc(db, 'usuarios', usuarioUid);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) { setIsSyncing(false); return; }
+      
+      let currentClientes = docSnap.data().clientes || [];
+      let updatedAny = false;
+      
+      for (const pendente of pendentes) {
+        const upImg = async (base64, path) => {
+          if (!base64.startsWith('data:image')) return base64;
+          const storageRef = ref(storage, `usuarios/${usuarioUid}/${path}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`);
+          await uploadString(storageRef, base64, 'data_url');
+          return await getDownloadURL(storageRef);
+        };
+
+        const urlsPrincipais = await Promise.all(pendente.fotosBase64.map(foto => upImg(foto, 'visitas')));
+        const urlsAlerta = await Promise.all(pendente.fotosAlertaBase64.map(foto => upImg(foto, 'alertas')));
+        
+        currentClientes = currentClientes.map(c => {
+          if (c.id === pendente.clienteId && c.historicoVisitas) {
+            return {
+              ...c,
+              historicoVisitas: c.historicoVisitas.map(v => {
+                if (v.vId === pendente.id) {
+                  return { ...v, fotos: urlsPrincipais, fotosA: urlsAlerta, pendenteSync: false };
+                }
+                return v;
+              })
+            };
+          }
+          return c;
+        });
+        await removePendingVisit(pendente.id);
+        updatedAny = true;
+      }
+      
+      if (updatedAny) {
+        await updateDoc(docRef, { clientes: currentClientes });
+        setClientes(currentClientes);
+      }
+      const remaining = await getPendingVisits();
+      setPendentesCount(remaining.length);
+    } catch (error) {
+      console.error("Erro na sincronização:", error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    getPendingVisits().then(p => setPendentesCount(p.length));
+    
+    const handleOnline = () => {
+      if (user) processarFilaSincronizacao(user.uid, clientes);
+    };
+    window.addEventListener('online', handleOnline);
+    const interval = setInterval(() => {
+      if (navigator.onLine && user) processarFilaSincronizacao(user.uid, clientes);
+    }, 30000); // Tenta a cada 30 segundos
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
+  }, [user, clientes]);
+
 
   useEffect(() => {
     const desinscrever = onAuthStateChanged(auth, async (usuarioAtual) => {
@@ -140,7 +222,35 @@ export default function App() {
         
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setClientes(data.clientes || []);
+          let clientesFirebase = data.clientes || [];
+          
+          try {
+            const pendentes = await getPendingVisits();
+            if (pendentes.length > 0) {
+              setPendentesCount(pendentes.length);
+              clientesFirebase = clientesFirebase.map(c => {
+                const pendentesDoCliente = pendentes.filter(p => p.clienteId === c.id);
+                if (pendentesDoCliente.length > 0 && c.historicoVisitas) {
+                   return {
+                     ...c,
+                     historicoVisitas: c.historicoVisitas.map(v => {
+                        const pendenteMatch = pendentesDoCliente.find(p => p.id === v.vId);
+                        if (pendenteMatch && v.pendenteSync) {
+                           return { ...v, fotos: pendenteMatch.fotosBase64, fotosA: pendenteMatch.fotosAlertaBase64 };
+                        }
+                        return v;
+                     })
+                   }
+                }
+                return c;
+              });
+              if (navigator.onLine) {
+                 setTimeout(() => processarFilaSincronizacao(usuarioAtual.uid, clientesFirebase), 3000);
+              }
+            }
+          } catch(e) { console.error("Erro merge offline", e) }
+
+          setClientes(clientesFirebase);
           
           let perfilAtual = data.perfil || {};
           // Atualiza o email no banco caso não exista (para o Painel Admin)
@@ -188,12 +298,13 @@ export default function App() {
   // --- FUNÇÃO DE UPLOAD PARA O STORAGE ---
   const uploadImagem = async (base64, path) => {
     try {
-      const storageRef = ref(storage, `usuarios/${user.uid}/${path}/${Date.now()}.jpg`);
+      if (!base64.startsWith('data:image')) return base64; // Ja e URL
+      const storageRef = ref(storage, `usuarios/${user.uid}/${path}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`);
       await uploadString(storageRef, base64, 'data_url');
       return await getDownloadURL(storageRef);
     } catch (error) {
       console.error("Erro no upload:", error);
-      return base64; // Fallback para base64 se falhar (não recomendado)
+      throw error; // Lança erro para garantir que a fila offline seja acionada
     }
   };
 
@@ -478,68 +589,95 @@ export default function App() {
       return;
     }
 
-    // --- NOVO: UPLOAD DAS FOTOS PARA STORAGE ---
-    setSalvandoVisita(true); // Usar loading enquanto sobe fotos e salva
+    // --- NOVO: SALVAMENTO INSTANTÂNEO COM FILA OFFLINE ---
+    const dataFim = new Date();
+    const dataInicio = new Date(clienteAtual.horaInicioVisitaMs || horaInicioVisita || Date.now());
+    
+    const formataHora = (data) => `${data.getHours().toString().padStart(2, '0')}:${data.getMinutes().toString().padStart(2, '0')}`;
+    const horarioVisita = `${formataHora(dataInicio)} - ${formataHora(dataFim)}`;
+
+    const tempoMsTotal = dataFim.getTime() - dataInicio.getTime();
+    const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
+    const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
+    
+    const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
+    const mesesCurtos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    
+    const vId = Date.now().toString();
+
+    const visitaPendente = {
+      id: vId,
+      clienteId: clienteAtual.id,
+      fotosBase64: fotosVisita,
+      fotosAlertaBase64: fotosAlerta
+    };
+    await savePendingVisit(visitaPendente);
+
+    const novaVisitaLocal = {
+      vId,
+      d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
+      h: horarioVisita, 
+      a: aspecto, 
+      c: cloro, 
+      p: ph, 
+      al: alcalinidade, 
+      temp: temperatura,
+      t: tempoFormatado,
+      tMs: tempoMsTotal, 
+      fotos: fotosVisita, 
+      fotosA: fotosAlerta, 
+      txtA: textoAlerta,
+      pendenteSync: true
+    };
+    
+    const clientesAtualizados = clientes.map(c => {
+      if (c.id === clienteAtual.id) {
+        const historicoBase = c.historicoVisitas || [];
+        return { 
+          ...c, 
+          ultimaVisita: dataHojeStr, 
+          visitaEmAndamentoData: null, 
+          horaInicioVisitaMs: null,
+          adiadoPara: null,
+          ultimosProdutosFaltando: [...produtosFaltando],
+          historicoVisitas: [...historicoBase, novaVisitaLocal]
+        };
+      }
+      return c;
+    });
+
+    setClientes(clientesAtualizados);
+
+    // Salvar no firestore SEM O BASE64 para não estourar o limite de 1MB
+    const clientesParaFirestore = clientesAtualizados.map(c => {
+      if (c.id === clienteAtual.id) {
+        return {
+          ...c,
+          historicoVisitas: c.historicoVisitas.map(v => {
+             if (v.vId === vId) {
+               return { ...v, fotos: [], fotosA: [] }; 
+             }
+             return v;
+          })
+        };
+      }
+      return c;
+    });
+
     try {
-      const urlsFotosPrincipais = await Promise.all(
-        fotosVisita.map(foto => foto.startsWith('http') ? foto : uploadImagem(foto, 'visitas'))
-      );
-      
-      const urlsFotosAlerta = await Promise.all(
-        fotosAlerta.map(foto => foto.startsWith('http') ? foto : uploadImagem(foto, 'alertas'))
-      );
-
-      const dataFim = new Date();
-      const dataInicio = new Date(clienteAtual.horaInicioVisitaMs || horaInicioVisita || Date.now());
-      
-      const formataHora = (data) => `${data.getHours().toString().padStart(2, '0')}:${data.getMinutes().toString().padStart(2, '0')}`;
-      const horarioVisita = `${formataHora(dataInicio)} - ${formataHora(dataFim)}`;
-
-      const tempoMsTotal = dataFim.getTime() - dataInicio.getTime();
-      const tempoMinutos = Math.max(1, Math.round(tempoMsTotal / 60000)); 
-      const tempoFormatado = tempoMinutos >= 60 ? `${Math.floor(tempoMinutos/60)}h ${tempoMinutos%60}m` : `${tempoMinutos}m`;
-      
-      const diaFormatado = String(dateObj.getDate()).padStart(2, '0');
-      const mesesCurtos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-      
-      const novaVisita = {
-        d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
-        h: horarioVisita, 
-        a: aspecto, 
-        c: cloro, 
-        p: ph, 
-        al: alcalinidade, 
-        temp: temperatura,
-        t: tempoFormatado,
-        tMs: tempoMsTotal, 
-        fotos: urlsFotosPrincipais, 
-        fotosA: urlsFotosAlerta, 
-        txtA: textoAlerta
-      };
-      
-      await atualizarE_SalvarClientes(clientes.map(c => {
-        if (c.id === clienteAtual.id) {
-          const historicoBase = c.historicoVisitas || [];
-          return { 
-            ...c, 
-            ultimaVisita: dataHojeStr, 
-            visitaEmAndamentoData: null, 
-            horaInicioVisitaMs: null,
-            adiadoPara: null,
-            ultimosProdutosFaltando: [...produtosFaltando],
-            historicoVisitas: [...historicoBase, novaVisita]
-          };
-        }
-        return c;
-      }));
-
-      alert(`✅ VISITA FINALIZADA!\n\nSalvo na nuvem com sucesso. Tempo: ${tempoFormatado}`);
-      setTela('lista');
-      resetarFormulario();
+      await updateDoc(doc(db, 'usuarios', user.uid), { clientes: clientesParaFirestore });
     } catch (e) {
-      alert("Erro ao salvar visita: " + e.message);
-    } finally {
-      setSalvandoVisita(false);
+      console.error("Erro ao salvar visita no firestore offline:", e);
+    }
+
+    alert(`✅ VISITA FINALIZADA!\n\nA tarefa foi salva instantaneamente.\nAs fotos serão enviadas em segundo plano.\nTempo: ${tempoFormatado}`);
+    setTela('lista');
+    resetarFormulario();
+
+    if (navigator.onLine) {
+      processarFilaSincronizacao(user.uid, clientesAtualizados);
+    } else {
+      setPendentesCount(prev => prev + 1);
     }
   };
 
@@ -741,6 +879,10 @@ export default function App() {
                 <ShieldCheck size={20} />
               </button>
             )}
+            <button onClick={() => processarFilaSincronizacao(user?.uid, clientes)} className={`relative p-2.5 rounded-xl border shadow-sm transition-transform ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-800 text-rose-500' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400'} hover:scale-105`}>
+              {isSyncing ? <RefreshCw size={20} className="animate-spin" /> : pendentesCount > 0 ? <CloudOff size={20} /> : <Cloud size={20} />}
+              {pendentesCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">{pendentesCount}</span>}
+            </button>
             <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
               {modoEscuro ? <Sun size={20} /> : <Moon size={20} />}
 

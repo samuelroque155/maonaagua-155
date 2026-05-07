@@ -1570,6 +1570,15 @@ export default function App() {
             <button onClick={() => abrirEdicaoCliente(clienteExibicao)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors shadow-sm">
               <Pencil size={18} /> Editar Cadastro do Cliente
             </button>
+            <button onClick={() => {
+              if(window.confirm("⚠️ TEM CERTEZA?\nIsso vai apagar TODO o histórico de visitas e fotos deste cliente. O cadastro será mantido limpo.")) {
+                const novosClientes = clientes.map(c => c.id === clienteExibicao.id ? { ...c, historicoVisitas: [], ultimaVisita: null } : c);
+                atualizarE_SalvarClientes(novosClientes);
+                alert("Histórico zerado com sucesso!");
+              }
+            }} className="w-full bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 text-orange-600 dark:text-orange-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors">
+              <RotateCcw size={18} /> Zerar Histórico (Limpar)
+            </button>
             <button onClick={() => excluirCliente(clienteExibicao.id)} className="w-full bg-transparent border-2 border-rose-200 dark:border-rose-900/50 text-rose-500 dark:text-rose-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
               <Trash2 size={18} /> Encerrar Contrato (Excluir)
             </button>

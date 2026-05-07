@@ -90,6 +90,46 @@ export default function App() {
 
   const [clientes, setClientes] = useState([]);
 
+  // --- HOOKS DA TELA ADMIN ---
+  const [todosUsuarios, setTodosUsuarios] = useState([]);
+  const [carregandoAdmin, setCarregandoAdmin] = useState(false);
+
+  const carregarTodosUsuarios = async () => {
+    setCarregandoAdmin(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "usuarios"));
+      let lista = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        lista.push({ uid: docSnap.id, ...data });
+      });
+      setTodosUsuarios(lista);
+    } catch (error) {
+      alert("Erro ao carregar usuários: " + error.message + "\n\nVocê colou as Regras do Firestore corretamente?");
+    }
+    setCarregandoAdmin(false);
+  };
+
+  const alternarStatusAssinatura = async (uid, statusAtual) => {
+    try {
+      await updateDoc(doc(db, "usuarios", uid), {
+        "perfil.assinaturaAtiva": !statusAtual
+      });
+      setTodosUsuarios(todosUsuarios.map(u => 
+        u.uid === uid ? { ...u, perfil: { ...u.perfil, assinaturaAtiva: !statusAtual } } : u
+      ));
+    } catch (error) {
+      alert("Erro ao atualizar assinatura: " + error.message);
+    }
+  };
+
+  useEffect(() => {
+    if (tela === 'admin_panel' && user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      carregarTodosUsuarios();
+    }
+  }, [tela, user]);
+
+
   useEffect(() => {
     const desinscrever = onAuthStateChanged(auth, async (usuarioAtual) => {
       setUser(usuarioAtual);
@@ -1388,44 +1428,6 @@ export default function App() {
   }
 
   // --- TELA ADMIN ---
-  const [todosUsuarios, setTodosUsuarios] = useState([]);
-  const [carregandoAdmin, setCarregandoAdmin] = useState(false);
-
-  const carregarTodosUsuarios = async () => {
-    setCarregandoAdmin(true);
-    try {
-      const querySnapshot = await getDocs(collection(db, "usuarios"));
-      let lista = [];
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        lista.push({ uid: docSnap.id, ...data });
-      });
-      setTodosUsuarios(lista);
-    } catch (error) {
-      alert("Erro ao carregar usuários: " + error.message + "\n\nVocê colou as Regras do Firestore corretamente?");
-    }
-    setCarregandoAdmin(false);
-  };
-
-  const alternarStatusAssinatura = async (uid, statusAtual) => {
-    try {
-      await updateDoc(doc(db, "usuarios", uid), {
-        "perfil.assinaturaAtiva": !statusAtual
-      });
-      setTodosUsuarios(todosUsuarios.map(u => 
-        u.uid === uid ? { ...u, perfil: { ...u.perfil, assinaturaAtiva: !statusAtual } } : u
-      ));
-    } catch (error) {
-      alert("Erro ao atualizar assinatura: " + error.message);
-    }
-  };
-
-  useEffect(() => {
-    if (tela === 'admin_panel' && user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-      carregarTodosUsuarios();
-    }
-  }, [tela]);
-
   if (tela === 'admin_panel') {
     if (user?.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
       return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-8 text-center font-bold">Acesso Negado. Seu e-mail é: {user?.email}</div>;

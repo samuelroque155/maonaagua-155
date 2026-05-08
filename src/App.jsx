@@ -135,23 +135,29 @@ export default function App() {
 
   const [pendentesCount, setPendentesCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const isSyncingRef = useRef(false);
 
   const processarFilaSincronizacao = async (usuarioUid, currentClientesState) => {
-    if (isSyncing || !navigator.onLine || !usuarioUid) return;
+    if (isSyncingRef.current || !navigator.onLine || !usuarioUid) return;
+    
+    isSyncingRef.current = true;
     setIsSyncing(true);
+    console.log("🔄 Iniciando sincronização...");
+    
     try {
       const pendentes = await getPendingVisits();
       if (pendentes.length === 0) {
         setPendentesCount(0);
-        setIsSyncing(false);
         return;
       }
       setPendentesCount(pendentes.length);
       
       for (const pendente of pendentes) {
         try {
+          console.log(`📤 Sincronizando visita ${pendente.id} do cliente ${pendente.clienteId}...`);
+          
           const upImg = async (base64, path) => {
-            if (!base64.startsWith('data:image')) return base64;
+            if (!base64 || !base64.startsWith('data:image')) return base64;
             const storageRef = ref(storage, `usuarios/${usuarioUid}/${path}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`);
             await uploadString(storageRef, base64, 'data_url');
             return await getDownloadURL(storageRef);
@@ -162,25 +168,39 @@ export default function App() {
           
           const q = query(collection(db, 'usuarios', usuarioUid, 'historicos'), where('vId', '==', pendente.id));
           const querySnapshot = await getDocs(q);
+          
           if (!querySnapshot.empty) {
             await updateDoc(querySnapshot.docs[0].ref, {
               fotos: urlsPrincipais,
               fotosA: urlsAlerta,
               pendenteSync: false
             });
+            console.log(`✅ Visita ${pendente.id} sincronizada com sucesso.`);
+          } else {
+            console.warn(`⚠️ Documento da visita ${pendente.id} não encontrado no Firestore.`);
           }
+          
           await removePendingVisit(pendente.id);
         } catch (err) {
-          console.error("Erro no upload de visita pendente:", err);
+          console.error(`❌ Erro ao processar item da fila (${pendente.id}):`, err);
+          // Se o erro for crítico (ex: quota do storage), talvez devêssemos parar o loop.
+          // Por enquanto, removemos para não travar o app em loop infinito se o arquivo for inválido.
+          if (err.message?.includes('quota') || err.message?.includes('invalid')) {
+            await removePendingVisit(pendente.id);
+          }
         }
       }
       
       const remaining = await getPendingVisits();
       setPendentesCount(remaining.length);
     } catch (error) {
-      console.error("Erro na sincronização:", error);
+      console.error("❌ Erro fatal na sincronização:", error);
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
+      console.log("🏁 Sincronização finalizada.");
+    }
+  };cing(false);
     }
   };
 
@@ -192,14 +212,16 @@ export default function App() {
     };
     window.addEventListener('online', handleOnline);
     const interval = setInterval(() => {
-      if (navigator.onLine && user) processarFilaSincronizacao(user.uid, clientes);
-    }, 30000); // Tenta a cada 30 segundos
+      if (navigator.onLine && user && !isSyncingRef.current) {
+        processarFilaSincronizacao(user.uid, clientes);
+      }
+    }, 30000);
     
     return () => {
       window.removeEventListener('online', handleOnline);
       clearInterval(interval);
     };
-  }, [user, clientes]);
+  }, [user]); // Removido 'clientes' da dependência para evitar re-triggers desnecessários
 
 
   useEffect(() => {

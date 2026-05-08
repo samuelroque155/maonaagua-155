@@ -136,6 +136,12 @@ export default function App() {
   const [pendentesCount, setPendentesCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const isSyncingRef = useRef(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const processarFilaSincronizacao = async (usuarioUid, currentClientesState) => {
     if (isSyncingRef.current || !navigator.onLine || !usuarioUid) return;
@@ -713,7 +719,7 @@ export default function App() {
       console.error("Erro ao salvar visita no firestore offline:", e);
     }
 
-    alert(`✅ VISITA FINALIZADA!\n\nA tarefa foi salva instantaneamente.\nAs fotos serão enviadas em segundo plano.\nTempo: ${tempoFormatado}`);
+    showToast(`Limpeza finalizada! (${tempoFormatado})`);
     setTela('lista');
     resetarFormulario();
 
@@ -916,6 +922,15 @@ export default function App() {
   if (tela === 'lista') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 pb-24 font-sans transition-colors duration-300 relative">
+        {toast && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] w-auto animate-bounce">
+            <div className="bg-zinc-900/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl shadow-2xl border border-zinc-700 flex items-center gap-3">
+              <CheckCircle2 size={18} className="text-teal-400" />
+              <span className="font-bold text-sm whitespace-nowrap">{toast.message}</span>
+            </div>
+          </div>
+        )}
+
         {notificacoesAtivas.length > 0 && (
           <div className="fixed top-4 left-0 right-0 z-[100] px-4 pointer-events-none flex flex-col items-center gap-2">
             {notificacoesAtivas.map(not => (
@@ -947,9 +962,9 @@ export default function App() {
                 <ShieldCheck size={20} />
               </button>
             )}
-            <button onClick={() => processarFilaSincronizacao(user?.uid, clientes)} className={`relative p-2.5 rounded-xl border shadow-sm transition-transform ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-800 text-rose-500' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400'} hover:scale-105`}>
-              {isSyncing ? <RefreshCw size={20} className="animate-spin" /> : pendentesCount > 0 ? <CloudOff size={20} /> : <Cloud size={20} />}
-              {pendentesCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">{pendentesCount}</span>}
+            <button onClick={() => processarFilaSincronizacao(user?.uid, clientes)} className={`relative p-2.5 rounded-xl border shadow-sm transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-800 text-rose-500' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400'} hover:scale-105 active:scale-95`}>
+              {isSyncing ? <Cloud size={20} className="animate-pulse text-teal-500" /> : pendentesCount > 0 ? <CloudOff size={20} /> : <Cloud size={20} />}
+              {pendentesCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-slate-50 dark:border-zinc-950">{pendentesCount}</span>}
             </button>
             <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
               {modoEscuro ? <Sun size={20} /> : <Moon size={20} />}

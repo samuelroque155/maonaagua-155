@@ -885,7 +885,13 @@ export default function App() {
 
 
   if (authLoading) {
-    return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-teal-400 font-bold">A conectar ao Firebase...</div>;
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center relative overflow-hidden">
+        <div className="absolute top-[-20%] left-[-10%] w-96 h-96 bg-sky-500 rounded-full mix-blend-screen filter blur-[120px] opacity-10"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-80 h-80 bg-emerald-400 rounded-full mix-blend-screen filter blur-[100px] opacity-10"></div>
+        <Droplets size={48} className="animate-pulse text-teal-500/50 z-10" />
+      </div>
+    );
   }
 
   if (salvandoVisita) {

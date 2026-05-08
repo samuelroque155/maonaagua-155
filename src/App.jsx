@@ -9,8 +9,8 @@ import { savePendingVisit, getPendingVisits, removePendingVisit } from './db';
 // --- IMPORTAÇÕES DO FIREBASE ---
 import { auth, db, storage } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, runTransaction } from 'firebase/firestore';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, runTransaction, addDoc, query, where, deleteDoc } from 'firebase/firestore';
+import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 
 // --- CONFIGURAÇÕES DOS PRODUTOS E ACESSÓRIOS ---
 const listaQuimica = [
@@ -66,6 +66,8 @@ export default function App() {
 
   const [tela, setTela] = useState('lista'); 
   const [clienteRelatorio, setClienteRelatorio] = useState(null);
+  const [historicoDoRelatorio, setHistoricoDoRelatorio] = useState([]);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
   const [modoImpressao, setModoImpressao] = useState(null);
   const [salvandoVisita, setSalvandoVisita] = useState(false);
 
@@ -146,10 +148,6 @@ export default function App() {
       }
       setPendentesCount(pendentes.length);
       
-      const docRef = doc(db, 'usuarios', usuarioUid);
-      
-      // Realizar uploads primeiro (pode demorar, então não bloqueamos o estado)
-      const uploadsFeitos = [];
       for (const pendente of pendentes) {
         try {
           const upImg = async (base64, path) => {
@@ -162,69 +160,18 @@ export default function App() {
           const urlsPrincipais = await Promise.all(pendente.fotosBase64.map(foto => upImg(foto, 'visitas')));
           const urlsAlerta = await Promise.all(pendente.fotosAlertaBase64.map(foto => upImg(foto, 'alertas')));
           
-          uploadsFeitos.push({ pendente, urlsPrincipais, urlsAlerta });
+          const q = query(collection(db, 'usuarios', usuarioUid, 'historicos'), where('vId', '==', pendente.id));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            await updateDoc(querySnapshot.docs[0].ref, {
+              fotos: urlsPrincipais,
+              fotosA: urlsAlerta,
+              pendenteSync: false
+            });
+          }
+          await removePendingVisit(pendente.id);
         } catch (err) {
           console.error("Erro no upload de visita pendente:", err);
-        }
-      }
-      
-      // Aplicar todas as mudanças no Firestore via Transação para não sobrescrever dados recentes
-      if (uploadsFeitos.length > 0) {
-        await runTransaction(db, async (transaction) => {
-          const docSnap = await transaction.get(docRef);
-          if (!docSnap.exists()) return;
-          
-          let currentClientes = docSnap.data().clientes || [];
-          let updatedAny = false;
-          
-          uploadsFeitos.forEach(({ pendente, urlsPrincipais, urlsAlerta }) => {
-            currentClientes = currentClientes.map(c => {
-              if (c.id === pendente.clienteId && c.historicoVisitas) {
-                return {
-                  ...c,
-                  historicoVisitas: c.historicoVisitas.map(v => {
-                    if (v.vId === pendente.id) {
-                      updatedAny = true;
-                      return { ...v, fotos: urlsPrincipais, fotosA: urlsAlerta, pendenteSync: false };
-                    }
-                    return v;
-                  })
-                };
-              }
-              return c;
-            });
-          });
-          
-          if (updatedAny) {
-            transaction.update(docRef, { clientes: currentClientes });
-          }
-        });
-
-        // Atualizar estado local
-        setClientes(prev => {
-          let novoState = [...prev];
-          uploadsFeitos.forEach(({ pendente, urlsPrincipais, urlsAlerta }) => {
-            novoState = novoState.map(c => {
-              if (c.id === pendente.clienteId && c.historicoVisitas) {
-                return {
-                  ...c,
-                  historicoVisitas: c.historicoVisitas.map(v => {
-                    if (v.vId === pendente.id) {
-                      return { ...v, fotos: urlsPrincipais, fotosA: urlsAlerta, pendenteSync: false };
-                    }
-                    return v;
-                  })
-                };
-              }
-              return c;
-            });
-          });
-          return novoState;
-        });
-
-        // Remover visitas processadas do IndexedDB
-        for (const up of uploadsFeitos) {
-          await removePendingVisit(up.pendente.id);
         }
       }
       
@@ -266,26 +213,29 @@ export default function App() {
           const data = docSnap.data();
           let clientesFirebase = data.clientes || [];
           
+          // MIGRAÇÃO: Transferir históricos existentes do array de clientes para subcoleção
+          let migratedAny = false;
+          clientesFirebase = clientesFirebase.map(c => {
+             if (c.historicoVisitas && c.historicoVisitas.length > 0) {
+                 c.historicoVisitas.forEach(v => {
+                    const visitaMigrada = { ...v, clienteId: c.id, fotos: v.fotos || [], fotosA: v.fotosA || [] };
+                    addDoc(collection(db, 'usuarios', usuarioAtual.uid, 'historicos'), visitaMigrada).catch(console.error);
+                 });
+                 migratedAny = true;
+             }
+             const cleanC = { ...c };
+             delete cleanC.historicoVisitas; // Limpa o array velho pra liberar limite de 1MB do Firestore
+             return cleanC;
+          });
+          
+          if (migratedAny) {
+             updateDoc(docRef, { clientes: clientesFirebase }).catch(console.error);
+          }
+
           try {
             const pendentes = await getPendingVisits();
             if (pendentes.length > 0) {
               setPendentesCount(pendentes.length);
-              clientesFirebase = clientesFirebase.map(c => {
-                const pendentesDoCliente = pendentes.filter(p => p.clienteId === c.id);
-                if (pendentesDoCliente.length > 0 && c.historicoVisitas) {
-                   return {
-                     ...c,
-                     historicoVisitas: c.historicoVisitas.map(v => {
-                        const pendenteMatch = pendentesDoCliente.find(p => p.id === v.vId);
-                        if (pendenteMatch && v.pendenteSync) {
-                           return { ...v, fotos: pendenteMatch.fotosBase64, fotosA: pendenteMatch.fotosAlertaBase64 };
-                        }
-                        return v;
-                     })
-                   }
-                }
-                return c;
-              });
               if (navigator.onLine) {
                  setTimeout(() => processarFilaSincronizacao(usuarioAtual.uid, clientesFirebase), 3000);
               }
@@ -591,6 +541,35 @@ export default function App() {
     setTela('editar_cliente');
   };
 
+  const abrirRelatorio = async (cliente) => {
+    setClienteRelatorio(cliente);
+    setTela('ver_relatorio');
+    setCarregandoHistorico(true);
+    try {
+      const q = query(collection(db, 'usuarios', user.uid, 'historicos'), where('clienteId', '==', cliente.id));
+      const querySnapshot = await getDocs(q);
+      const pendentes = await getPendingVisits();
+      const pendentesDoCliente = pendentes.filter(p => p.clienteId === cliente.id);
+      
+      const hist = [];
+      querySnapshot.forEach((docSnap) => {
+        let data = docSnap.data();
+        if (data.pendenteSync) {
+          const match = pendentesDoCliente.find(p => p.id === data.vId);
+          if (match) {
+            data = { ...data, fotos: match.fotosBase64, fotosA: match.fotosAlertaBase64 };
+          }
+        }
+        hist.push({ docId: docSnap.id, ...data });
+      });
+      hist.sort((a, b) => Number(a.vId) - Number(b.vId));
+      setHistoricoDoRelatorio(hist);
+    } catch (e) {
+      console.error(e);
+    }
+    setCarregandoHistorico(false);
+  };
+
   const salvarEdicaoCliente = () => {
     if (novoNome && novaRua && novoBairro && novosDias.length > 0) {
       const enderecoCompleto = `${novaRua}, ${novoNumero ? novoNumero + ', ' : ''}${novoBairro}`;
@@ -613,11 +592,26 @@ export default function App() {
     setNovosDias(novosDias.includes(diaIndex) ? novosDias.filter(d => d !== diaIndex) : [...novosDias, diaIndex]);
   };
 
-  const excluirCliente = (id) => {
+  const excluirCliente = async (id) => {
     const confirmacao = window.confirm("⚠️ TEM CERTEZA?\n\nIsso vai apagar este cliente e todo o histórico de visitas dele para sempre da nuvem.");
     if (confirmacao) {
+      try {
+        const q = query(collection(db, 'usuarios', user.uid, 'historicos'), where('clienteId', '==', id));
+        const querySnapshot = await getDocs(q);
+        const apagar = async (url) => { if (url.startsWith('http')) { try { await deleteObject(ref(storage, url)); } catch(e){} } };
+        
+        querySnapshot.forEach(async (docSnap) => {
+           const data = docSnap.data();
+           if (!data.pendenteSync) {
+              if (data.fotos) data.fotos.forEach(apagar);
+              if (data.fotosA) data.fotosA.forEach(apagar);
+           }
+           await deleteDoc(docSnap.ref);
+        });
+      } catch(e){ console.error(e); }
+      
       atualizarE_SalvarClientes(clientes.filter(c => c.id !== id));
-      setTela('relatorio');
+      setTela('lista');
     }
   };
 
@@ -656,6 +650,7 @@ export default function App() {
     await savePendingVisit(visitaPendente);
 
     const novaVisitaLocal = {
+      clienteId: clienteAtual.id,
       vId,
       d: `${diaFormatado}/${mesesCurtos[dateObj.getMonth()]}`,
       h: horarioVisita, 
@@ -674,15 +669,13 @@ export default function App() {
     
     const clientesAtualizados = clientes.map(c => {
       if (c.id === clienteAtual.id) {
-        const historicoBase = c.historicoVisitas || [];
         return { 
           ...c, 
           ultimaVisita: dataHojeStr, 
           visitaEmAndamentoData: null, 
           horaInicioVisitaMs: null,
           adiadoPara: null,
-          ultimosProdutosFaltando: [...produtosFaltando],
-          historicoVisitas: [...historicoBase, novaVisitaLocal]
+          ultimosProdutosFaltando: [...produtosFaltando]
         };
       }
       return c;
@@ -690,24 +683,10 @@ export default function App() {
 
     setClientes(clientesAtualizados);
 
-    // Salvar no firestore SEM O BASE64 para não estourar o limite de 1MB
-    const clientesParaFirestore = clientesAtualizados.map(c => {
-      if (c.id === clienteAtual.id) {
-        return {
-          ...c,
-          historicoVisitas: c.historicoVisitas.map(v => {
-             if (v.vId === vId) {
-               return { ...v, fotos: [], fotosA: [] }; 
-             }
-             return v;
-          })
-        };
-      }
-      return c;
-    });
-
     try {
-      await updateDoc(doc(db, 'usuarios', user.uid), { clientes: clientesParaFirestore });
+      const visitaSemBase64 = { ...novaVisitaLocal, fotos: [], fotosA: [] };
+      await addDoc(collection(db, 'usuarios', user.uid, 'historicos'), visitaSemBase64);
+      await updateDoc(doc(db, 'usuarios', user.uid), { clientes: clientesAtualizados });
     } catch (e) {
       console.error("Erro ao salvar visita no firestore offline:", e);
     }
@@ -723,14 +702,28 @@ export default function App() {
     }
   };
 
-  const executarReabertura = (clienteAlvo) => {
-    const historico = clienteAlvo.historicoVisitas || [];
+  const executarReabertura = async (clienteAlvo) => {
+    const q = query(collection(db, 'usuarios', user.uid, 'historicos'), where('clienteId', '==', clienteAlvo.id));
+    const querySnapshot = await getDocs(q);
+    const pendentes = await getPendingVisits();
+    
+    const historico = [];
+    querySnapshot.forEach((docSnap) => {
+       let data = docSnap.data();
+       if (data.pendenteSync) {
+         const match = pendentes.find(p => p.id === data.vId);
+         if (match) data = { ...data, fotos: match.fotosBase64, fotosA: match.fotosAlertaBase64 };
+       }
+       historico.push({ docId: docSnap.id, ...data });
+    });
+    historico.sort((a, b) => Number(a.vId) - Number(b.vId));
+    
     if (historico.length === 0) return;
     
     const ultimaVisitaReal = historico[historico.length - 1];
     
     setAspecto(ultimaVisitaReal.a || ''); setPh(ultimaVisitaReal.p || ''); setCloro(ultimaVisitaReal.c || ''); setAlcalinidade(ultimaVisitaReal.al || '');
-    setTemperatura(ultimaVisitaReal.temp || ''); // REABRE COM TEMPERATURA
+    setTemperatura(ultimaVisitaReal.temp || ''); 
     setFotosVisita(ultimaVisitaReal.fotos || []); setFotosContagem(ultimaVisitaReal.fotos ? ultimaVisitaReal.fotos.length : 0);
     setFotosAlerta(ultimaVisitaReal.fotosA || []); 
     setTextoAlerta(ultimaVisitaReal.txtA || '');
@@ -738,19 +731,24 @@ export default function App() {
     
     setHoraInicioVisita(Date.now() - (ultimaVisitaReal.tMs || 0)); 
     
-    const novoHistorico = historico.slice(0, -1);
-    
-    // Remove da fila de pendentes para não duplicar se estava aguardando sync
     if (ultimaVisitaReal.vId) {
       removePendingVisit(ultimaVisitaReal.vId).catch(console.error);
     }
+    
+    try {
+       await deleteDoc(doc(db, 'usuarios', user.uid, 'historicos', ultimaVisitaReal.docId));
+       if (!ultimaVisitaReal.pendenteSync) {
+          const apagar = async (url) => { if (url.startsWith('http')) { try { await deleteObject(ref(storage, url)); } catch(e){} } };
+          if (ultimaVisitaReal.fotos) ultimaVisitaReal.fotos.forEach(url => apagar(url));
+          if (ultimaVisitaReal.fotosA) ultimaVisitaReal.fotosA.forEach(url => apagar(url));
+       }
+    } catch(e) { console.error(e); }
     
     atualizarE_SalvarClientes(clientes.map(c => c.id === clienteAlvo.id ? { 
       ...c, 
       ultimaVisita: null, 
       visitaEmAndamentoData: dataHojeStr,
       horaInicioVisitaMs: Date.now() - (ultimaVisitaReal.tMs || 0),
-      historicoVisitas: novoHistorico, 
       ultimosProdutosFaltando: [] 
     } : c));
     
@@ -1304,7 +1302,7 @@ export default function App() {
         <header className="flex items-center gap-4 mb-8 mt-2"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Meus Clientes</h2></header>
         <div className="space-y-3.5">
           {clientes.map(c => (
-            <button key={c.id} onClick={() => { setClienteRelatorio(c); setTela('ver_relatorio'); }} className="w-full bg-white dark:bg-zinc-900 p-5 rounded-[1.25rem] border border-zinc-200 dark:border-zinc-800 text-left flex justify-between items-center hover:border-teal-300 dark:hover:border-teal-700 shadow-sm transition-all group">
+            <button key={c.id} onClick={() => abrirRelatorio(c)} className="w-full bg-white dark:bg-zinc-900 p-5 rounded-[1.25rem] border border-zinc-200 dark:border-zinc-800 text-left flex justify-between items-center hover:border-teal-300 dark:hover:border-teal-700 shadow-sm transition-all group">
               <div><p className="font-bold text-lg text-zinc-800 dark:text-zinc-200 mb-1">{c.nome}</p><p className="text-[10px] text-teal-600 dark:text-teal-500 uppercase font-bold tracking-widest">Abrir Pasta Virtual</p></div>
               <div className={`p-3 rounded-xl ${gradIconBg} group-hover:scale-110 transition-transform`}><FileText size={20} /></div>
             </button>
@@ -1315,11 +1313,10 @@ export default function App() {
   }
 
   if (tela === 'ver_relatorio') {
-    const clienteExibicao = clientes.find(c => c.id === clienteRelatorio.id) || clienteRelatorio;
+    const clienteExibicao = clientes.find(c => c.id === clienteRelatorio?.id) || clienteRelatorio;
+    if (!clienteExibicao) return null;
     const produtosDoRelatorio = clienteExibicao.ultimosProdutosFaltando || [];
-    const historicoDoRelatorio = clienteExibicao.historicoVisitas || [];
     
-    // --- NOVO FILTRO: Adiciona TODAS as fotos de todas as visitas ---
     const fotosDoMes = [];
     historicoDoRelatorio.forEach(v => {
       if (v.fotos && v.fotos.length > 0) {
@@ -1332,6 +1329,10 @@ export default function App() {
     const visitasComAlerta = historicoDoRelatorio.filter(v => (v.fotosA && v.fotosA.length > 0) || v.txtA);
     const ultimaVisitaReal = historicoDoRelatorio.length > 0 ? historicoDoRelatorio[historicoDoRelatorio.length - 1] : null;
     const foiVisitadoHoje = clienteExibicao.ultimaVisita === dataHojeStr;
+
+    if (carregandoHistorico) {
+      return <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 flex flex-col items-center justify-center text-teal-500 font-bold"><RefreshCw size={40} className="animate-spin mb-4"/> Carregando pasta virtual...</div>;
+    }
 
     return (
       <div className={`min-h-screen font-sans relative overflow-x-hidden transition-colors duration-300 ${modoImpressao ? 'bg-white text-black' : 'bg-slate-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 pb-10 max-w-md mx-auto'}`}>
@@ -1570,10 +1571,26 @@ export default function App() {
             <button onClick={() => abrirEdicaoCliente(clienteExibicao)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors shadow-sm">
               <Pencil size={18} /> Editar Cadastro do Cliente
             </button>
-            <button onClick={() => {
+            <button onClick={async () => {
               if(window.confirm("⚠️ TEM CERTEZA?\nIsso vai apagar TODO o histórico de visitas e fotos deste cliente. O cadastro será mantido limpo.")) {
-                const novosClientes = clientes.map(c => c.id === clienteExibicao.id ? { ...c, historicoVisitas: [], ultimaVisita: null } : c);
+                try {
+                  const q = query(collection(db, 'usuarios', user.uid, 'historicos'), where('clienteId', '==', clienteExibicao.id));
+                  const querySnapshot = await getDocs(q);
+                  const apagar = async (url) => { if (url.startsWith('http')) { try { await deleteObject(ref(storage, url)); } catch(e){} } };
+                  
+                  querySnapshot.forEach(async (docSnap) => {
+                     const data = docSnap.data();
+                     if (!data.pendenteSync) {
+                        if (data.fotos) data.fotos.forEach(apagar);
+                        if (data.fotosA) data.fotosA.forEach(apagar);
+                     }
+                     await deleteDoc(docSnap.ref);
+                  });
+                } catch(e) { console.error(e); }
+                
+                const novosClientes = clientes.map(c => c.id === clienteExibicao.id ? { ...c, ultimaVisita: null } : c);
                 atualizarE_SalvarClientes(novosClientes);
+                setHistoricoDoRelatorio([]);
                 alert("Histórico zerado com sucesso!");
               }
             }} className="w-full bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 text-orange-600 dark:text-orange-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-2 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors">

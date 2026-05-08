@@ -160,51 +160,57 @@ export default function App() {
       
       for (const pendente of pendentes) {
         try {
-          console.log(`📤 Sincronizando visita ${pendente.id} do cliente ${pendente.clienteId}...`);
-          
-          const upImg = async (base64, path) => {
-            if (!base64 || !base64.startsWith('data:image')) return base64;
-            const storageRef = ref(storage, `usuarios/${usuarioUid}/${path}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`);
-            await uploadString(storageRef, base64, 'data_url');
-            return await getDownloadURL(storageRef);
+          // Timeout de 15 segundos por item para não travar a fila
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Timeout")), 15000)
+          );
+
+          const processarItem = async () => {
+            console.log(`📤 Enviando: Visita ${pendente.id}`);
+            
+            const upImg = async (base64, path) => {
+              if (!base64 || !base64.startsWith('data:image')) return base64;
+              const storageRef = ref(storage, `usuarios/${usuarioUid}/${path}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`);
+              await uploadString(storageRef, base64, 'data_url');
+              return await getDownloadURL(storageRef);
+            };
+
+            const urlsPrincipais = await Promise.all(pendente.fotosBase64.map(foto => upImg(foto, 'visitas')));
+            const urlsAlerta = await Promise.all(pendente.fotosAlertaBase64.map(foto => upImg(foto, 'alertas')));
+            
+            const q = query(collection(db, 'usuarios', usuarioUid, 'historicos'), where('vId', '==', pendente.id));
+            const querySnapshot = await getDocs(q);
+            
+            if (!querySnapshot.empty) {
+              await updateDoc(querySnapshot.docs[0].ref, {
+                fotos: urlsPrincipais,
+                fotosA: urlsAlerta,
+                pendenteSync: false
+              });
+            }
+            await removePendingVisit(pendente.id);
           };
 
-          const urlsPrincipais = await Promise.all(pendente.fotosBase64.map(foto => upImg(foto, 'visitas')));
-          const urlsAlerta = await Promise.all(pendente.fotosAlertaBase64.map(foto => upImg(foto, 'alertas')));
+          await Promise.race([processarItem(), timeoutPromise]);
           
-          const q = query(collection(db, 'usuarios', usuarioUid, 'historicos'), where('vId', '==', pendente.id));
-          const querySnapshot = await getDocs(q);
+          // Atualiza o contador após cada item removido
+          const nextCount = await getPendingVisits();
+          setPendentesCount(nextCount.length);
           
-          if (!querySnapshot.empty) {
-            await updateDoc(querySnapshot.docs[0].ref, {
-              fotos: urlsPrincipais,
-              fotosA: urlsAlerta,
-              pendenteSync: false
-            });
-            console.log(`✅ Visita ${pendente.id} sincronizada com sucesso.`);
-          } else {
-            console.warn(`⚠️ Documento da visita ${pendente.id} não encontrado no Firestore.`);
-          }
-          
-          await removePendingVisit(pendente.id);
         } catch (err) {
-          console.error(`❌ Erro ao processar item da fila (${pendente.id}):`, err);
-          // Se o erro for crítico (ex: quota do storage), talvez devêssemos parar o loop.
-          // Por enquanto, removemos para não travar o app em loop infinito se o arquivo for inválido.
-          if (err.message?.includes('quota') || err.message?.includes('invalid')) {
-            await removePendingVisit(pendente.id);
-          }
+          console.error(`❌ Falha no item ${pendente.id}, pulando...`, err);
+          // Se falhou (timeout ou erro), removemos para não travar a fila de quem está pagando
+          await removePendingVisit(pendente.id);
+          const nextCount = await getPendingVisits();
+          setPendentesCount(nextCount.length);
         }
       }
-      
-      const remaining = await getPendingVisits();
-      setPendentesCount(remaining.length);
     } catch (error) {
-      console.error("❌ Erro fatal na sincronização:", error);
+      console.error("❌ Erro na fila:", error);
     } finally {
       isSyncingRef.current = false;
       setIsSyncing(false);
-      console.log("🏁 Sincronização finalizada.");
+      console.log("🏁 Fila processada.");
     }
   };
 
@@ -984,10 +990,20 @@ export default function App() {
                   <ShieldCheck size={18} />
                 </button>
               )}
-              <button onClick={() => processarFilaSincronizacao(user?.uid, clientes)} className={`relative p-2 rounded-lg border shadow-sm transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-800 text-rose-500' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400'} active:scale-95`}>
-                {isSyncing ? <Cloud size={18} className="animate-pulse text-teal-500" /> : pendentesCount > 0 ? <CloudOff size={18} /> : <Cloud size={18} />}
-                {pendentesCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border-2 border-slate-50 dark:border-zinc-950">{pendentesCount}</span>}
-              </button>
+              <button 
+              onClick={() => {
+                if (pendentesCount > 0) {
+                  showToast(`${pendentesCount} relatórios sendo enviados...`);
+                  processarFilaSincronizacao(user?.uid, clientes);
+                } else {
+                  showToast("Nuvem sincronizada!");
+                }
+              }} 
+              className={`relative p-2 rounded-lg border shadow-sm transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-800 text-rose-500' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400'} active:scale-95`}
+            >
+              {isSyncing ? <Cloud size={18} className="animate-pulse text-teal-500" /> : pendentesCount > 0 ? <CloudOff size={18} /> : <Cloud size={18} />}
+              {pendentesCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border-2 border-slate-50 dark:border-zinc-950">{pendentesCount}</span>}
+            </button>
               <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm active:scale-95 transition-transform">
                 {modoEscuro ? <Sun size={18} /> : <Moon size={18} />}
               </button>

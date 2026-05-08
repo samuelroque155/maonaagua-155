@@ -61,7 +61,9 @@ export default function App() {
     empresa: 'Mão Na Água',
     cidade: 'Sua Cidade',
     assinaturaAtiva: true, // Por padrão true para novos usuários em trial ou teste
-    whatsappSuporte: '5564999999999'
+    whatsappSuporte: '5564999999999',
+    listaProdutos: listaQuimica,
+    listaAcessorios: listaAcessorios
   });
 
   const [tela, setTela] = useState('lista'); 
@@ -248,6 +250,12 @@ export default function App() {
         
         if (docSnap.exists()) {
           const data = docSnap.data();
+          setPerfil(prev => ({ 
+            ...prev, 
+            ...data.perfil,
+            listaProdutos: data.perfil?.listaProdutos || listaQuimica,
+            listaAcessorios: data.perfil?.listaAcessorios || listaAcessorios
+          }));
           let clientesFirebase = data.clientes || [];
           
           // MIGRAÇÃO: Transferir históricos existentes do array de clientes para subcoleção
@@ -1227,7 +1235,34 @@ export default function App() {
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
             <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Produtos a Repor</p>
             <div className="space-y-3">
-              {listaQuimica.map(q => {
+              {perfil.listaProdutos.map(q => {
+                const item = produtosFaltando.find(p => p.nome === q);
+                return (
+                  <div key={q} className={`flex flex-col p-3 rounded-[1.25rem] border transition-colors ${item ? 'bg-gradient-to-r from-sky-50 to-teal-50 dark:from-sky-900/10 dark:to-teal-900/10 border-teal-300 dark:border-teal-700/50' : 'bg-slate-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-teal-200 dark:hover:border-teal-800'}`}>
+                    <div className="flex items-center justify-between">
+                      <button onClick={() => toggleProduto(q)} className="flex items-center gap-3.5 flex-1 text-left">
+                        <div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${item ? 'bg-gradient-to-br from-sky-400 to-teal-400 border-transparent shadow-sm' : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900'}`}>{item && <Check size={14} className="text-white font-black" />}</div>
+                        <span className={`text-sm font-medium ${item ? 'text-teal-800 dark:text-teal-300 font-bold' : 'text-zinc-600 dark:text-zinc-400'}`}>{q}</span>
+                      </button>
+                      {item && (
+                        <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 rounded-xl p-1.5 border border-teal-100 dark:border-teal-800 shadow-sm">
+                          <button onClick={() => updateQtdProduto(q, -1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"><Minus size={14} /></button>
+                          <span className="font-bold text-sm w-4 text-center text-teal-700 dark:text-teal-400">{item.qtd}</span>
+                          <button onClick={() => updateQtdProduto(q, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"><Plus size={14} /></button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-sky-400/5 to-transparent rounded-bl-full pointer-events-none"></div>
+            <p className="font-bold text-sm mb-5 flex items-center gap-2.5 text-zinc-800 dark:text-zinc-200"><div className={`p-1.5 rounded-lg ${gradIconBg}`}><ShoppingCart size={16}/></div> Acessórios a Repor</p>
+            <div className="space-y-3">
+              {perfil.listaAcessorios.map(q => {
                 const item = produtosFaltando.find(p => p.nome === q);
                 return (
                   <div key={q} className={`flex flex-col p-3 rounded-[1.25rem] border transition-colors ${item ? 'bg-gradient-to-r from-sky-50 to-teal-50 dark:from-sky-900/10 dark:to-teal-900/10 border-teal-300 dark:border-teal-700/50' : 'bg-slate-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-teal-200 dark:hover:border-teal-800'}`}>
@@ -1689,12 +1724,12 @@ export default function App() {
 
   if (tela === 'configuracoes') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300">
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300 pb-20">
         <header className="flex items-center gap-4 mb-10"><button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20}/></button><h2 className={`text-2xl font-black ${gradText}`}>Configurações</h2></header>
         
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
-            <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-6 flex items-center gap-2"><Pencil size={16} className="text-teal-500" /> Perfil Profissional</h3>
+        <div className="space-y-8">
+          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-6 flex items-center gap-2 uppercase tracking-widest"><Pencil size={16} className="text-teal-500" /> Perfil Profissional</h3>
             
             <div className="space-y-5">
               <div className="space-y-2">
@@ -1707,9 +1742,75 @@ export default function App() {
                 <input value={perfil.cidade} onChange={e => setPerfil({...perfil, cidade: e.target.value})} placeholder="Ex: Jataí - GO" className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl outline-none focus:border-teal-400 text-sm font-bold" />
               </div>
             </div>
-            
-            <button onClick={() => { salvarPerfil(perfil); alert("Perfil salvo com sucesso!"); }} className={`w-full py-4 rounded-xl font-bold mt-8 ${gradBtn}`}>SALVAR ALTERAÇÕES</button>
-          </div>
+          </section>
+
+          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <h3 className="font-bold text-sm mb-4 uppercase tracking-wider text-teal-600 flex items-center gap-2"><ShoppingCart size={16} /> Meus Produtos</h3>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input 
+                  id="novoProdInput"
+                  type="text" 
+                  placeholder="Ex: Cloro 10kg" 
+                  className="flex-1 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-3 rounded-xl text-sm outline-none focus:border-teal-400" 
+                />
+                <button 
+                  onClick={() => {
+                    const input = document.getElementById('novoProdInput');
+                    if (input.value) {
+                      setPerfil({...perfil, listaProdutos: [...perfil.listaProdutos, input.value]});
+                      input.value = '';
+                    }
+                  }}
+                  className="bg-teal-500 text-white p-3 rounded-xl"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1 scrollbar-hide border-t border-zinc-50 dark:border-zinc-800 mt-2 pt-3">
+                {perfil.listaProdutos.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 rounded-xl text-[11px] font-medium">
+                    <span className="text-zinc-700 dark:text-zinc-300">{p}</span>
+                    <button onClick={() => setPerfil({...perfil, listaProdutos: perfil.listaProdutos.filter((_, idx) => idx !== i)})} className="text-rose-400 hover:text-rose-600"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <h3 className="font-bold text-sm mb-4 uppercase tracking-wider text-teal-600 flex items-center gap-2"><Plus size={16} /> Meus Acessórios</h3>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input 
+                  id="novoAcessInput"
+                  type="text" 
+                  placeholder="Ex: Cabo 6mt" 
+                  className="flex-1 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-3 rounded-xl text-sm outline-none focus:border-teal-400" 
+                />
+                <button 
+                  onClick={() => {
+                    const input = document.getElementById('novoAcessInput');
+                    if (input.value) {
+                      setPerfil({...perfil, listaAcessorios: [...perfil.listaAcessorios, input.value]});
+                      input.value = '';
+                    }
+                  }}
+                  className="bg-sky-500 text-white p-3 rounded-xl"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1 scrollbar-hide border-t border-zinc-50 dark:border-zinc-800 mt-2 pt-3">
+                {perfil.listaAcessorios.map((a, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 rounded-xl text-[11px] font-medium">
+                    <span className="text-zinc-700 dark:text-zinc-300">{a}</span>
+                    <button onClick={() => setPerfil({...perfil, listaAcessorios: perfil.listaAcessorios.filter((_, idx) => idx !== i)})} className="text-rose-400 hover:text-rose-600"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
 
           <div className="bg-zinc-100 dark:bg-zinc-900/50 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 text-center">
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Status da Conta</p>
@@ -1724,6 +1825,17 @@ export default function App() {
               </div>
             )}
           </div>
+          
+          <button 
+            onClick={async () => {
+              await updateDoc(doc(db, 'usuarios', user.uid), { perfil });
+              showToast("Configurações salvas!");
+              setTela('lista');
+            }} 
+            className={`w-full py-4 rounded-xl font-bold ${gradBtn} flex items-center justify-center gap-2`}
+          >
+            <Save size={20} /> SALVAR ALTERAÇÕES
+          </button>
           
           <button onClick={handleSair} className="w-full py-4 text-rose-500 font-bold border border-rose-200 dark:border-rose-900/30 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors">SAIR DA CONTA</button>
         </div>

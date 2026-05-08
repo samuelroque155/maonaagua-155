@@ -206,8 +206,6 @@ export default function App() {
       setIsSyncing(false);
       console.log("🏁 Sincronização finalizada.");
     }
-  };cing(false);
-    }
   };
 
   useEffect(() => {

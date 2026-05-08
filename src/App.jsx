@@ -934,7 +934,8 @@ export default function App() {
 
   if (tela === 'lista') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 pb-24 font-sans transition-colors duration-300 relative">
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 pb-24 font-sans transition-colors duration-300 relative overflow-x-hidden">
+
         {toast && (
           <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] w-auto animate-bounce">
             <div className="bg-zinc-900/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl shadow-2xl border border-zinc-700 flex items-center gap-3">
@@ -964,34 +965,35 @@ export default function App() {
             ))}
           </div>
         )}
-        <header className="flex justify-between items-start mb-6 pb-2 relative">
-          <div>
-            <h1 className={`text-3xl font-black ${gradText}`}>Mão Na Água</h1>
-            <p className="text-teal-600/70 dark:text-teal-400/60 font-bold text-[10px] uppercase tracking-widest mt-0.5">{perfil.empresa}</p>
-          </div>
-          <div className="flex gap-2">
-            {user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
-              <button onClick={() => setTela('admin_panel')} className="bg-gradient-to-r from-amber-400 to-orange-500 p-2.5 rounded-xl border border-transparent text-white shadow-sm hover:scale-105 transition-transform">
-                <ShieldCheck size={20} />
+        <header className="flex flex-col gap-4 mb-8 pb-2">
+          <div className="flex justify-between items-center w-full">
+            <div>
+              <h1 className={`text-2xl xs:text-3xl font-black ${gradText} leading-tight`}>Mão Na Água</h1>
+              <p className="text-teal-600/70 dark:text-teal-400/60 font-bold text-[9px] uppercase tracking-widest mt-0.5">{perfil.empresa}</p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-1.5 max-w-[200px]">
+              {user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
+                <button onClick={() => setTela('admin_panel')} className="bg-gradient-to-r from-amber-400 to-orange-500 p-2 rounded-lg border border-transparent text-white shadow-sm active:scale-95 transition-transform">
+                  <ShieldCheck size={18} />
+                </button>
+              )}
+              <button onClick={() => processarFilaSincronizacao(user?.uid, clientes)} className={`relative p-2 rounded-lg border shadow-sm transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-800 text-rose-500' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400'} active:scale-95`}>
+                {isSyncing ? <Cloud size={18} className="animate-pulse text-teal-500" /> : pendentesCount > 0 ? <CloudOff size={18} /> : <Cloud size={18} />}
+                {pendentesCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border-2 border-slate-50 dark:border-zinc-950">{pendentesCount}</span>}
               </button>
-            )}
-            <button onClick={() => processarFilaSincronizacao(user?.uid, clientes)} className={`relative p-2.5 rounded-xl border shadow-sm transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-800 text-rose-500' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400'} hover:scale-105 active:scale-95`}>
-              {isSyncing ? <Cloud size={20} className="animate-pulse text-teal-500" /> : pendentesCount > 0 ? <CloudOff size={20} /> : <Cloud size={20} />}
-              {pendentesCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-slate-50 dark:border-zinc-950">{pendentesCount}</span>}
-            </button>
-            <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
-              {modoEscuro ? <Sun size={20} /> : <Moon size={20} />}
-
-            </button>
-            <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm hover:scale-105 transition-transform">
-              <CalendarDays size={20} />
-            </button>
-            <button onClick={() => setTela('configuracoes')} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm hover:scale-105 transition-transform">
-              <Pencil size={20} />
-            </button>
-            <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-rose-500 shadow-sm hover:scale-105 transition-transform">
-              <LogOut size={20} />
-            </button>
+              <button onClick={() => setModoEscuro(!modoEscuro)} className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm active:scale-95 transition-transform">
+                {modoEscuro ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <button onClick={() => setTela('agenda')} className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-sky-500 shadow-sm active:scale-95 transition-transform">
+                <CalendarDays size={18} />
+              </button>
+              <button onClick={() => setTela('configuracoes')} className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm active:scale-95 transition-transform">
+                <Pencil size={18} />
+              </button>
+              <button onClick={handleSair} className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-rose-500 shadow-sm active:scale-95 transition-transform">
+                <LogOut size={18} />
+              </button>
+            </div>
           </div>
         </header>
 

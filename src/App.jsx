@@ -479,41 +479,56 @@ export default function App() {
     setTela('visita');
   };
 
-  const processarFotoComprimida = (e, callback) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
+  const comprimirImagem = (base64, maxWidth = 1280, quality = 0.7) => {
+    return new Promise((resolve) => {
       const img = new Image();
+      img.src = base64;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_DIM = 400; 
-        let width = img.width; let height = img.height;
-        if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } 
-        else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
-        canvas.width = width; canvas.height = height;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (maxWidth / width) * height;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        callback(canvas.toDataURL('image/jpeg', 0.6));
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
-      img.src = event.target.result;
+    });
+  };
+
+  const handleNovaFoto = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Comprimido = await comprimirImagem(event.target.result);
+      setFotosVisita(prev => [...prev, base64Comprimido]);
+      setFotosContagem(prev => prev + 1);
     };
     reader.readAsDataURL(file);
   };
 
-  const handleNovaFoto = (e) => processarFotoComprimida(e, (base64) => {
-    setFotosVisita(prev => [...prev, base64]);
-    setFotosContagem(prev => prev + 1);
-  });
+  const handleFotoAlerta = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Comprimido = await comprimirImagem(event.target.result);
+      setFotosAlerta(prev => [...prev, base64Comprimido]);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const removerFoto = (indexToRemove) => {
     setFotosVisita(prev => prev.filter((_, index) => index !== indexToRemove));
     setFotosContagem(prev => prev - 1);
   };
-
-  const handleFotoAlerta = (e) => processarFotoComprimida(e, (base64) => {
-    setFotosAlerta(prev => [...prev, base64]); 
-  });
 
   const removerFotoAlerta = (indexToRemove) => {
     setFotosAlerta(prev => prev.filter((_, index) => index !== indexToRemove));

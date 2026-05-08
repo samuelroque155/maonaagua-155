@@ -232,6 +232,11 @@ export default function App() {
     const desinscrever = onAuthStateChanged(auth, async (usuarioAtual) => {
       setUser(usuarioAtual);
       if (usuarioAtual) {
+        // Pedir permissão de notificação assim que logar
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+        
         const docRef = doc(db, 'usuarios', usuarioAtual.uid);
         const docSnap = await getDoc(docRef);
         
@@ -359,30 +364,32 @@ export default function App() {
       Notification.requestPermission();
     }
 
-    const checarNotificacoes = () => {
-      const agora = new Date();
-      const diaAtualLocal = agora.getDay();
-      const tempoAtualMinutos = agora.getHours() * 60 + agora.getMinutes();
-      const dataKey = agora.toDateString(); 
+      const checarNotificacoes = () => {
+        const agora = new Date();
+        const diaAtualLocal = agora.getDay();
+        const tempoAtualMinutos = agora.getHours() * 60 + agora.getMinutes();
+        const dataKey = agora.toDateString(); 
 
-      const clientesParaNotificar = clientes.filter(c => {
-        const hojeE_DiaVisita = c.diasVisita?.includes(diaAtualLocal) || c.adiadoPara === diaAtualLocal;
-        if (!hojeE_DiaVisita) return false;
-        if (!c.horaVisita) return false;
-        
-        const [h, m] = c.horaVisita.split(':').map(Number);
-        const tempoVisitaMinutos = h * 60 + m;
-        
-        // Alarme toca exatamente 2 horas (120 minutos) antes da visita
-        const tempoAlarmeMinutos = (tempoVisitaMinutos - 120 + 1440) % 1440;
-        
-        if (tempoAtualMinutos !== tempoAlarmeMinutos) return false;
+        const clientesParaNotificar = clientes.filter(c => {
+          if (!c.horaVisita) return false;
+          
+          const eDiaVisita = c.diasVisita.includes(diaAtualLocal) || c.adiadoPara === diaAtualLocal;
+          if (!eDiaVisita) return false;
 
-        const jaNotificadoKey = `${c.id}-${dataKey}-${c.horaVisita}`;
-        if (notificadosHojeRef.current.has(jaNotificadoKey)) return false;
+          const [h, m] = c.horaVisita.split(':').map(Number);
+          const tempoVisitaMinutos = h * 60 + m;
+          
+          // Janela de 2 minutos para o alerta (exatamente 2 horas antes)
+          const tempoAlarmeMinutos = (tempoVisitaMinutos - 120 + 1440) % 1440;
+          const diff = Math.abs(tempoAtualMinutos - tempoAlarmeMinutos);
+          
+          if (diff > 1) return false;
 
-        return true;
-      });
+          const jaNotificadoKey = `${c.id}-${dataKey}-${c.horaVisita}`;
+          if (notificadosHojeRef.current.has(jaNotificadoKey)) return false;
+
+          return true;
+        });
 
       if (clientesParaNotificar.length > 0) {
         const novasNots = [];
@@ -392,7 +399,7 @@ export default function App() {
 
           // Tocar o som de água apenas uma vez (sem loop)
           try {
-            const audio = new Audio('/agua.ogg');
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
             audio.play().catch(e => console.log('Áudio bloqueado', e));
           } catch(e) {}
 

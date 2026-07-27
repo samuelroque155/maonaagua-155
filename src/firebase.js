@@ -1,6 +1,6 @@
 // Importa as funções que precisamos do Firebase
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -25,3 +25,4 @@ enableIndexedDbPersistence(db).catch((err) => {
 });
 
 export const storage = getStorage(app);
+export const googleProvider = new GoogleAuthProvider();

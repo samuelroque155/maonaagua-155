@@ -1,5 +1,15 @@
 {
   "appId": "com.maonaagua.app",
   "appName": "Mão na Água",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "BackgroundRunner": {
+      "label": "com.maonaagua.app.sync",
+      "src": "runners/runner.js",
+      "event": "syncTask",
+      "repeat": true,
+      "interval": 15,
+      "autoStart": true
+    }
+  }
 }

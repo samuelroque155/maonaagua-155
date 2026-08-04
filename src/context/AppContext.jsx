@@ -167,7 +167,13 @@ export const AppProvider = ({ children }) => {
 
         const aplicarVinculo = async (linkData) => {
           const perfilAtual = linkData
-            ? { ...perfilBase, tipoConta: 'funcionario', vinculoEmpresa: linkData.employerUid, rotas: linkData.rotas || [] }
+            ? {
+                ...perfilBase,
+                tipoConta: 'funcionario',
+                vinculoEmpresa: linkData.employerUid,
+                rotas: linkData.rotas || [],
+                assinaturaAtiva: true
+              }
             : perfilBase;
           const targetId = perfilAtual.tipoConta === 'funcionario' && perfilAtual.vinculoEmpresa
             ? perfilAtual.vinculoEmpresa
@@ -180,7 +186,8 @@ export const AppProvider = ({ children }) => {
             await updateDoc(userDocRef, {
               'perfil.tipoConta': 'funcionario',
               'perfil.vinculoEmpresa': linkData.employerUid,
-              'perfil.rotas': linkData.rotas || []
+              'perfil.rotas': linkData.rotas || [],
+              'perfil.assinaturaAtiva': true
             });
           }
 

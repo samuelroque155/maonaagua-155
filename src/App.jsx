@@ -406,7 +406,9 @@ export default function App() {
   if (!user) return <Login />;
   if (!perfil.tipoConta) return <Onboarding />;
   
-  if (!perfil.assinaturaAtiva && tela !== 'configuracoes' && user.email !== ADMIN_EMAIL) {
+  const funcionarioVinculado = perfil.tipoConta === 'funcionario' && Boolean(perfil.vinculoEmpresa);
+
+  if (!perfil.assinaturaAtiva && !funcionarioVinculado && tela !== 'configuracoes' && user.email !== ADMIN_EMAIL) {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-white text-center">
         <AlertTriangle size={64} className="text-rose-500 mb-6" />

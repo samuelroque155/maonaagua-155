@@ -282,16 +282,17 @@ export default function App() {
       // Salva imediatamente no banco local (IndexedDB) para garantir persistência offline
       await savePendingVisit(novaVisita);
 
-      // Salva de forma otimista/imediata o registro de texto no Firestore
-      await addDoc(collection(db, 'usuarios', targetUid, 'clientes', String(clienteAtual.id), 'visitas'), {
-        ...novaVisita,
-        fotosBase64: [],
-        fotosAlertaBase64: [],
-        fotos: [],
-        fotosA: []
-      });
+      if (navigator.onLine) {
+        await addDoc(collection(db, 'usuarios', targetUid, 'clientes', String(clienteAtual.id), 'visitas'), {
+          ...novaVisita,
+          fotosBase64: [],
+          fotosAlertaBase64: [],
+          fotos: [],
+          fotosA: []
+        });
+      }
 
-      if (produtosFaltando && produtosFaltando.length > 0) {
+      if (navigator.onLine && produtosFaltando && produtosFaltando.length > 0) {
         await addDoc(collection(db, 'usuarios', targetUid, 'alertasProdutos'), {
           clienteId: clienteAtual.id,
           clienteNome: clienteAtual.nome,
@@ -316,16 +317,24 @@ export default function App() {
             } 
           : c
       );
-      await atualizarE_SalvarClientes(novosClientes);
-
-      // Limpa progresso do localStorage
-      localStorage.removeItem('maonagua_visita_progresso');
-
-      showToast("Visita salva com sucesso!");
-      setTela('lista');
-
-      // Dispara a sincronização de upload em segundo plano (non-blocking)
-      processarFilaSincronizacao(user.uid, novosClientes).catch(err => console.error("Erro na fila assíncrona:", err));
+      if (navigator.onLine) {
+        await atualizarE_SalvarClientes(novosClientes);
+        const sincronizou = await processarFilaSincronizacao(user.uid, novosClientes, targetUid);
+        if (!sincronizou) {
+          showToast("Visita salva localmente. As fotos serão enviadas na próxima tentativa.");
+          return;
+        }
+        localStorage.removeItem('maonagua_visita_progresso');
+        showToast("Visita e fotos salvas com sucesso!");
+        setTela('lista');
+      } else {
+        setClientes(novosClientes);
+        const pendentes = await getPendingVisits();
+        setPendentesCount(pendentes.length);
+        localStorage.removeItem('maonagua_visita_progresso');
+        showToast("Sem internet: visita salva localmente e aguardando envio.");
+        setTela('lista');
+      }
     } catch (e) {
       alert("Erro ao salvar visita: " + e.message);
     } finally {
@@ -370,7 +379,7 @@ export default function App() {
         fotosA: []
       });
 
-      processarFilaSincronizacao(user.uid, clientes).catch(err => console.error(err));
+      processarFilaSincronizacao(user.uid, clientes, targetUid).catch(err => console.error(err));
       showToast("Ocorrência enviada com sucesso!");
       return true;
     } catch (e) {

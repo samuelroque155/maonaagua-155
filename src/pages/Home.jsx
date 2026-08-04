@@ -8,7 +8,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
   const { 
     user, perfil, clientes, modoEscuro, setModoEscuro, 
     pendentesCount, isSyncing, handleSair, gradText, gradBtn, 
-    diaAtual, dataHojeStr, processarFilaSincronizacao, tela
+    diaAtual, dataHojeStr, processarFilaSincronizacao, tela, targetUid
   } = useContext(AppContext);
   
   let clientesFiltrados = clientes;
@@ -56,7 +56,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
               {modoEscuro ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <button 
-              onClick={() => processarFilaSincronizacao(user.uid, clientes)} 
+              onClick={() => processarFilaSincronizacao(user.uid, clientes, targetUid)}
               className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-500' : 'bg-slate-50 dark:bg-zinc-800 text-teal-500'}`}
             >
               {isSyncing ? <Cloud size={18} className="animate-pulse" /> : pendentesCount > 0 ? <CloudOff size={18} /> : <Cloud size={18} />}

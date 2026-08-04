@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
 import { db } from '../firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, updateDoc, query, orderBy } from 'firebase/firestore';
-import { UserPlus, UserMinus, ShieldAlert, CheckCircle, Bell, Users } from 'lucide-react';
+import { collection, doc, getDocs, deleteDoc, updateDoc, query, orderBy, writeBatch } from 'firebase/firestore';
+import { UserPlus, UserMinus, ShieldAlert, CheckCircle, Bell, Users, Pencil } from 'lucide-react';
 
 export default function GestaoEquipe({ setTela }) {
   const { user, clientes, gradText, gradBtn } = useContext(AppContext);
@@ -16,13 +16,7 @@ export default function GestaoEquipe({ setTela }) {
   const [email, setEmail] = useState('');
   const [rotasSelecionadas, setRotasSelecionadas] = useState([]);
   const [isAdding, setIsAdding] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      carregarFuncionarios();
-      carregarAlertas();
-    }
-  }, [user]);
+  const [funcionarioEditando, setFuncionarioEditando] = useState(null);
 
   const carregarAlertas = async () => {
     try {
@@ -55,33 +49,61 @@ export default function GestaoEquipe({ setTela }) {
     }
   };
 
-  const adicionarFuncionario = async () => {
+  const limparFormulario = () => {
+    setNome('');
+    setEmail('');
+    setRotasSelecionadas([]);
+    setIsAdding(false);
+    setFuncionarioEditando(null);
+  };
+
+  useEffect(() => {
+    if (user) {
+      // Os estados são atualizados após as leituras assíncronas do Firestore.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      carregarFuncionarios();
+      carregarAlertas();
+    }
+    // As funções carregam apenas os dados do usuário autenticado atual.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const abrirEdicao = (funcionario) => {
+    setFuncionarioEditando(funcionario);
+    setNome(funcionario.nome || '');
+    setEmail(funcionario.email || '');
+    setRotasSelecionadas(funcionario.rotas || []);
+    setIsAdding(true);
+  };
+
+  const salvarFuncionario = async () => {
     if (!nome || !email) return alert("Preencha o nome e o e-mail do funcionário.");
     const emailFormatado = email.trim().toLowerCase();
     
     try {
-      // 1. Salva na subcoleção do dono
-      const funcRef = doc(collection(db, 'usuarios', user.uid, 'funcionarios'));
-      const novoFunc = {
+      const funcRef = funcionarioEditando
+        ? doc(db, 'usuarios', user.uid, 'funcionarios', funcionarioEditando.id)
+        : doc(collection(db, 'usuarios', user.uid, 'funcionarios'));
+      const dadosFuncionario = {
         nome,
         email: emailFormatado,
         rotas: rotasSelecionadas,
-        criadoEm: Date.now()
+        ...(funcionarioEditando ? {} : { criadoEm: Date.now() })
       };
-      await setDoc(funcRef, novoFunc);
-
-      // 2. Salva no link raiz para o funcionário se encontrar
-      await setDoc(doc(db, 'equipes_links', emailFormatado), {
+      const batch = writeBatch(db);
+      batch.set(funcRef, dadosFuncionario, { merge: true });
+      batch.set(doc(db, 'equipes_links', emailFormatado), {
         employerUid: user.uid,
-        nome: nome,
+        nome,
         rotas: rotasSelecionadas
-      });
+      }, { merge: true });
+      await batch.commit();
 
-      alert("Funcionário adicionado! Ele já pode criar uma conta com esse e-mail.");
-      setNome(''); setEmail(''); setRotasSelecionadas([]); setIsAdding(false);
-      carregarFuncionarios();
+      alert(funcionarioEditando ? "Rotas do funcionário atualizadas!" : "Funcionário adicionado! Ele já pode criar uma conta com esse e-mail.");
+      limparFormulario();
+      await carregarFuncionarios();
     } catch (e) {
-      alert("Erro ao adicionar funcionário: " + e.message);
+      alert("Erro ao salvar funcionário: " + e.message);
     }
   };
 
@@ -140,7 +162,7 @@ export default function GestaoEquipe({ setTela }) {
           <>
             {isAdding ? (
               <div className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-4">Novo Funcionário</h2>
+                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-4">{funcionarioEditando ? 'Editar rotas' : 'Novo Funcionário'}</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider ml-2">Nome Completo</label>
@@ -148,7 +170,7 @@ export default function GestaoEquipe({ setTela }) {
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider ml-2">E-mail de Login</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl outline-none focus:border-teal-400 dark:text-white" />
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={Boolean(funcionarioEditando)} className="w-full bg-slate-50 dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl outline-none focus:border-teal-400 dark:text-white disabled:opacity-60" />
                   </div>
                   
                   <div className="pt-2">
@@ -164,13 +186,13 @@ export default function GestaoEquipe({ setTela }) {
                   </div>
 
                   <div className="flex gap-2 pt-4">
-                    <button onClick={() => setIsAdding(false)} className="flex-1 py-4 rounded-2xl font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800">Cancelar</button>
-                    <button onClick={adicionarFuncionario} className={`flex-1 py-4 rounded-2xl font-bold ${gradBtn}`}>Salvar</button>
+                    <button onClick={limparFormulario} className="flex-1 py-4 rounded-2xl font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800">Cancelar</button>
+                    <button onClick={salvarFuncionario} className={`flex-1 py-4 rounded-2xl font-bold ${gradBtn}`}>Salvar</button>
                   </div>
                 </div>
               </div>
             ) : (
-              <button onClick={() => setIsAdding(true)} className="w-full bg-sky-50 dark:bg-sky-900/20 border border-dashed border-sky-300 dark:border-sky-700 p-6 rounded-[2rem] flex flex-col items-center justify-center text-sky-500 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors">
+              <button onClick={() => { limparFormulario(); setIsAdding(true); }} className="w-full bg-sky-50 dark:bg-sky-900/20 border border-dashed border-sky-300 dark:border-sky-700 p-6 rounded-[2rem] flex flex-col items-center justify-center text-sky-500 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors">
                 <UserPlus size={32} className="mb-2" />
                 <span className="font-bold">Adicionar Funcionário</span>
               </button>
@@ -190,9 +212,14 @@ export default function GestaoEquipe({ setTela }) {
                       <p className="text-xs text-zinc-400">{f.email}</p>
                       <p className="text-[10px] font-bold text-sky-500 mt-1">{f.rotas?.length || 0} rota(s) atribuída(s)</p>
                     </div>
-                    <button onClick={() => removerFuncionario(f.id, f.email)} className="w-10 h-10 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-xl flex items-center justify-center hover:bg-rose-100 dark:hover:bg-rose-900/40">
-                      <UserMinus size={18} />
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => abrirEdicao(f)} aria-label={`Editar rotas de ${f.nome}`} className="w-10 h-10 bg-sky-50 dark:bg-sky-900/20 text-sky-500 rounded-xl flex items-center justify-center hover:bg-sky-100 dark:hover:bg-sky-900/40">
+                        <Pencil size={18} />
+                      </button>
+                      <button onClick={() => removerFuncionario(f.id, f.email)} aria-label={`Remover ${f.nome}`} className="w-10 h-10 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-xl flex items-center justify-center hover:bg-rose-100 dark:hover:bg-rose-900/40">
+                        <UserMinus size={18} />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

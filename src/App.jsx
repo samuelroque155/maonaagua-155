@@ -5,7 +5,7 @@ import { signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { ref, deleteObject, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { savePendingVisit, getPendingVisits, removePendingVisit } from './db';
-import imageCompression from 'browser-image-compression';
+import { compressImage, fileToBase64 } from './utils/imageUtils';
 
 // Componentes das Páginas
 import Home from './pages/Home';
@@ -24,25 +24,6 @@ import GestaoEquipe from './pages/GestaoEquipe';
 import { AlertTriangle } from 'lucide-react';
 
 const ADMIN_EMAIL = 'samuelroque155@gmail.com';
-
-const compressImage = async (file) => {
-  const options = {
-    maxSizeMB: 0.2,
-    maxWidthOrHeight: 1024,
-    useWebWorker: true,
-    fileType: 'image/jpeg'
-  };
-  return await imageCompression(file, options);
-};
-
-const fileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = error => reject(error);
-  });
-};
 
 export default function App() {
   const { 
@@ -210,7 +191,7 @@ export default function App() {
         const compressedFile = await compressImage(file);
         const base64 = await fileToBase64(compressedFile);
         const compressedUrl = URL.createObjectURL(compressedFile);
-        setFotosVisita(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, status: 'ready' } : f));
+        setFotosVisita(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, blob: compressedFile, status: 'ready' } : f));
       } catch (error) {
         console.error("Erro na compressão:", error);
         setFotosVisita(prev => prev.map(f => f.id === tempId ? { ...f, status: 'error' } : f));
@@ -228,7 +209,7 @@ export default function App() {
         const compressedFile = await compressImage(file);
         const base64 = await fileToBase64(compressedFile);
         const compressedUrl = URL.createObjectURL(compressedFile);
-        setFotosAlerta(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, status: 'ready' } : f));
+        setFotosAlerta(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, blob: compressedFile, status: 'ready' } : f));
       } catch (error) {
         console.error("Erro na compressão:", error);
         setFotosAlerta(prev => prev.map(f => f.id === tempId ? { ...f, status: 'error' } : f));
@@ -264,6 +245,8 @@ export default function App() {
 
     const base64Principais = fotosVisita.map(f => f.base64).filter(Boolean);
     const base64Alerta = fotosAlerta.map(f => f.base64).filter(Boolean);
+    const arquivosPrincipais = fotosVisita.map(f => f.blob).filter(Boolean);
+    const arquivosAlerta = fotosAlerta.map(f => f.blob).filter(Boolean);
 
     const visitaId = Date.now();
     let novaVisita = {
@@ -271,7 +254,11 @@ export default function App() {
       d: dataFim.toLocaleDateString('pt-BR'), 
       h: strInicio ? `${strInicio} - ${strFim} (${tempoFormatado})` : strFim,
       ts: Date.now(), p: ph, c: cloro, al: alcalinidade, t: temperatura, asp: aspecto,
-      fotosBase64: base64Principais, fotosAlertaBase64: base64Alerta, txtA: textoAlerta,
+      fotosBase64: arquivosPrincipais.length ? [] : base64Principais,
+      fotosAlertaBase64: arquivosAlerta.length ? [] : base64Alerta,
+      fotosArquivos: arquivosPrincipais,
+      fotosAlertaArquivos: arquivosAlerta,
+      txtA: textoAlerta,
       prods: produtosFaltando, pendenteSync: true,
       tempoTrabalhadoAcumulado: totalSegundos,
       tipo: 'visita',
@@ -287,6 +274,8 @@ export default function App() {
           ...novaVisita,
           fotosBase64: [],
           fotosAlertaBase64: [],
+          fotosArquivos: [],
+          fotosAlertaArquivos: [],
           fotos: [],
           fotosA: []
         });
@@ -319,14 +308,14 @@ export default function App() {
       );
       if (navigator.onLine) {
         await atualizarE_SalvarClientes(novosClientes);
-        const sincronizou = await processarFilaSincronizacao(user.uid, novosClientes, targetUid);
-        if (!sincronizou) {
-          showToast("Visita salva localmente. As fotos serão enviadas na próxima tentativa.");
-          return;
-        }
         localStorage.removeItem('maonagua_visita_progresso');
-        showToast("Visita e fotos salvas com sucesso!");
+        const pendentes = await getPendingVisits();
+        setPendentesCount(pendentes.length);
+        showToast("Visita salva no celular. Enviando fotos em segundo plano...");
         setTela('lista');
+        processarFilaSincronizacao(user.uid, novosClientes, targetUid).catch(error => {
+          console.error('Erro ao iniciar sincronização em segundo plano:', error);
+        });
       } else {
         setClientes(novosClientes);
         const pendentes = await getPendingVisits();

@@ -57,6 +57,8 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
             </button>
             <button 
               onClick={() => processarFilaSincronizacao(user.uid, clientes, targetUid)}
+              aria-label={isSyncing ? 'Enviando fotos para a nuvem' : pendentesCount > 0 ? `${pendentesCount} visita(s) aguardando envio` : 'Tudo salvo na nuvem'}
+              title={isSyncing ? 'Enviando fotos para a nuvem' : pendentesCount > 0 ? `${pendentesCount} visita(s) aguardando envio` : 'Tudo salvo na nuvem'}
               className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-500' : 'bg-slate-50 dark:bg-zinc-800 text-teal-500'}`}
             >
               {isSyncing ? <Cloud size={18} className="animate-pulse" /> : pendentesCount > 0 ? <CloudOff size={18} /> : <Cloud size={18} />}
@@ -64,6 +66,14 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
           </div>
         </div>
       </header>
+
+      {(isSyncing || pendentesCount > 0) && (
+        <div className={`max-w-md mx-auto px-6 pt-3 text-xs font-bold ${isSyncing ? 'text-sky-600 dark:text-sky-400' : 'text-amber-600 dark:text-amber-400'}`}>
+          {isSyncing
+            ? `Enviando ${pendentesCount || 1} visita(s) para a nuvem...`
+            : `${pendentesCount} visita(s) salva(s) no celular aguardando internet. Toque na nuvem para tentar novamente.`}
+        </div>
+      )}
 
       <main className="p-6 max-w-md mx-auto space-y-6">
         {/* Status Bar */}

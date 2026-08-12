@@ -3,7 +3,7 @@ import { auth, db, storage } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, addDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { getPendingVisits, removePendingVisit } from '../db';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AppContext = createContext();
@@ -78,15 +78,24 @@ export const AppProvider = ({ children }) => {
 
       for (const pendente of pendentes) {
         try {
-          const upImg = async (base64, path) => {
-            if (!base64 || !base64.startsWith('data:image')) return base64;
+          const upImg = async (imagem, path) => {
+            if (!imagem) return imagem;
             const storageRef = ref(storage, `usuarios/${donoUid}/${path}/${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`);
-            await uploadString(storageRef, base64, 'data_url');
+            if (imagem instanceof Blob) {
+              await uploadBytes(storageRef, imagem, { contentType: 'image/jpeg' });
+            } else if (typeof imagem === 'string' && imagem.startsWith('data:image')) {
+              // Mantém compatibilidade com fotos salvas antes desta otimização.
+              await uploadString(storageRef, imagem, 'data_url');
+            } else {
+              return imagem;
+            }
             return getDownloadURL(storageRef);
           };
 
-          const urlsPrincipais = await Promise.all((pendente.fotosBase64 || []).map(foto => upImg(foto, 'visitas')));
-          const urlsAlerta = await Promise.all((pendente.fotosAlertaBase64 || []).map(foto => upImg(foto, 'alertas')));
+          const fotosPrincipais = pendente.fotosArquivos?.length ? pendente.fotosArquivos : (pendente.fotosBase64 || []);
+          const fotosDeAlerta = pendente.fotosAlertaArquivos?.length ? pendente.fotosAlertaArquivos : (pendente.fotosAlertaBase64 || []);
+          const urlsPrincipais = await Promise.all(fotosPrincipais.map(foto => upImg(foto, 'visitas')));
+          const urlsAlerta = await Promise.all(fotosDeAlerta.map(foto => upImg(foto, 'alertas')));
           const visitasRef = collection(db, 'usuarios', donoUid, 'clientes', String(pendente.clienteId), 'visitas');
           const visitaQuery = query(visitasRef, where('vId', '==', pendente.id));
           const querySnapshot = await getDocs(visitaQuery);
@@ -96,6 +105,8 @@ export const AppProvider = ({ children }) => {
               ...pendente,
               fotosBase64: [],
               fotosAlertaBase64: [],
+              fotosArquivos: [],
+              fotosAlertaArquivos: [],
               fotos: urlsPrincipais,
               fotosA: urlsAlerta,
               pendenteSync: false

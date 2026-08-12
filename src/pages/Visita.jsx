@@ -3,26 +3,7 @@ import { AppContext } from '../context/AppContext.jsx';
 import { 
   ArrowLeft, Camera, AlertTriangle, Droplets, ShoppingCart, Check, Minus, Plus, Trash2, Wrench, Loader2, Clock, Pause, Send
 } from 'lucide-react';
-import imageCompression from 'browser-image-compression';
-
-const compressImage = async (file) => {
-  const options = {
-    maxSizeMB: 0.2,
-    maxWidthOrHeight: 1024,
-    useWebWorker: true,
-    fileType: 'image/jpeg'
-  };
-  return await imageCompression(file, options);
-};
-
-const fileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = error => reject(error);
-  });
-};
+import { compressImage, fileToBase64 } from '../utils/imageUtils';
 
 export default function Visita({ 
   setTela, clienteAtual, salvarVisita, handleNovaFoto, removerFoto, 

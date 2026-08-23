@@ -67,9 +67,9 @@ export default function Visita({
       fone = '55' + fone;
     }
     
-    const url = fone 
-      ? `https://wa.me/${fone}?text=${encondeURLComponent(msg)}`
-      : `https://wa.me/?tet=${encondeURLComponent(msg)}`;
+    const url = fone
+      ? `https://wa.me/${fone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
       
     window.open(url, '_blank');
   };

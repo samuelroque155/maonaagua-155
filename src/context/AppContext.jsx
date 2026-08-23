@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useRef } from 'react';
 import { auth, db, storage } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, addDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { getPendingVisits, removePendingVisit } from '../db';
 import { ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage';
 
@@ -97,26 +97,27 @@ export const AppProvider = ({ children }) => {
           const urlsPrincipais = await Promise.all(fotosPrincipais.map(foto => upImg(foto, 'visitas')));
           const urlsAlerta = await Promise.all(fotosDeAlerta.map(foto => upImg(foto, 'alertas')));
           const visitasRef = collection(db, 'usuarios', donoUid, 'clientes', String(pendente.clienteId), 'visitas');
-          const visitaQuery = query(visitasRef, where('vId', '==', pendente.id));
+          const visitaQuery = query(visitasRef, where('vId', '==', pendente.vId || pendente.id));
           const querySnapshot = await getDocs(visitaQuery);
 
+          const visitaSincronizada = {
+            ...pendente,
+            // Arquivos grandes pertencem somente ao aparelho. No Firestore ficam
+            // apenas as URLs, que são o que o relatório e o PDF conseguem abrir.
+            fotosBase64: [],
+            fotosAlertaBase64: [],
+            fotosArquivos: [],
+            fotosAlertaArquivos: [],
+            fotos: urlsPrincipais,
+            fotosA: urlsAlerta,
+            pendenteSync: false
+          };
+
           if (querySnapshot.empty) {
-            await addDoc(visitasRef, {
-              ...pendente,
-              fotosBase64: [],
-              fotosAlertaBase64: [],
-              fotosArquivos: [],
-              fotosAlertaArquivos: [],
-              fotos: urlsPrincipais,
-              fotosA: urlsAlerta,
-              pendenteSync: false
-            });
+            // Usa um id estável para não criar duas visitas ao repetir o envio.
+            await setDoc(doc(visitasRef, String(pendente.vId || pendente.id)), visitaSincronizada);
           } else {
-            await updateDoc(querySnapshot.docs[0].ref, {
-              fotos: urlsPrincipais,
-              fotosA: urlsAlerta,
-              pendenteSync: false
-            });
+            await updateDoc(querySnapshot.docs[0].ref, visitaSincronizada);
           }
 
           await removePendingVisit(pendente.id);
@@ -207,9 +208,15 @@ export const AppProvider = ({ children }) => {
             setClientes(targetSnap.exists() ? targetSnap.data().clientes || [] : []);
           });
 
-          if (navigator.onLine) await processarFilaSincronizacao(usuarioAtual.uid, [], targetId);
-          else setPendentesCount((await getPendingVisits()).length);
           setAuthLoading(false);
+
+          // A tela inicial não pode aguardar uploads. A sincronização continua em
+          // segundo plano e a fila permanece guardada se a internet cair.
+          if (navigator.onLine) {
+            void processarFilaSincronizacao(usuarioAtual.uid, [], targetId);
+          } else {
+            setPendentesCount((await getPendingVisits()).length);
+          }
         };
 
         const emailKey = usuarioAtual.email?.trim().toLowerCase();

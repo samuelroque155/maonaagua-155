@@ -68,8 +68,8 @@ export default function Visita({
     }
     
     const url = fone 
-      ? `https://api.whatsapp.com/send?phone=${fone}&text=${encodeURIComponent(msg)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+      ? `https://wa.me/${fone}?text=${encondeURLComponent(msg)}`
+      : `https://wa.me/?tet=${encondeURLComponent(msg)}`;
       
     window.open(url, '_blank');
   };

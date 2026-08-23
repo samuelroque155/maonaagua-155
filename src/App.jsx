@@ -1,8 +1,8 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext } from './context/AppContext.jsx';
 import { auth, db, storage } from './firebase';
 import { signOut } from 'firebase/auth';
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, deleteDoc, doc, updateDoc, addDoc, onSnapshot } from 'firebase/firestore';
 import { ref, deleteObject, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { savePendingVisit, getPendingVisits, removePendingVisit } from './db';
 import { compressImage, fileToBase64 } from './utils/imageUtils';
@@ -38,6 +38,7 @@ export default function App() {
   const [carregandoRelatorio, setCarregandoRelatorio] = useState(false);
   const [toast, setToast] = useState(null);
   const [salvandoVisita, setSalvandoVisita] = useState(false);
+  const relatorioUnsubscribeRef = useRef(null);
 
   // Estados dos Formulários
   const [aspecto, setAspecto] = useState('Cristalina');
@@ -73,17 +74,27 @@ export default function App() {
     }
   }, [ph, cloro, alcalinidade, temperatura, aspecto, textoAlerta, fotosVisita, fotosAlerta, produtosFaltando, clienteAtual, tela, horaInicioVisita]);
 
-  const abrirRelatorio = async (cliente) => {
+  useEffect(() => () => {
+    relatorioUnsubscribeRef.current?.();
+  }, []);
+
+  const abrirRelatorio = (cliente) => {
+    relatorioUnsubscribeRef.current?.();
     setClienteAtual(cliente);
     setTela('ver_relatorio');
     setCarregandoRelatorio(true);
-    try {
-      const q = query(collection(db, 'usuarios', targetUid, 'clientes', String(cliente.id), 'visitas'));
-      const snap = await getDocs(q);
+    const q = query(collection(db, 'usuarios', targetUid, 'clientes', String(cliente.id), 'visitas'));
+
+    // O relatório acompanha alterações em tempo real: quando o upload termina,
+    // as fotos aparecem sem o usuário precisar fechar e abrir novamente.
+    relatorioUnsubscribeRef.current = onSnapshot(q, (snap) => {
       const hist = snap.docs.map(d => d.data()).sort((a, b) => b.ts - a.ts);
       setHistoricoDoRelatorio(hist);
-    } catch (e) { console.error(e); }
-    setCarregandoRelatorio(false);
+      setCarregandoRelatorio(false);
+    }, (error) => {
+      console.error('Erro ao carregar relatório:', error);
+      setCarregandoRelatorio(false);
+    });
   };
 
   const abrirEdicaoCliente = (cliente) => {
@@ -269,18 +280,6 @@ export default function App() {
       // Salva imediatamente no banco local (IndexedDB) para garantir persistência offline
       await savePendingVisit(novaVisita);
 
-      if (navigator.onLine) {
-        await addDoc(collection(db, 'usuarios', targetUid, 'clientes', String(clienteAtual.id), 'visitas'), {
-          ...novaVisita,
-          fotosBase64: [],
-          fotosAlertaBase64: [],
-          fotosArquivos: [],
-          fotosAlertaArquivos: [],
-          fotos: [],
-          fotosA: []
-        });
-      }
-
       if (navigator.onLine && produtosFaltando && produtosFaltando.length > 0) {
         await addDoc(collection(db, 'usuarios', targetUid, 'alertasProdutos'), {
           clienteId: clienteAtual.id,
@@ -360,14 +359,6 @@ export default function App() {
 
     try {
       await savePendingVisit(novaOcorrencia);
-      await addDoc(collection(db, 'usuarios', targetUid, 'clientes', String(clienteAtual.id), 'visitas'), {
-        ...novaOcorrencia,
-        fotosBase64: [],
-        fotosAlertaBase64: [],
-        fotos: [],
-        fotosA: []
-      });
-
       processarFilaSincronizacao(user.uid, clientes, targetUid).catch(err => console.error(err));
       showToast("Ocorrência enviada com sucesso!");
       return true;

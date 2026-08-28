@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { getPendingVisits, removePendingVisit } from '../db';
 import { ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage';
+import { createReportThumbnail } from '../utils/imageUtils';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AppContext = createContext();
@@ -94,8 +95,31 @@ export const AppProvider = ({ children }) => {
 
           const fotosPrincipais = pendente.fotosArquivos?.length ? pendente.fotosArquivos : (pendente.fotosBase64 || []);
           const fotosDeAlerta = pendente.fotosAlertaArquivos?.length ? pendente.fotosAlertaArquivos : (pendente.fotosAlertaBase64 || []);
-          const urlsPrincipais = await Promise.all(fotosPrincipais.map(foto => upImg(foto, 'visitas')));
-          const urlsAlerta = await Promise.all(fotosDeAlerta.map(foto => upImg(foto, 'alertas')));
+          const novasUrlsPrincipais = await Promise.all(fotosPrincipais.map(foto => upImg(foto, 'visitas')));
+          const novasUrlsAlerta = await Promise.all(fotosDeAlerta.map(foto => upImg(foto, 'alertas')));
+          const urlsPrincipais = [...new Set([...(pendente.fotosExistentes || []), ...novasUrlsPrincipais].filter(Boolean))];
+          const urlsAlerta = [...new Set([...(pendente.fotosAlertaExistentes || []), ...novasUrlsAlerta].filter(Boolean))];
+
+          const completarMiniaturas = async (miniaturasSalvas = [], fotosOriginais = [], limite = 8) => {
+            const miniaturas = miniaturasSalvas.filter(Boolean).slice(0, limite);
+            const faltam = Math.max(0, limite - miniaturas.length);
+            if (faltam === 0) return miniaturas;
+
+            const geradas = await Promise.all(
+              fotosOriginais.slice(0, faltam).map(async (foto) => {
+                try {
+                  return await createReportThumbnail(foto);
+                } catch (thumbnailError) {
+                  console.warn('Não foi possível criar uma miniatura para o relatório:', thumbnailError);
+                  return null;
+                }
+              })
+            );
+            return [...miniaturas, ...geradas.filter(Boolean)];
+          };
+
+          const miniaturasPrincipais = await completarMiniaturas(pendente.fotosMiniaturas || [], fotosPrincipais, 8);
+          const miniaturasAlerta = await completarMiniaturas(pendente.fotosAlertaMiniaturas || [], fotosDeAlerta, 4);
           const visitasRef = collection(db, 'usuarios', donoUid, 'clientes', String(pendente.clienteId), 'visitas');
           const visitaQuery = query(visitasRef, where('vId', '==', pendente.vId || pendente.id));
           const querySnapshot = await getDocs(visitaQuery);
@@ -108,8 +132,12 @@ export const AppProvider = ({ children }) => {
             fotosAlertaBase64: [],
             fotosArquivos: [],
             fotosAlertaArquivos: [],
+            fotosExistentes: [],
+            fotosAlertaExistentes: [],
             fotos: urlsPrincipais,
             fotosA: urlsAlerta,
+            fotosMiniaturas: miniaturasPrincipais,
+            fotosAlertaMiniaturas: miniaturasAlerta,
             pendenteSync: false
           };
 

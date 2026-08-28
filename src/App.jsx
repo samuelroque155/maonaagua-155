@@ -2,10 +2,11 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext } from './context/AppContext.jsx';
 import { auth, db, storage } from './firebase';
 import { signOut } from 'firebase/auth';
-import { collection, query, where, deleteDoc, doc, updateDoc, addDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, deleteDoc, doc, updateDoc, addDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { ref, deleteObject, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { savePendingVisit, getPendingVisits, removePendingVisit } from './db';
-import { compressImage, fileToBase64 } from './utils/imageUtils';
+import { compressImage, createReportThumbnail, fileToBase64 } from './utils/imageUtils';
+import { abrirWhatsApp } from './utils/whatsapp';
 
 // Componentes das Páginas
 import Home from './pages/Home';
@@ -51,6 +52,7 @@ export default function App() {
   const [textoAlerta, setTextoAlerta] = useState('');
   const [produtosFaltando, setProdutosFaltando] = useState([]);
   const [horaInicioVisita, setHoraInicioVisita] = useState(null);
+  const [visitaEmEdicaoId, setVisitaEmEdicaoId] = useState(null);
 
   const showToast = (message) => {
     setToast(message);
@@ -68,11 +70,12 @@ export default function App() {
         clienteId: clienteAtual.id,
         ph, cloro, alcalinidade, temperatura, aspecto, textoAlerta,
         fotosVisita, fotosAlerta, produtosFaltando,
-        horaInicioVisita: horaInicioVisita ? horaInicioVisita.getTime() : null
+        horaInicioVisita: horaInicioVisita ? horaInicioVisita.getTime() : null,
+        visitaEmEdicaoId
       };
       localStorage.setItem('maonagua_visita_progresso', JSON.stringify(progresso));
     }
-  }, [ph, cloro, alcalinidade, temperatura, aspecto, textoAlerta, fotosVisita, fotosAlerta, produtosFaltando, clienteAtual, tela, horaInicioVisita]);
+  }, [ph, cloro, alcalinidade, temperatura, aspecto, textoAlerta, fotosVisita, fotosAlerta, produtosFaltando, clienteAtual, tela, horaInicioVisita, visitaEmEdicaoId]);
 
   useEffect(() => () => {
     relatorioUnsubscribeRef.current?.();
@@ -103,6 +106,7 @@ export default function App() {
   };
 
   const iniciarVisita = async (cliente) => {
+    setVisitaEmEdicaoId(null);
     const horaInicioMs = Date.now();
     const estavaEmAndamento = cliente.visitaEmAndamentoData === dataHojeStr;
     let novosClientes;
@@ -150,6 +154,7 @@ export default function App() {
           setFotosAlerta(progresso.fotosAlerta || []);
           setTextoAlerta(progresso.textoAlerta || '');
           setProdutosFaltando(progresso.produtosFaltando || []);
+          setVisitaEmEdicaoId(progresso.visitaEmEdicaoId || null);
           setTela('visita');
           return;
         }
@@ -184,7 +189,8 @@ export default function App() {
       clienteId: clienteAtual.id,
       ph, cloro, alcalinidade, temperatura, aspecto, textoAlerta,
       fotosVisita, fotosAlerta, produtosFaltando,
-      horaInicioVisita: null
+      horaInicioVisita: null,
+      visitaEmEdicaoId
     };
     localStorage.setItem('maonagua_visita_progresso', JSON.stringify(progresso));
     
@@ -201,8 +207,14 @@ export default function App() {
       try {
         const compressedFile = await compressImage(file);
         const base64 = await fileToBase64(compressedFile);
+        let miniatura = null;
+        try {
+          miniatura = await createReportThumbnail(compressedFile);
+        } catch (thumbnailError) {
+          console.warn('Não foi possível criar a miniatura da foto:', thumbnailError);
+        }
         const compressedUrl = URL.createObjectURL(compressedFile);
-        setFotosVisita(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, blob: compressedFile, status: 'ready' } : f));
+        setFotosVisita(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, blob: compressedFile, miniatura, status: 'ready' } : f));
       } catch (error) {
         console.error("Erro na compressão:", error);
         setFotosVisita(prev => prev.map(f => f.id === tempId ? { ...f, status: 'error' } : f));
@@ -219,8 +231,14 @@ export default function App() {
       try {
         const compressedFile = await compressImage(file);
         const base64 = await fileToBase64(compressedFile);
+        let miniatura = null;
+        try {
+          miniatura = await createReportThumbnail(compressedFile);
+        } catch (thumbnailError) {
+          console.warn('Não foi possível criar a miniatura da ocorrência:', thumbnailError);
+        }
         const compressedUrl = URL.createObjectURL(compressedFile);
-        setFotosAlerta(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, blob: compressedFile, status: 'ready' } : f));
+        setFotosAlerta(prev => prev.map(f => f.id === tempId ? { id: tempId, url: compressedUrl, base64, blob: compressedFile, miniatura, status: 'ready' } : f));
       } catch (error) {
         console.error("Erro na compressão:", error);
         setFotosAlerta(prev => prev.map(f => f.id === tempId ? { ...f, status: 'error' } : f));
@@ -258,8 +276,14 @@ export default function App() {
     const base64Alerta = fotosAlerta.map(f => f.base64).filter(Boolean);
     const arquivosPrincipais = fotosVisita.map(f => f.blob).filter(Boolean);
     const arquivosAlerta = fotosAlerta.map(f => f.blob).filter(Boolean);
+    const fotosExistentes = fotosVisita.map(f => f.remoteUrl).filter(Boolean);
+    const fotosAlertaExistentes = fotosAlerta.map(f => f.remoteUrl).filter(Boolean);
+    // Mantemos um conjunto leve para o PDF, sem aproximar o documento do
+    // limite de tamanho do Firestore.
+    const miniaturasPrincipais = fotosVisita.map(f => f.miniatura).filter(Boolean).slice(0, 8);
+    const miniaturasAlerta = fotosAlerta.map(f => f.miniatura).filter(Boolean).slice(0, 4);
 
-    const visitaId = Date.now();
+    const visitaId = visitaEmEdicaoId || Date.now();
     let novaVisita = {
       id: visitaId, vId: visitaId, clienteId: clienteAtual.id,
       d: dataFim.toLocaleDateString('pt-BR'), 
@@ -269,6 +293,10 @@ export default function App() {
       fotosAlertaBase64: arquivosAlerta.length ? [] : base64Alerta,
       fotosArquivos: arquivosPrincipais,
       fotosAlertaArquivos: arquivosAlerta,
+      fotosExistentes,
+      fotosAlertaExistentes,
+      fotosMiniaturas: miniaturasPrincipais,
+      fotosAlertaMiniaturas: miniaturasAlerta,
       txtA: textoAlerta,
       prods: produtosFaltando, pendenteSync: true,
       tempoTrabalhadoAcumulado: totalSegundos,
@@ -281,16 +309,20 @@ export default function App() {
       await savePendingVisit(novaVisita);
 
       if (navigator.onLine && produtosFaltando && produtosFaltando.length > 0) {
-        await addDoc(collection(db, 'usuarios', targetUid, 'alertasProdutos'), {
-          clienteId: clienteAtual.id,
-          clienteNome: clienteAtual.nome,
-          clienteTel: clienteAtual.telefone || '',
-          data: dataHojeStr,
-          produtos: produtosFaltando,
-          lido: false,
-          ts: Date.now(),
-          funcionarioAtivo: perfil?.nome || user?.email
-        });
+        try {
+          await addDoc(collection(db, 'usuarios', targetUid, 'alertasProdutos'), {
+            clienteId: clienteAtual.id,
+            clienteNome: clienteAtual.nome,
+            clienteTel: clienteAtual.telefone || '',
+            data: dataHojeStr,
+            produtos: produtosFaltando,
+            lido: false,
+            ts: Date.now(),
+            funcionarioAtivo: perfil?.nome || user?.email
+          });
+        } catch (alertaError) {
+          console.error('Não foi possível registrar o aviso de produtos:', alertaError);
+        }
       }
 
       const novosClientes = clientes.map(c => 
@@ -310,16 +342,18 @@ export default function App() {
         localStorage.removeItem('maonagua_visita_progresso');
         const pendentes = await getPendingVisits();
         setPendentesCount(pendentes.length);
-        showToast("Visita salva no celular. Enviando fotos em segundo plano...");
+        const sincronizou = await processarFilaSincronizacao(user.uid, novosClientes, targetUid);
+        setVisitaEmEdicaoId(null);
+        showToast(sincronizou
+          ? "Visita e fotos salvas no relatório!"
+          : "Visita salva no celular. As fotos serão enviadas quando a conexão voltar.");
         setTela('lista');
-        processarFilaSincronizacao(user.uid, novosClientes, targetUid).catch(error => {
-          console.error('Erro ao iniciar sincronização em segundo plano:', error);
-        });
       } else {
         setClientes(novosClientes);
         const pendentes = await getPendingVisits();
         setPendentesCount(pendentes.length);
         localStorage.removeItem('maonagua_visita_progresso');
+        setVisitaEmEdicaoId(null);
         showToast("Sem internet: visita salva localmente e aguardando envio.");
         setTela('lista');
       }
@@ -368,10 +402,72 @@ export default function App() {
     }
   };
 
+  const enviarAvisoWhatsApp = (cliente) => {
+    const mensagem = `Olá, ${cliente?.nome || ''}! 🌊\n\nSeu relatório de manutenção está disponível no aplicativo Mão Na Água.`;
+    if (!abrirWhatsApp(cliente?.telefone, mensagem)) {
+      alert('Cadastre no cliente um telefone com DDD para enviar uma mensagem pelo WhatsApp. Exemplo: (64) 99999-9999.');
+    }
+  };
+
   const reabrirTarefaDaHome = async (cliente) => {
-    const novosClientes = clientes.map(c => c.id === cliente.id ? { ...c, ultimaVisita: null } : c);
-    await atualizarE_SalvarClientes(novosClientes);
-    showToast("Visita reaberta.");
+    if (!navigator.onLine) {
+      alert('Conecte-se à internet para reabrir uma visita já concluída sem perder seus dados.');
+      return;
+    }
+
+    try {
+      const visitasRef = collection(db, 'usuarios', targetUid, 'clientes', String(cliente.id), 'visitas');
+      const visitasSnap = await getDocs(visitasRef);
+      const ultimaVisita = visitasSnap.docs
+        .map(item => item.data())
+        .filter(item => item.tipo !== 'problema')
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+
+      if (!ultimaVisita) {
+        alert('Não encontrei uma visita salva para reabrir neste cliente.');
+        return;
+      }
+
+      const horaInicioMs = Date.now();
+      const novosClientes = clientes.map(c => c.id === cliente.id
+        ? {
+            ...c,
+            ultimaVisita: null,
+            visitaEmAndamentoData: dataHojeStr,
+            tempoTrabalhadoAcumulado: ultimaVisita.tempoTrabalhadoAcumulado || 0,
+            horaInicioVisitaMs: horaInicioMs
+          }
+        : c);
+      const clienteAtualizado = novosClientes.find(c => c.id === cliente.id) || cliente;
+
+      const montarFotos = (urls = [], miniaturas = []) => urls.map((url, index) => ({
+        id: `existente-${index}-${Date.now()}`,
+        url,
+        remoteUrl: url,
+        miniatura: miniaturas[index] || null,
+        status: 'ready'
+      }));
+
+      setClienteAtual(clienteAtualizado);
+      setAspecto(ultimaVisita.asp || ultimaVisita.a || 'Cristalina');
+      setPh(ultimaVisita.p || '');
+      setCloro(ultimaVisita.c || '');
+      setAlcalinidade(ultimaVisita.al || '');
+      setTemperatura(ultimaVisita.t || '');
+      setFotosVisita(montarFotos(ultimaVisita.fotos, ultimaVisita.fotosMiniaturas));
+      setFotosAlerta(montarFotos(ultimaVisita.fotosA, ultimaVisita.fotosAlertaMiniaturas));
+      setTextoAlerta(ultimaVisita.txtA || '');
+      setProdutosFaltando(ultimaVisita.prods || []);
+      setHoraInicioVisita(new Date(horaInicioMs));
+      setVisitaEmEdicaoId(ultimaVisita.vId || ultimaVisita.id);
+
+      await atualizarE_SalvarClientes(novosClientes);
+      setTela('visita');
+      showToast('Visita reaberta com as informações já salvas.');
+    } catch (error) {
+      console.error('Erro ao reabrir visita:', error);
+      alert('Não foi possível reabrir a visita agora. Nenhuma informação foi apagada.');
+    }
   };
 
   const excluirCliente = async (id) => {
@@ -404,7 +500,7 @@ export default function App() {
   switch (tela) {
     case 'lista': return <Home setTela={setTela} iniciarVisita={iniciarVisita} reabrirTarefaDaHome={reabrirTarefaDaHome} toast={toast} />;
     case 'relatorio': return <Relatorios setTela={setTela} abrirRelatorio={abrirRelatorio} excluirCliente={excluirCliente} irParaNovoCliente={() => setTela('novo_cliente')} abrirEdicaoCliente={abrirEdicaoCliente} />;
-    case 'ver_relatorio': return <VerRelatorio setTela={setTela} cliente={clienteAtual} historico={historicoDoRelatorio} carregando={carregandoRelatorio} />;
+    case 'ver_relatorio': return <VerRelatorio setTela={setTela} cliente={clienteAtual} historico={historicoDoRelatorio} carregando={carregandoRelatorio} enviarAvisoWhatsApp={enviarAvisoWhatsApp} />;
     case 'visita': return <Visita 
       setTela={setTela} clienteAtual={clienteAtual} salvarVisita={salvarVisita}
       aspecto={aspecto} setAspecto={setAspecto} ph={ph} setPh={setPh} cloro={cloro} setCloro={setCloro} 

@@ -11,7 +11,8 @@ const urlToBase64 = async (url) => {
   if (!url) return null;
   if (url.startsWith('data:')) return url; // Already base64
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Imagem indisponível (${response.status})`);
     const blob = await response.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -171,29 +172,36 @@ export const gerarRelatorioPDF = async (cliente, historico, perfil) => {
         const imagensPrincipais = [];
         const imagensAlerta = [];
 
+        const carregarImagens = async (miniaturas, originais, destino) => {
+          // As miniaturas são guardadas junto à visita. Assim o PDF não fica
+          // dependente de converter uma URL remota durante a geração.
+          const fontes = miniaturas?.length
+            ? [...miniaturas, ...(originais || []).slice(miniaturas.length)]
+            : originais;
+          for (const fonte of fontes || []) {
+            if (!fonte) continue;
+            if (typeof fonte === 'string' && fonte.startsWith('data:image')) {
+              destino.push(fonte);
+              continue;
+            }
+            const b64 = await urlToBase64(fonte);
+            if (b64) destino.push(b64);
+          }
+        };
+
         // Fotos normais da piscina
-        if (v.fotosBase64 && v.fotosBase64.length > 0) {
-          for (let f of v.fotosBase64) {
-            if (f) imagensPrincipais.push(f);
-          }
-        } else if (v.fotos && v.fotos.length > 0) {
-          for (let url of v.fotos) {
-            const b64 = await urlToBase64(url);
-            if (b64) imagensPrincipais.push(b64);
-          }
-        }
+        await carregarImagens(
+          v.fotosMiniaturas,
+          v.fotosBase64?.length ? v.fotosBase64 : v.fotos,
+          imagensPrincipais
+        );
 
         // Fotos de alerta / ocorrência
-        if (v.fotosAlertaBase64 && v.fotosAlertaBase64.length > 0) {
-          for (let f of v.fotosAlertaBase64) {
-            if (f) imagensAlerta.push(f);
-          }
-        } else if (v.fotosA && v.fotosA.length > 0) {
-          for (let url of v.fotosA) {
-            const b64 = await urlToBase64(url);
-            if (b64) imagensAlerta.push(b64);
-          }
-        }
+        await carregarImagens(
+          v.fotosAlertaMiniaturas,
+          v.fotosAlertaBase64?.length ? v.fotosAlertaBase64 : v.fotosA,
+          imagensAlerta
+        );
 
         return { ...v, imagensPrincipais, imagensAlerta };
       })

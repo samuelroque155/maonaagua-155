@@ -25,6 +25,36 @@ const urlToBase64 = async (url) => {
   }
 };
 
+const formatoDaImagem = (imagem) => {
+  const tipo = String(imagem || '').match(/^data:image\/([a-zA-Z0-9+.-]+);/i)?.[1]?.toLowerCase();
+  if (tipo === 'png') return 'PNG';
+  if (tipo === 'webp') return 'WEBP';
+  return 'JPEG';
+};
+
+// Mostra qualquer foto dentro da área reservada, sem cortar a imagem ou
+// distorcê-la. Assim as fotos verticais e horizontais ficam boas no relatório.
+const adicionarMiniatura = (pdf, imagem, x, y, largura, altura) => {
+  try {
+    const propriedades = pdf.getImageProperties(imagem);
+    const escala = Math.min(largura / propriedades.width, altura / propriedades.height);
+    const larguraImagem = propriedades.width * escala;
+    const alturaImagem = propriedades.height * escala;
+    const posicaoX = x + (largura - larguraImagem) / 2;
+    const posicaoY = y + (altura - alturaImagem) / 2;
+
+    pdf.setFillColor(245, 245, 245);
+    pdf.rect(x, y, largura, altura, 'F');
+    pdf.addImage(imagem, formatoDaImagem(imagem), posicaoX, posicaoY, larguraImagem, alturaImagem, undefined, 'FAST');
+    pdf.setDrawColor(220, 220, 220);
+    pdf.rect(x, y, largura, altura, 'S');
+    return true;
+  } catch (error) {
+    console.warn('Erro ao inserir miniatura no PDF', error);
+    return false;
+  }
+};
+
 // Helper for date formatting
 const formatarDataCurta = (dataStr) => {
   if (!dataStr) return '';
@@ -233,39 +263,33 @@ export const gerarRelatorioPDF = async (cliente, historico, perfil) => {
       y += 8;
 
       let x = 15;
-      const imgWidth = 55;
-      const imgHeight = 55;
+      const imgWidth = 40;
+      const imgHeight = 36;
       const gap = 5;
 
       for (let v of visitasComFotos) {
         for (let base64 of v.imagensPrincipais) {
-          if (x + imgWidth > pageWidth - 10) {
+          if (x + imgWidth > pageWidth - 15) {
             x = 15;
-            y += imgHeight + gap;
-            if (y > 230) {
+            y += imgHeight + 12;
+            if (y + imgHeight + 10 > 280) {
               pdf.addPage();
               y = 20;
             }
           }
-          
-          try {
-            pdf.addImage(base64, 'JPEG', x, y, imgWidth, imgHeight);
-            
+
+          if (adicionarMiniatura(pdf, base64, x, y, imgWidth, imgHeight)) {
             pdf.setFillColor(0, 0, 0);
-            pdf.rect(x, y + imgHeight - 8, imgWidth, 8, 'F');
-            
-            pdf.setFontSize(8);
+            pdf.rect(x, y + imgHeight, imgWidth, 7, 'F');
+            pdf.setFontSize(7);
             pdf.setTextColor(255, 255, 255);
-            pdf.text(formatarDataCurta(v.d).toUpperCase(), x + (imgWidth/2), y + imgHeight - 2.5, { align: 'center' });
-            
-          } catch (e) {
-            console.warn("Erro ao inserir imagem no PDF", e);
+            pdf.text(formatarDataCurta(v.d).toUpperCase(), x + (imgWidth / 2), y + imgHeight + 4.8, { align: 'center' });
           }
-          
+
           x += imgWidth + gap;
         }
       }
-      y += imgHeight + 15;
+      if (x !== 15) y += imgHeight + 15;
     }
 
     // SEÇÃO DEDICADA A OCORRÊNCIAS TÉCNICAS E ALERTAS
@@ -314,11 +338,7 @@ export const gerarRelatorioPDF = async (cliente, historico, perfil) => {
           const ogap = 3;
 
           for (let img of o.imagensAlerta) {
-            try {
-              pdf.addImage(img, 'JPEG', ox, y + 14 + textoHeight, oimgWidth, oimgHeight);
-            } catch (e) {
-              console.warn("Erro ao inserir imagem de ocorrência no PDF", e);
-            }
+            adicionarMiniatura(pdf, img, ox, y + 14 + textoHeight, oimgWidth, oimgHeight);
             ox += oimgWidth + ogap;
           }
         }

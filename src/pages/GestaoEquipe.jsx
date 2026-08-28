@@ -3,6 +3,7 @@ import { AppContext } from '../context/AppContext.jsx';
 import { db } from '../firebase';
 import { collection, doc, getDocs, deleteDoc, updateDoc, query, orderBy, writeBatch } from 'firebase/firestore';
 import { UserPlus, UserMinus, ShieldAlert, CheckCircle, Bell, Users, Pencil } from 'lucide-react';
+import { abrirWhatsApp } from '../utils/whatsapp';
 
 export default function GestaoEquipe({ setTela }) {
   const { user, clientes, gradText, gradBtn } = useContext(AppContext);
@@ -258,7 +259,12 @@ export default function GestaoEquipe({ setTela }) {
 
                   <div className="flex gap-2">
                     {a.clienteTel && (
-                      <button onClick={() => window.open(`https://wa.me/55${a.clienteTel.replace(/\D/g, '')}?text=Olá, durante a manutenção notamos que faltam alguns produtos: ${a.produtos.map(p => `${p.qtd}x ${p.nome}`).join(', ')}.`, '_blank')} className="flex-1 py-3 text-xs font-bold bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 rounded-xl">
+                      <button onClick={() => {
+                        const mensagem = `Olá, durante a manutenção notamos que faltam alguns produtos: ${a.produtos.map(p => `${p.qtd}x ${p.nome}`).join(', ')}.`;
+                        if (!abrirWhatsApp(a.clienteTel, mensagem)) {
+                          alert('O telefone deste cliente precisa ter DDD para abrir o WhatsApp.');
+                        }
+                      }} className="flex-1 py-3 text-xs font-bold bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 rounded-xl">
                         Avisar Cliente
                       </button>
                     )}

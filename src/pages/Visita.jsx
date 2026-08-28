@@ -4,6 +4,7 @@ import {
   ArrowLeft, Camera, AlertTriangle, Droplets, ShoppingCart, Check, Minus, Plus, Trash2, Wrench, Loader2, Clock, Pause, Send
 } from 'lucide-react';
 import { compressImage, fileToBase64 } from '../utils/imageUtils';
+import { abrirWhatsApp } from '../utils/whatsapp';
 
 export default function Visita({ 
   setTela, clienteAtual, salvarVisita, handleNovaFoto, removerFoto, 
@@ -15,6 +16,7 @@ export default function Visita({
 }) {
   const { perfil, gradBtn } = useContext(AppContext);
   const gradIconBg = "bg-teal-500/10 text-teal-500";
+  const exibirPrecos = perfil.tipoConta !== 'autonomo';
 
   const [segundosExibicao, setSegundosExibicao] = useState(0);
   const [fotoOcorrencia, setFotoOcorrencia] = useState(null);
@@ -56,23 +58,13 @@ export default function Visita({
     produtosFaltando.forEach(p => {
       const itemTotal = p.qtd * (p.preco || 0);
       total += itemTotal;
-      msg += `• ${p.qtd}x ${p.nome}${p.preco ? ` - R$ ${p.preco.toFixed(2)} un. (Subtotal: R$ ${itemTotal.toFixed(2)})` : ''}\n`;
+      msg += `• ${p.qtd}x ${p.nome}${exibirPrecos && p.preco ? ` - R$ ${p.preco.toFixed(2)} un. (Subtotal: R$ ${itemTotal.toFixed(2)})` : ''}\n`;
     });
-    msg += `\n*Valor Total: R$ ${total.toFixed(2)}*\n\n`;
+    if (exibirPrecos) msg += `\n*Valor Total: R$ ${total.toFixed(2)}*\n\n`;
     msg += `Podemos confirmar o pedido?`;
-    
-    let fone = (clienteAtual.telefone || '').replace(/\D/g, '');
-    if (fone.startsWith('55')) fone = fone.slice(2);
-
-    // Um telefone brasileiro válido tem DDD + número (10 ou 11 dígitos).
-    // Sem isso o WhatsApp abre uma página de erro vermelha.
-    if (!/^\d{10,11}$/.test(fone)) {
+    if (!abrirWhatsApp(clienteAtual.telefone, msg)) {
       return alert('Cadastre no cliente um telefone com DDD para enviar o pedido pelo WhatsApp. Exemplo: (64) 99999-9999.');
     }
-
-    const telefoneComPais = `55${fone}`;
-    const url = `https://api.whatsapp.com/send?phone=${telefoneComPais}&text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleFotoOcorrenciaInput = async (e) => {
@@ -261,16 +253,18 @@ export default function Visita({
                           <span className="font-bold text-sm w-4 text-center text-teal-700 dark:text-teal-400">{item.qtd}</span>
                           <button onClick={() => updateQtdProduto(q, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300"><Plus size={14} /></button>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 pt-1.5 w-full justify-end">
-                          <span className="text-[10px] text-zinc-500 font-bold">R$</span>
-                          <input 
-                            type="number" 
-                            placeholder="Preço un." 
-                            value={item.preco || ''} 
-                            onChange={e => updatePrecoProduto(q, parseFloat(e.target.value) || 0)} 
-                            className="w-20 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-bold rounded-lg p-1.5 text-center outline-none focus:border-teal-400 text-zinc-800 dark:text-zinc-200"
-                          />
-                        </div>
+                        {exibirPrecos && (
+                          <div className="flex items-center gap-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 pt-1.5 w-full justify-end">
+                            <span className="text-[10px] text-zinc-500 font-bold">R$</span>
+                            <input
+                              type="number"
+                              placeholder="Preço un."
+                              value={item.preco || ''}
+                              onChange={e => updatePrecoProduto(q, parseFloat(e.target.value) || 0)}
+                              className="w-20 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-bold rounded-lg p-1.5 text-center outline-none focus:border-teal-400 text-zinc-800 dark:text-zinc-200"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -299,16 +293,18 @@ export default function Visita({
                           <span className="font-bold text-sm w-4 text-center text-teal-700 dark:text-teal-400">{item.qtd}</span>
                           <button onClick={() => updateQtdProduto(q, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300"><Plus size={14} /></button>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 pt-1.5 w-full justify-end">
-                          <span className="text-[10px] text-zinc-500 font-bold">R$</span>
-                          <input 
-                            type="number" 
-                            placeholder="Preço un." 
-                            value={item.preco || ''} 
-                            onChange={e => updatePrecoProduto(q, parseFloat(e.target.value) || 0)} 
-                            className="w-20 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-bold rounded-lg p-1.5 text-center outline-none focus:border-teal-400 text-zinc-800 dark:text-zinc-200"
-                          />
-                        </div>
+                        {exibirPrecos && (
+                          <div className="flex items-center gap-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 pt-1.5 w-full justify-end">
+                            <span className="text-[10px] text-zinc-500 font-bold">R$</span>
+                            <input
+                              type="number"
+                              placeholder="Preço un."
+                              value={item.preco || ''}
+                              onChange={e => updatePrecoProduto(q, parseFloat(e.target.value) || 0)}
+                              className="w-20 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-bold rounded-lg p-1.5 text-center outline-none focus:border-teal-400 text-zinc-800 dark:text-zinc-200"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -320,12 +316,14 @@ export default function Visita({
 
         {produtosFaltando.length > 0 && (
           <section className="bg-gradient-to-br from-teal-500/5 to-emerald-500/5 dark:from-teal-950/10 dark:to-emerald-950/10 p-6 rounded-[1.5rem] border border-teal-200 dark:border-teal-800/50 shadow-sm transition-colors relative overflow-hidden flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">Total do Pedido:</span>
-              <span className="text-lg font-black text-teal-600 dark:text-teal-400">
-                R$ {produtosFaltando.reduce((acc, curr) => acc + (curr.qtd * (curr.preco || 0)), 0).toFixed(2)}
-              </span>
-            </div>
+            {exibirPrecos && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">Total do Pedido:</span>
+                <span className="text-lg font-black text-teal-600 dark:text-teal-400">
+                  R$ {produtosFaltando.reduce((acc, curr) => acc + (curr.qtd * (curr.preco || 0)), 0).toFixed(2)}
+                </span>
+              </div>
+            )}
             <button
               onClick={enviarPedidoWhatsApp}
               className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-sm"

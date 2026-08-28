@@ -61,17 +61,18 @@ export default function Visita({
     msg += `\n*Valor Total: R$ ${total.toFixed(2)}*\n\n`;
     msg += `Podemos confirmar o pedido?`;
     
-    let fone = clienteAtual.telefone || '';
-    fone = fone.replace(/\D/g, '');
-    if (fone && !fone.startsWith('55') && fone.length >= 10) {
-      fone = '55' + fone;
+    let fone = (clienteAtual.telefone || '').replace(/\D/g, '');
+    if (fone.startsWith('55')) fone = fone.slice(2);
+
+    // Um telefone brasileiro válido tem DDD + número (10 ou 11 dígitos).
+    // Sem isso o WhatsApp abre uma página de erro vermelha.
+    if (!/^\d{10,11}$/.test(fone)) {
+      return alert('Cadastre no cliente um telefone com DDD para enviar o pedido pelo WhatsApp. Exemplo: (64) 99999-9999.');
     }
-    
-    const url = fone
-      ? `https://wa.me/${fone}?text=${encodeURIComponent(msg)}`
-      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-      
-    window.open(url, '_blank');
+
+    const telefoneComPais = `55${fone}`;
+    const url = `https://api.whatsapp.com/send?phone=${telefoneComPais}&text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleFotoOcorrenciaInput = async (e) => {

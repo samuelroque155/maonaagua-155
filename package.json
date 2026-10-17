@@ -21,6 +21,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/network": "^8.0.1",
     "@capacitor/share": "^8.0.1",
+    "@supabase/supabase-js": "^2.118.0",
     "@tailwindcss/vite": "^4.2.4",
     "browser-image-compression": "^2.0.2",
     "firebase": "^12.12.1",

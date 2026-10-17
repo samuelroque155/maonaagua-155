@@ -1,3 +1,4 @@
+import {supabase} from '../supabase';
 import React, { createContext, useState, useEffect, useRef } from 'react';
 import { auth, db, storage } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -24,6 +25,7 @@ const listaAcessorios = [
 export const AppProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [perfil, setPerfil] = useState({
     empresa: 'Mão Na Água', cidade: 'Sua Cidade', assinaturaAtiva: true,
     whatsappSuporte: '5564999999999', listaProdutos: listaQuimica, listaAcessorios: listaAcessorios

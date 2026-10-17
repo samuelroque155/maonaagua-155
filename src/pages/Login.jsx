@@ -1,6 +1,4 @@
-import React, { useState, useContext } from 'react';
-import { auth, googleProvider } from '../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup } from 'firebase/auth';
+import { supabase } from '../supabase';
 import { AppContext } from '../context/AppContext.jsx';
 
 export default function Login() {
@@ -10,38 +8,71 @@ export default function Login() {
   const [isRegistering, setIsRegistering] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !senha) return alert("Preencha e-mail e senha");
-    try {
-      await signInWithEmailAndPassword(auth, email, senha);
-    } catch (error) {
-      alert("Erro ao entrar: Verifique se o e-mail e a senha estão corretos.");
+    if (!email || !senha) {
+      return alert("Preencha e-mail e senha");
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password: senha
+    });
+
+    if (error) {
+      alert("Erro ao entrar: " + error.message);
     }
   };
 
   const handleCadastro = async () => {
-    if (!email || !senha) return alert("Preencha e-mail e senha");
-    if (senha.length < 6) return alert("A senha deve ter pelo menos 6 caracteres.");
-    try {
-      await createUserWithEmailAndPassword(auth, email, senha);
-    } catch (error) {
+    if (!email || !senha) {
+      return alert("Preencha e-mail e senha");
+    }
+
+    if (senha.length < 6) {
+      return alert("A senha deve ter pelo menos 6 caracteres.");
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: senha
+    });
+
+    if (error) {
       alert("Erro ao cadastrar: " + error.message);
+      return;
+    }
+
+    if (data.session) {
+      alert("Conta criada com sucesso!");
+    } else {
+      alert(
+        "Cadastro iniciado! Confira seu e-mail para confirmar a conta, se solicitado."
+      );
     }
   };
 
   const handleRecuperarSenha = async () => {
-    if (!email) return alert("Digite o seu e-mail acima para recuperar a senha.");
-    try {
-      await sendPasswordResetEmail(auth, email);
-      alert("✅ E-mail de recuperação enviado!");
-    } catch (error) {
-      alert("Erro ao enviar e-mail: Verifique se o e-mail está correto.");
+    if (!email) {
+      return alert("Digite o seu e-mail acima para recuperar a senha.");
     }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+
+    if (error) {
+      alert("Erro ao enviar e-mail: " + error.message);
+      return;
+    }
+
+    alert("Solicitação enviada! Confira seu e-mail.");
   };
 
   const handleGoogleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google'
+    });
+
+    if (error) {
       alert("Erro ao entrar com Google: " + error.message);
     }
   };

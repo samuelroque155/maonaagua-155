@@ -22,9 +22,10 @@ export default function GestaoEquipe({ setTela }) {
       carregarFuncionarios();
       carregarAlertas();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const carregarAlertas = async () => {
+  async function carregarAlertas() {
     try {
       const q = query(collection(db, 'usuarios', user.uid, 'alertasProdutos'), orderBy('ts', 'desc'));
       const snap = await getDocs(q);
@@ -43,7 +44,7 @@ export default function GestaoEquipe({ setTela }) {
     }
   };
 
-  const carregarFuncionarios = async () => {
+  async function carregarFuncionarios() {
     try {
       const snap = await getDocs(collection(db, 'usuarios', user.uid, 'funcionarios'));
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));

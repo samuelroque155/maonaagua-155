@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { AppContext } from '../context/AppContext.jsx';
+import React, { useContext, useState } from 'react';
 
 export default function Login() {
   const { gradText, gradBtn } = useContext(AppContext);
@@ -7,20 +8,36 @@ export default function Login() {
   const [senha, setSenha] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !senha) {
-      return alert("Preencha e-mail e senha");
-    }
+const handleLogin = async () => {
+  if (!email || !senha) {
+    return alert("Preencha e-mail e senha");
+  }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
+  try {
+    console.log("Iniciando login no Supabase...");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
       password: senha
     });
 
     if (error) {
+      console.error("Erro de login:", error.message);
       alert("Erro ao entrar: " + error.message);
+      return;
     }
-  };
+
+    console.log("Login respondeu. Sessão criada:", !!data.session);
+    alert(
+      data.session
+        ? "Login realizado! Agora vamos verificar a abertura do aplicativo."
+        : "Login respondeu, mas não retornou uma sessão."
+    );
+  } catch (erro) {
+    console.error("Falha inesperada no login:", erro);
+    alert("Falha inesperada ao entrar. Confira o console do navegador.");
+  }
+};
 
   const handleCadastro = async () => {
     if (!email || !senha) {
@@ -67,15 +84,31 @@ export default function Login() {
     alert("Solicitação enviada! Confira seu e-mail.");
   };
 
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google'
+  
+const handleGoogleLogin = async () => {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
     });
 
     if (error) {
-      alert("Erro ao entrar com Google: " + error.message);
+      console.error('Erro ao iniciar login com Google:', error);
+      alert('Erro ao entrar com Google: ' + error.message);
+      return;
     }
-  };
+
+    console.log('Redirecionando para autenticação Google:', data.url);
+  } catch (erro) {
+    console.error('Falha inesperada no login Google:', erro);
+    alert(
+      'Falha ao entrar com Google: ' +
+      (erro.message || 'Erro inesperado')
+    );
+  }
+};
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-white font-sans relative overflow-hidden">

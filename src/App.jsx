@@ -836,34 +836,66 @@ export default function App() {
         />
       );
 
+    // EDIÇÃO DE CLIENTES: atualiza apenas o registro do usuário autenticado.
     case 'editar_cliente':
       return (
         <NovoCliente
           setTela={setTela}
           clienteExistente={clienteEditando}
           salvarEdicaoCliente={async (id, dados) => {
-            const novoEndereco =
-              `${dados.rua}, ${dados.numero}, ${dados.bairro}`;
+            try {
+              const nome = dados.nome?.trim();
+              if (!nome) {
+                alert('Informe o nome do cliente.');
+                return;
+              }
 
-            const novos = clientes.map(c =>
-              c.id === id
-                ? {
-                    ...c,
-                    ...dados,
-                    endereco: novoEndereco,
-                    diasVisita: dados.dias,
-                    horaVisita: dados.hora
-                  }
-                : c
-            );
+              const { data: { user: usuario }, error: erroAuth } =
+                await supabase.auth.getUser();
+              if (erroAuth || !usuario) {
+                throw new Error('Sua sessão expirou. Faça login novamente.');
+              }
 
-            await atualizarE_SalvarClientes(novos);
+              const endereco = `${dados.rua || ''}, ${dados.numero || ''}, ${dados.bairro || ''}`;
+              const alteracoes = {
+                nome,
+                telefone: dados.telefone || '',
+                rua: dados.rua || '',
+                numero: dados.numero || '',
+                bairro: dados.bairro || '',
+                endereco,
+                dias_visita: dados.dias || [],
+                hora_visita: dados.hora || null
+              };
 
-            showToast(
-              'Cliente atualizado com sucesso!'
-            );
+              const { data: clienteSalvo, error } = await supabase
+                .from('clientes')
+                .update(alteracoes)
+                .eq('id', id)
+                .eq('user_id', usuario.id)
+                .select()
+                .single();
 
-            setTela('relatorio');
+              if (error) throw error;
+              if (!clienteSalvo) throw new Error('Cliente não encontrado.');
+
+              // Mantém os nomes de campos esperados pelas telas existentes.
+              const clienteAtualizado = {
+                ...clienteSalvo,
+                diasVisita: clienteSalvo.dias_visita || [],
+                horaVisita: clienteSalvo.hora_visita || ''
+              };
+
+              setClientes(anteriores => anteriores.map(c =>
+                c.id === id ? { ...c, ...clienteAtualizado } : c
+              ));
+              setClienteEditando(null);
+              showToast('Cliente atualizado no Supabase!');
+              setTela('relatorio');
+            } catch (erro) {
+              console.error('Erro ao editar cliente no Supabase:', erro);
+              alert('Erro ao editar cliente: ' + erro.message);
+            }
           }}
         />
       );

@@ -13,7 +13,7 @@ const urlToBase64 = async (url) => {
   if (url.startsWith('data:')) return url;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-store' });
 
     if (!response.ok) {
       throw new Error(`Erro ao carregar imagem: ${response.status}`);
@@ -240,33 +240,17 @@ export const gerarRelatorioPDF = async (
         const imagensPrincipais = [];
         const imagensAlerta = [];
 
-        if (
-          Array.isArray(v.fotosBase64) &&
-          v.fotosBase64.length > 0
-        ) {
-          for (const foto of v.fotosBase64) {
-            if (foto) imagensPrincipais.push(foto);
+        const carregarImagens = async (miniaturas, originais, destino) => {
+          const fontes = miniaturas?.length
+            ? [...miniaturas, ...(originais || []).slice(miniaturas.length)]
+            : originais || [];
+          for (const fonte of fontes) {
+            const base64 = await urlToBase64(fonte);
+            if (base64) destino.push(base64);
           }
-        } else if (Array.isArray(v.fotos)) {
-          for (const url of v.fotos) {
-            const base64 = await urlToBase64(url);
-            if (base64) imagensPrincipais.push(base64);
-          }
-        }
-
-        if (
-          Array.isArray(v.fotosAlertaBase64) &&
-          v.fotosAlertaBase64.length > 0
-        ) {
-          for (const foto of v.fotosAlertaBase64) {
-            if (foto) imagensAlerta.push(foto);
-          }
-        } else if (Array.isArray(v.fotosA)) {
-          for (const url of v.fotosA) {
-            const base64 = await urlToBase64(url);
-            if (base64) imagensAlerta.push(base64);
-          }
-        }
+        };
+        await carregarImagens(v.fotosMiniaturas, v.fotosBase64?.length ? v.fotosBase64 : v.fotos, imagensPrincipais);
+        await carregarImagens(v.fotosAlertaMiniaturas, v.fotosAlertaBase64?.length ? v.fotosAlertaBase64 : v.fotosA, imagensAlerta);
 
         return {
           ...v,

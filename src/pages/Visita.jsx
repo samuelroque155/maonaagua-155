@@ -20,30 +20,8 @@ import {
   Save,
   X
 } from 'lucide-react';
-import imageCompression from 'browser-image-compression';
+import { compressImage, fileToBase64 } from '../utils/imageUtils';
 import { mensagemProdutos, urlWhatsApp, resumirProdutos } from '../services/whatsappService';
-
-const compressImage = async (file) => {
-  const options = {
-    maxSizeMB: 0.2,
-    maxWidthOrHeight: 1024,
-    useWebWorker: true,
-    fileType: 'image/jpeg'
-  };
-
-  return await imageCompression(file, options);
-};
-
-const fileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.readAsDataURL(file);
-
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-  });
-};
 
 export default function Visita({
   setTela,

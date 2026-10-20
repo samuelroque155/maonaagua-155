@@ -6,9 +6,11 @@ import { criarProcessadorRetorno, mensagemErroAuth } from '../services/authServi
 import { carregarPerfil as obterPerfil, mapearPerfil, salvarPerfilProfissional, salvarTipoPerfil, normalizarTipoPerfil } from '../services/perfilService';
 import React, { createContext, useState, useEffect, useRef, useCallback } from 'react';
 import { consultarAssinatura } from '../services/assinaturaService';
-import { db, storage } from '../firebase';
+import { auth as firebaseAuth, db, storage } from '../firebase';
+import { createReportThumbnail } from '../utils/imageUtils';
 import {
   doc,
+  setDoc,
   updateDoc,
   collection,
   getDocs,
@@ -22,6 +24,7 @@ import {
 import {
   ref,
   uploadString,
+  uploadBytes,
   getDownloadURL
 } from 'firebase/storage';
 
@@ -85,8 +88,13 @@ export const AppProvider = ({ children }) => {
   const [tela, setTela] = useState('lista');
 
   const [modoEscuro, setModoEscuro] = useState(() => {
-    const salvo = localStorage.getItem('maonagua_tema');
-    return salvo !== null ? JSON.parse(salvo) : true;
+    try {
+      const salvo = localStorage.getItem('maonagua_tema');
+      return salvo !== null ? JSON.parse(salvo) : true;
+    } catch (erro) {
+      console.error('Erro ao carregar tema salvo:', erro);
+      return true;
+    }
   });
 
   const [pendentesCount, setPendentesCount] = useState(0);
@@ -332,122 +340,120 @@ export const AppProvider = ({ children }) => {
 
   // Sincronização antiga de fotos e visitas offline.
   // Continua dependendo do Firebase e precisa ser migrada.
-  async function processarFilaSincronizacao(
-    usuarioUid,
-    currentClientesState,
-    tUid = targetUid
-  ) {
-    if (
-      isSyncingRef.current ||
-      !navigator.onLine ||
-      !usuarioUid ||
-      !tUid
-    ) {
-      return;
-    }
+  async function processarFilaSincronizacao(usuarioUid, currentClientesState, tUid) {
+    void currentClientesState;
+    // A fila legada exige a mesma identidade autenticada no Firebase.
+    if (firebaseAuth.currentUser?.uid !== usuarioUid) return false;
+    const donoUid = tUid || targetUid;
+    if (isSyncingRef.current || !navigator.onLine || !usuarioUid || !donoUid) return false;
 
     isSyncingRef.current = true;
     setIsSyncing(true);
+    console.log('🔄 Iniciando sincronização...');
 
     try {
       const pendentes = await getPendingVisits();
-
       if (pendentes.length === 0) {
         setPendentesCount(0);
-        return;
+        return true;
       }
-
       setPendentesCount(pendentes.length);
 
       for (const pendente of pendentes) {
         try {
-          const upImg = async (base64, caminho) => {
-            if (!base64 || !base64.startsWith('data:image')) {
-              return base64;
+          const upImg = async (imagem, path) => {
+            if (!imagem) return imagem;
+            const storageRef = ref(storage, `usuarios/${donoUid}/${path}/${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`);
+            if (imagem instanceof Blob) {
+              await uploadBytes(storageRef, imagem, { contentType: 'image/jpeg' });
+            } else if (typeof imagem === 'string' && imagem.startsWith('data:image')) {
+              // Mantém compatibilidade com fotos salvas antes desta otimização.
+              await uploadString(storageRef, imagem, 'data_url');
+            } else {
+              return imagem;
             }
-
-            const storageRef = ref(
-              storage,
-              `usuarios/${usuarioUid}/${caminho}/${Date.now()}_${Math.floor(
-                Math.random() * 1000
-              )}.jpg`
-            );
-
-            await uploadString(storageRef, base64, 'data_url');
-            return await getDownloadURL(storageRef);
+            return getDownloadURL(storageRef);
           };
 
-          const urlsPrincipais = await Promise.all(
-            (pendente.fotosBase64 || []).map((foto) =>
-              upImg(foto, 'visitas')
-            )
-          );
+          const fotosPrincipais = pendente.fotosArquivos?.length ? pendente.fotosArquivos : (pendente.fotosBase64 || []);
+          const fotosDeAlerta = pendente.fotosAlertaArquivos?.length ? pendente.fotosAlertaArquivos : (pendente.fotosAlertaBase64 || []);
+          const novasUrlsPrincipais = await Promise.all(fotosPrincipais.map(foto => upImg(foto, 'visitas')));
+          const novasUrlsAlerta = await Promise.all(fotosDeAlerta.map(foto => upImg(foto, 'alertas')));
+          const urlsPrincipais = [...new Set([...(pendente.fotosExistentes || []), ...novasUrlsPrincipais].filter(Boolean))];
+          const urlsAlerta = [...new Set([...(pendente.fotosAlertaExistentes || []), ...novasUrlsAlerta].filter(Boolean))];
 
-          const urlsAlerta = await Promise.all(
-            (pendente.fotosAlertaBase64 || []).map((foto) =>
-              upImg(foto, 'alertas')
-            )
-          );
+          const completarMiniaturas = async (miniaturasSalvas = [], fotosOriginais = [], limite = 8) => {
+            const miniaturas = miniaturasSalvas.filter(Boolean).slice(0, limite);
+            const faltam = Math.max(0, limite - miniaturas.length);
+            if (faltam === 0) return miniaturas;
 
-          const q = query(
-            collection(
-              db,
-              'usuarios',
-              tUid,
-              'clientes',
-              String(pendente.clienteId),
-              'visitas'
-            ),
-            where('vId', '==', pendente.id)
-          );
+            const geradas = await Promise.all(
+              fotosOriginais.slice(0, faltam).map(async (foto) => {
+                try {
+                  return await createReportThumbnail(foto);
+                } catch (thumbnailError) {
+                  console.warn('Não foi possível criar uma miniatura para o relatório:', thumbnailError);
+                  return null;
+                }
+              })
+            );
+            return [...miniaturas, ...geradas.filter(Boolean)];
+          };
 
-          const querySnapshot = await getDocs(q);
+          const miniaturasPrincipais = await completarMiniaturas(pendente.fotosMiniaturas || [], fotosPrincipais, 8);
+          const miniaturasAlerta = await completarMiniaturas(pendente.fotosAlertaMiniaturas || [], fotosDeAlerta, 4);
+          const visitasRef = collection(db, 'usuarios', donoUid, 'clientes', String(pendente.clienteId), 'visitas');
+          const visitaQuery = query(visitasRef, where('vId', '==', pendente.vId || pendente.id));
+          const querySnapshot = await getDocs(visitaQuery);
 
-          if (!querySnapshot.empty) {
-            await updateDoc(querySnapshot.docs[0].ref, {
-              fotos: urlsPrincipais,
-              fotosA: urlsAlerta,
-              pendenteSync: false
-            });
+          const visitaSincronizada = {
+            ...pendente,
+            // Arquivos grandes pertencem somente ao aparelho. No Firestore ficam
+            // apenas as URLs, que são o que o relatório e o PDF conseguem abrir.
+            fotosBase64: [],
+            fotosAlertaBase64: [],
+            fotosArquivos: [],
+            fotosAlertaArquivos: [],
+            fotosExistentes: [],
+            fotosAlertaExistentes: [],
+            fotos: urlsPrincipais,
+            fotosA: urlsAlerta,
+            fotosMiniaturas: miniaturasPrincipais,
+            fotosAlertaMiniaturas: miniaturasAlerta,
+            pendenteSync: false
+          };
+
+          if (querySnapshot.empty) {
+            // Usa um id estável para não criar duas visitas ao repetir o envio.
+            await setDoc(doc(visitasRef, String(pendente.vId || pendente.id)), visitaSincronizada);
+          } else {
+            await updateDoc(querySnapshot.docs[0].ref, visitaSincronizada);
           }
 
           await removePendingVisit(pendente.id);
-
           const restantes = await getPendingVisits();
           setPendentesCount(restantes.length);
-        } catch (erro) {
-          console.error(
-            `Erro ao sincronizar a visita ${pendente.id}:`,
-            erro
-          );
-
-          if (
-            !navigator.onLine ||
-            erro.message?.includes('network') ||
-            erro.code?.includes('network') ||
-            erro.message?.includes('failed-precondition')
-          ) {
-            break;
-          }
-
-          // Mantém o comportamento anterior do projeto.
-          // O tratamento de erros será revisado na migração da fila.
-          await removePendingVisit(pendente.id);
-
-          const restantes = await getPendingVisits();
-          setPendentesCount(restantes.length);
+        } catch (error) {
+          console.error(`❌ Falha no item ${pendente.id}`, error);
+          console.log('⚠️ O item será mantido na fila para uma nova tentativa.');
+          break;
         }
       }
-    } catch (erro) {
-      console.error('Erro na fila de sincronização:', erro);
+
+      const restantes = await getPendingVisits();
+      setPendentesCount(restantes.length);
+      return restantes.length === 0;
+    } catch (error) {
+      console.error('❌ Erro na fila:', error);
+      return false;
     } finally {
       isSyncingRef.current = false;
       setIsSyncing(false);
+      console.log('🏁 Fila processada.');
     }
   }
 
-  // Mantém o evento de retorno da conexão.
-  // A sincronização abaixo ainda utiliza Firebase.
+
   useEffect(() => {
     const handleOnline = () => {
       if (user && navigator.onLine) {

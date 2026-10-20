@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import { db } from './firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { savePendingVisit } from './db';
-import imageCompression from 'browser-image-compression';
+import { compressImage, fileToBase64 } from './utils/imageUtils';
 
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -24,26 +24,6 @@ import { temAcessoAoApp } from './services/assinaturaService';
 import { enviarFotoVisita } from './services/fotosService';
 import { lerProgresso, salvarProgresso, removerProgresso } from './services/progressoVisita';
 import { criarControleBusca, fotosDaVisita } from './services/visitaEstado';
-
-const compressImage = async (file) => {
-  return imageCompression(file, {
-    maxSizeMB: 0.2,
-    maxWidthOrHeight: 1024,
-    useWebWorker: true,
-    fileType: 'image/jpeg'
-  });
-};
-
-const fileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.readAsDataURL(file);
-
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-  });
-};
 
 const normalizarTipoConta = (tipo) => {
   return String(tipo || '')

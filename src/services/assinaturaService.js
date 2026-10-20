@@ -1,5 +1,6 @@
-export function temAcessoAoApp(usuario, perfil) {
-  return Boolean(usuario) && (perfil?.assinaturaAtiva === true || usuario.app_metadata?.role === 'admin');
+export function temAcessoAoApp(usuario) {
+  // Acesso gratuito: autenticação continua obrigatória; assinatura não bloqueia o app.
+  return Boolean(usuario?.id);
 }
 
 // Consulta apenas o direito de acesso da própria conta; não grava pagamentos.

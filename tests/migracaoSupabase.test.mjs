@@ -45,6 +45,7 @@ test('migração SQL: empresa, funcionário, rotas, fotos, alertas e revogação
       insert into clientes(id,user_id,nome) values(1,'${owner}','Rota atribuída'),(2,'${owner}','Rota restrita'),(3,'${other}','Outra empresa');
     `);
     await db.exec(await readFile(new URL('../scripts/migrar-firebase-supabase.sql', import.meta.url), 'utf8'));
+    await db.exec(await readFile(new URL('../scripts/liberar-acesso-gratuito.sql', import.meta.url), 'utf8'));
     const asUser = async (id, fn, role = 'authenticated') => {
       await db.exec(`begin; set local role ${role}; select set_config('request.jwt.claim.sub','${id}',true);`);
       try { return await fn(); } finally { await db.exec('rollback'); }
@@ -96,7 +97,8 @@ test('migração SQL: empresa, funcionário, rotas, fotos, alertas e revogação
     await db.exec(`update auth.users set email_confirmed_at=now() where id='${worker}'; update perfis set assinatura_ativa=false where id='${owner}'`);
     await asUser(worker, async () => {
       assert.equal((await rows('select * from contexto_equipe()'))[0].assinatura_ativa, false);
-      assert.equal((await rows('select * from clientes')).length, 0);
+      assert.equal((await rows('select * from clientes')).length, 1);
+      await db.exec(`insert into visitas(user_id,cliente_id) values('${owner}',1)`);
     });
     await db.exec(`delete from equipes_links; update perfis set vinculo_empresa='${owner}',rotas='[1]',tipo_conta='funcionario' where id='${worker}'`);
     await asUser(worker, async () => {

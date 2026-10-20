@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { verificarGoogleDisponivel, mensagemErroAuth } from '../src/services/authService.js';
 import { consultarAssinatura, checkoutKiwify, temAcessoAoApp } from '../src/services/assinaturaService.js';
 
-test('acesso exige assinatura ativa ou papel administrativo do servidor', () => {
-  assert.equal(temAcessoAoApp({ id: 'u1' }, { assinaturaAtiva: false }), false);
+test('acesso gratuito permite qualquer conta autenticada, sem exigir assinatura ou papel admin', () => {
+  assert.equal(temAcessoAoApp({ id: 'u1' }, { assinaturaAtiva: false }), true);
   assert.equal(temAcessoAoApp({ id: 'u1' }, { assinaturaAtiva: true }), true);
   assert.equal(temAcessoAoApp({ id: 'dono', app_metadata: { role: 'admin' } }, { assinaturaAtiva: false }), true);
-  assert.equal(temAcessoAoApp({ id: 'u1', email: 'dono@exemplo.com', user_metadata: { role: 'admin', assinaturaAtiva: true } }, { assinaturaAtiva: false }), false);
+  assert.equal(temAcessoAoApp({ id: 'u1', email: 'outra@exemplo.com' }, { assinaturaAtiva: false }), true);
+  assert.equal(temAcessoAoApp({ id: 'nova' }, null), true);
+  assert.equal(temAcessoAoApp({}, { assinaturaAtiva: true }), false);
   assert.equal(temAcessoAoApp(null, { assinaturaAtiva: true }), false);
 });
 

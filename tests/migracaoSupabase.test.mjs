@@ -46,6 +46,7 @@ test('migração SQL: empresa, funcionário, rotas, fotos, alertas e revogação
     `);
     await db.exec(await readFile(new URL('../scripts/migrar-firebase-supabase.sql', import.meta.url), 'utf8'));
     await db.exec(await readFile(new URL('../scripts/liberar-acesso-gratuito.sql', import.meta.url), 'utf8'));
+    await db.exec(await readFile(new URL('../scripts/corrigir-acesso-rotas.sql', import.meta.url), 'utf8'));
     const asUser = async (id, fn, role = 'authenticated') => {
       await db.exec(`begin; set local role ${role}; select set_config('request.jwt.claim.sub','${id}',true);`);
       try { return await fn(); } finally { await db.exec('rollback'); }
@@ -67,6 +68,13 @@ test('migração SQL: empresa, funcionário, rotas, fotos, alertas e revogação
     });
     await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${worker}',true);
       insert into visitas(id,user_id,cliente_id,produtos,fotos) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','${owner}',1,'[{"nome":"Cloro","qtd":2}]','["${worker}/visitas/foto.jpg"]');commit;`);
+    await db.exec(`update perfis set tipo_conta='autonomo' where id='${owner}'`);
+    await asUser(worker, async () => {
+      assert.deepEqual((await rows('select id from clientes order by id')).map(r => r.id), [1]);
+      assert.equal((await rows('select tipo_conta from perfis'))[0].tipo_conta, 'autonomo');
+      assert.equal((await rows('select * from contexto_equipe()'))[0].employer_uid, owner);
+      await db.exec(`insert into visitas(user_id,cliente_id) values('${owner}',1)`);
+    });
     await db.exec(`insert into storage.objects(bucket_id,name) values('fotos-visitas','${worker}/visitas/foto.jpg'),('fotos-visitas','${other}/visitas/privada.jpg');`);
     await asUser(owner, async () => {
       assert.equal((await rows('select * from visitas')).length, 1);

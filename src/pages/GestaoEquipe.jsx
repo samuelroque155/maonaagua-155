@@ -148,7 +148,7 @@ export default function GestaoEquipe({ setTela }) {
           <>
             {isAdding ? (
               <div className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-4">{funcionarioEditando ? 'Editar rotas' : 'Novo Funcionário'}</h2>
+                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-4">{funcionarioEditando ? 'Editar funcionário e rotas' : 'Novo Funcionário'}</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider ml-2">Nome Completo</label>
@@ -156,7 +156,8 @@ export default function GestaoEquipe({ setTela }) {
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider ml-2">E-mail de Login</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={Boolean(funcionarioEditando)} className="w-full bg-slate-50 dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl outline-none focus:border-teal-400 dark:text-white disabled:opacity-60" />
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl outline-none focus:border-teal-400 dark:text-white" />
+                    <p className="text-xs text-zinc-500 mt-2">Use exatamente o email com que o funcionário entra no app. Ao corrigir o email, as rotas passam para a conta correspondente.</p>
                   </div>
                   
                   <div className="pt-2">

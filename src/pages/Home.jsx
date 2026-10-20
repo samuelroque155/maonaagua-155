@@ -1,5 +1,5 @@
 
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
 import { limpezaConcluida } from '../services/visitaEstado';
 import {
@@ -12,6 +12,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
     pendentesCount, pendentesLegados, erroSincronizacao, isSyncing, handleSair, gradText, gradBtn,
     diaAtual, dataHojeStr, processarFilaSincronizacao, tela, targetUid
   } = useContext(AppContext);
+  const [mostrarTodasRotas, setMostrarTodasRotas] = useState(true);
 
   let clientesFiltrados = clientes;
   if (perfil.tipoConta === 'funcionario' && perfil.rotas) {
@@ -28,6 +29,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
   const visitasEmAndamento = perfil.tipoConta === 'empresa'
     ? clientes.filter(c => c.visitaEmAndamentoData === dataHojeStr)
     : [];
+  const clientesExibidos = perfil.tipoConta === 'funcionario' && mostrarTodasRotas ? clientesFiltrados : piscinasDeHoje;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 font-sans pb-24 transition-colors duration-300 relative overflow-x-hidden">
@@ -138,7 +140,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
         <div className="space-y-4">
           <div className="flex items-center justify-between ml-2">
             <h2 className="text-xs font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">
-              Limpar Hoje
+              {perfil.tipoConta === 'funcionario' && mostrarTodasRotas ? 'Minhas rotas' : 'Limpar Hoje'}
             </h2>
             <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">
               {new Date().toLocaleDateString('pt-BR', {
@@ -149,15 +151,21 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
             </span>
           </div>
 
-          {piscinasDeHoje.length === 0 ? (
+          {perfil.tipoConta === 'funcionario' && <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-zinc-500">{clientesFiltrados.length} rota(s) atribuída(s)</span>
+            <button onClick={() => setMostrarTodasRotas(valor => !valor)} className="font-bold text-teal-600 dark:text-teal-400">
+              {mostrarTodasRotas ? 'Mostrar somente hoje' : 'Ver todas as rotas'}
+            </button>
+          </div>}
+          {clientesExibidos.length === 0 ? (
             <div className="bg-white dark:bg-zinc-900 p-10 rounded-[2.5rem] border border-dashed border-zinc-200 dark:border-zinc-800 text-center">
               <div className="w-16 h-16 bg-slate-50 dark:bg-zinc-950 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-400/30">
                 <Plus size={32} />
               </div>
-              <p className="text-sm font-bold text-zinc-400">Tudo limpo por hoje!</p>
+              <p className="text-sm font-bold text-zinc-400">{perfil.tipoConta === 'funcionario' && mostrarTodasRotas ? 'Nenhuma rota atribuída para esta conta.' : 'Tudo limpo por hoje!'}</p>
             </div>
           ) : (
-            piscinasDeHoje.map(cliente => {
+            clientesExibidos.map(cliente => {
               const pausada = String(progressoPausado?.clienteId) === String(cliente.id);
               const concluida = !pausada && limpezaConcluida(cliente, new Date(dataHojeStr));
               const emAndamento = (

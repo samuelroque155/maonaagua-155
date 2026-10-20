@@ -1,5 +1,8 @@
 
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useContext, useMemo, useState, useEffect } from 'react';
+import { supabase } from '../supabase';
+import { resolverImagemPerfil } from '../services/imagemPerfilService';
+import { identificacaoCliente } from '../services/identidadeRelatorio';
 import { visitasDoCliente } from '../services/visitaEstado';
 import { AppContext } from '../context/AppContext.jsx';
 import { gerarRelatorioPDF } from '../services/pdfService';
@@ -193,6 +196,14 @@ export default function VerRelatorio({
     perfil,
     modoImpressao
   } = useContext(AppContext);
+  const [fotoProfissional, setFotoProfissional] = useState('');
+  useEffect(() => {
+    let ativo = true;
+    resolverImagemPerfil(supabase, { fotoPerfilCaminho: perfil.fotoPerfilCaminho })
+      .then(url => { if (ativo) setFotoProfissional(url); })
+      .catch(() => { if (ativo) setFotoProfissional(''); });
+    return () => { ativo = false; };
+  }, [perfil.fotoPerfilCaminho]);
 
   const [loadingPDF, setLoadingPDF] =
     useState(false);
@@ -356,10 +367,11 @@ export default function VerRelatorio({
     setLoadingPDF(true);
 
     try {
+      const fotoPerfilUrl = await resolverImagemPerfil(supabase, perfil, true);
       await gerarRelatorioPDF(
         cliente,
         historicoFiltrado,
-        perfil
+        { ...perfil, fotoPerfilUrl }
       );
     } catch (erro) {
       console.error(
@@ -393,6 +405,7 @@ export default function VerRelatorio({
       `*${titulo} - MÃO NA ÁGUA*`,
       '',
       `Cliente: ${cliente.nome}`,
+      `Profissional / empresa: ${perfil.empresa || 'Mão Na Água'}`,
       `Período: ${periodoDescricao}`,
       `Visitas registradas: ${visitasFiltradas.length}`,
       `Fotos registradas: ${totalFotos}`,
@@ -522,12 +535,20 @@ export default function VerRelatorio({
       )}
 
       <main className="p-5 max-w-md mx-auto space-y-6">
+        <section className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 flex items-center gap-4">
+          {fotoProfissional && <img src={fotoProfissional} alt="Foto ou logo do profissional" className="w-20 h-20 shrink-0 rounded-xl object-contain bg-white border border-zinc-100 p-1" onError={() => setFotoProfissional('')} />}
+          <div className="min-w-0">
+            <p className="text-xs text-zinc-500 mb-1">Profissional / empresa</p>
+            <h2 className="font-black text-xl text-teal-600 dark:text-teal-400 break-words">{perfil.empresa || 'Mão Na Água'}</h2>
+            {perfil.cidade && <p className="text-xs text-zinc-500 mt-1">{perfil.cidade}</p>}
+          </div>
+        </section>
 
         {/* IDENTIFICAÇÃO DO CLIENTE */}
         <section className="bg-white dark:bg-zinc-900 p-6 rounded-[2rem] shadow-sm border border-zinc-200 dark:border-zinc-800">
 
           <h2 className="text-2xl font-black text-zinc-900 dark:text-white leading-tight">
-            {cliente.nome}
+            {identificacaoCliente(cliente)}
           </h2>
 
           <p className="text-xs text-zinc-500 flex items-center gap-1 mt-3">

@@ -1,3 +1,5 @@
+import { caminhoImagemPerfilValido, enviarImagemPerfil } from './imagemPerfilService.js';
+
 export function normalizarTipoPerfil(tipo) {
   return String(tipo || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -16,6 +18,9 @@ export function mapearPerfil(registro, preferencias = {}, padrao = {}) {
     tipoConta: normalizarTipoPerfil(registro?.tipo_conta) || null,
     vinculoEmpresa: registro?.vinculo_empresa ?? null,
     rotas: registro?.rotas ?? [],
+    fotoPerfilCaminho: typeof preferencias?.fotoPerfilCaminho === 'string' ? preferencias.fotoPerfilCaminho : '',
+    fotoPerfilUrl: '',
+    fotoPerfilNova: null,
     listaProdutos: Array.isArray(preferencias?.listaProdutos) ? preferencias.listaProdutos : padrao.listaProdutos || [],
     listaAcessorios: Array.isArray(preferencias?.listaAcessorios) ? preferencias.listaAcessorios : padrao.listaAcessorios || []
   };
@@ -59,6 +64,12 @@ export async function salvarPerfilProfissional(client, userId, perfil) {
   const usuario = await conferirUsuario(client, userId);
   const empresa = nomeProfissional(perfil);
   if (!empresa) throw new Error('Informe seu nome profissional ou o nome da empresa, sem usar o email.');
+  let fotoPerfilCaminho = usuario.user_metadata?.preferencias_profissionais?.fotoPerfilCaminho || '';
+  if (perfil.fotoPerfilNova) fotoPerfilCaminho = await enviarImagemPerfil(client, userId, perfil.fotoPerfilNova);
+  else if (perfil.fotoPerfilRemover) fotoPerfilCaminho = '';
+  if (fotoPerfilCaminho && !caminhoImagemPerfilValido(fotoPerfilCaminho, userId)) {
+    throw new Error('A imagem de perfil precisa pertencer à sua conta.');
+  }
   // Envia somente campos editáveis. Não altera assinatura, vínculo ou rotas.
   const { data, error } = await client.from('perfis')
     .upsert({ id: userId, empresa, cidade: String(perfil.cidade || '').trim() }, { onConflict: 'id' })
@@ -66,6 +77,7 @@ export async function salvarPerfilProfissional(client, userId, perfil) {
   if (error) throw error;
   const preferencias = {
     ...usuario.user_metadata?.preferencias_profissionais,
+    fotoPerfilCaminho,
     listaProdutos: perfil.listaProdutos,
     listaAcessorios: perfil.listaAcessorios
   };

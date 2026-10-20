@@ -45,8 +45,9 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
       <header className="bg-white dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-30 border-b border-zinc-200 dark:border-zinc-800/50 px-6 py-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-teal-500 rounded-2xl flex items-center justify-center shadow-lg shadow-teal-500/20">
+            <div className="relative shrink-0 w-10 h-10 bg-teal-500 rounded-2xl flex items-center justify-center shadow-lg shadow-teal-500/20">
               <span className="text-white font-bold text-xl">{(perfil.empresa || 'Mão Na Água').charAt(0)}</span>
+              {perfil.fotoPerfilUrl && !perfil.fotoPerfilNova && <img src={perfil.fotoPerfilUrl} alt="Sua foto ou logo" className="absolute inset-0 w-10 h-10 rounded-2xl object-contain bg-white p-0.5" onError={evento => { evento.currentTarget.style.display = 'none'; }} />}
             </div>
             <div>
               <h1 className={`text-xl font-black uppercase tracking-tight ${gradText}`}>{perfil.empresa || 'Mão Na Água'}</h1>

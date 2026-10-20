@@ -9,6 +9,7 @@ import { consultarAssinatura } from '../services/assinaturaService';
 import { getPendingVisits, removePendingVisit, savePendingVisit } from '../db';
 import { sincronizarPendencia, pendenciasDaConta } from '../services/filaSupabase';
 import { carregarContextoEquipe, aplicarContextoEquipe } from '../services/equipeService';
+import { resolverImagemPerfil } from '../services/imagemPerfilService';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AppContext = createContext();
@@ -219,10 +220,12 @@ export const AppProvider = ({ children }) => {
     const carregarPerfil = async () => {
       try {
         const [data, equipe] = await Promise.all([obterPerfil(supabase, user.id), carregarContextoEquipe(supabase)]);
+        const identidade = mapearPerfil(data, preferenciasPerfilRef.current);
+        const fotoPerfilUrl = await resolverImagemPerfil(supabase, identidade);
 
         if (!ativo) return;
         setContextoEquipe(equipe);
-        setPerfil(prev => aplicarContextoEquipe(mapearPerfil(data, preferenciasPerfilRef.current, prev), equipe));
+        setPerfil(prev => aplicarContextoEquipe({ ...mapearPerfil(data, preferenciasPerfilRef.current, prev), fotoPerfilUrl }, equipe));
         setNomeEmpresaSalvo(mapearPerfil(data).empresa);
         setErroPerfil('');
       } catch (erro) {
@@ -285,8 +288,9 @@ export const AppProvider = ({ children }) => {
     setSalvandoPerfil(true);
     try {
       const salvo = await salvarPerfilProfissional(supabase, userId, perfil);
+      const fotoPerfilUrl = await resolverImagemPerfil(supabase, salvo);
       if (ultimoUsuarioIdRef.current === userId) {
-        setPerfil(aplicarContextoEquipe(salvo, contextoEquipe));
+        setPerfil(aplicarContextoEquipe({ ...salvo, fotoPerfilUrl, fotoPerfilRemover: false }, contextoEquipe));
         setNomeEmpresaSalvo(salvo.empresa);
       }
       return salvo;

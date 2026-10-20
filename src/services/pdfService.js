@@ -4,6 +4,7 @@ import { applyPlugin } from 'jspdf-autotable';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { desenharIdentidadeProfissional, identificacaoCliente } from './identidadeRelatorio';
 
 applyPlugin(jsPDF);
 
@@ -164,39 +165,23 @@ export const gerarRelatorioPDF = async (
       }
     };
 
-    // CABEÇALHO
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(22);
-    pdf.setTextColor(13, 148, 136);
-
-    pdf.text(
-      String(perfil?.empresa || 'Mão Na Água'),
-      margem,
-      y
-    );
-
-    y += 6;
-
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(10);
-    pdf.setTextColor(100, 100, 100);
-
-    pdf.text(
-      String(perfil?.cidade || 'Sua Cidade'),
-      margem,
-      y
-    );
-
-    y += 12;
+    // A foto é incorporada no PDF; o arquivo compartilhado não depende do link temporário.
+    const imagemPerfil = perfil?.fotoPerfilUrl ? await urlToBase64(perfil.fotoPerfilUrl) : null;
+    if (perfil?.fotoPerfilUrl && !imagemPerfil) throw new Error('Não foi possível carregar a foto ou logo para o relatório. Tente novamente.');
+    y = desenharIdentidadeProfissional(pdf, perfil, imagemPerfil, margem, y, larguraConteudo);
 
     // CARD DO CLIENTE
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(14);
+    const linhasCliente = pdf.splitTextToSize(identificacaoCliente(cliente), larguraConteudo - 10);
+    const alturaCliente = 25 + Math.max(0, linhasCliente.length - 1) * 6;
     pdf.setFillColor(250, 250, 250);
 
     pdf.roundedRect(
       margem,
       y,
       larguraConteudo,
-      25,
+      alturaCliente,
       3,
       3,
       'F'
@@ -209,10 +194,7 @@ export const gerarRelatorioPDF = async (
     const nomeCliente = String(cliente?.nome || 'Cliente');
 
     pdf.text(
-      pdf.splitTextToSize(
-        nomeCliente,
-        larguraConteudo - 10
-      ).slice(0, 1),
+      linhasCliente,
       margem + 5,
       y + 10
     );
@@ -229,10 +211,10 @@ export const gerarRelatorioPDF = async (
         larguraConteudo - 10
       ).slice(0, 1),
       margem + 5,
-      y + 18
+      y + alturaCliente - 7
     );
 
-    y += 35;
+    y += alturaCliente + 10;
 
     // CARREGAMENTO DAS FOTOS
     const historicoComImagens = await Promise.all(

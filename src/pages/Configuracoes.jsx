@@ -1,5 +1,7 @@
 
-import React, { useContext } from 'react';
+import React, { useContext, useState, useRef, useEffect } from 'react';
+import imageCompression from 'browser-image-compression';
+import { fileToBase64 } from '../utils/imageUtils';
 import { AppContext } from '../context/AppContext.jsx';
 import {
   ArrowLeft, Pencil, ShoppingCart, Plus, Trash2, Save, Briefcase, User
@@ -7,6 +9,32 @@ import {
 
 export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair }) {
   const { user, perfil, setPerfil, gradText, gradBtn, definirTipoPerfil, salvandoPerfil } = useContext(AppContext);
+  const [preparandoFoto, setPreparandoFoto] = useState(false);
+  const [erroFoto, setErroFoto] = useState('');
+  const pedidoFoto = useRef(0);
+  useEffect(() => () => { pedidoFoto.current += 1; }, [user?.id]);
+
+  const selecionarFoto = async evento => {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = '';
+    if (!arquivo) return;
+    const pedido = ++pedidoFoto.current;
+    setErroFoto('');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(arquivo.type)) {
+      setErroFoto('Escolha uma foto ou logo em JPEG, PNG ou WebP.');
+      return;
+    }
+    setPreparandoFoto(true);
+    try {
+      const imagem = await imageCompression(arquivo, { maxSizeMB: 0.15, maxWidthOrHeight: 600,
+        useWebWorker: true, fileType: arquivo.type === 'image/png' ? 'image/png' : 'image/jpeg' });
+      const preview = await fileToBase64(imagem);
+      if (pedido !== pedidoFoto.current) return;
+      setPerfil(prev => ({ ...prev, fotoPerfilNova: imagem, fotoPerfilUrl: preview, fotoPerfilRemover: false }));
+    } catch {
+      if (pedido === pedidoFoto.current) setErroFoto('Não foi possível preparar esta imagem. Tente outra foto.');
+    } finally { if (pedido === pedidoFoto.current) setPreparandoFoto(false); }
+  };
 
   const alternarTipoConta = async (novoTipo) => {
     if (!user) {
@@ -60,6 +88,23 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
             <Pencil size={16} className="text-teal-500" /> Perfil Profissional
           </h3>
           <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-xs font-bold text-teal-600 dark:text-teal-400">Foto de perfil ou logo</p>
+              <div className="flex items-center gap-4">
+                {perfil.fotoPerfilUrl
+                  ? <img src={perfil.fotoPerfilUrl} alt="Sua foto ou logo" className="w-20 h-20 rounded-2xl object-contain bg-slate-50 border border-zinc-200 p-1" />
+                  : <div className="w-20 h-20 rounded-2xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center"><User size={32} className="text-teal-500" /></div>}
+                <div className="flex-1 space-y-2">
+                  <label className="block text-sm font-bold text-teal-600 cursor-pointer">
+                    {preparandoFoto ? 'Preparando imagem...' : 'Escolher foto ou logo'}
+                    <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Escolher foto ou logo" disabled={preparandoFoto || salvandoPerfil} onChange={selecionarFoto} className="block w-full mt-2 text-xs" />
+                  </label>
+                  {(perfil.fotoPerfilUrl || perfil.fotoPerfilCaminho) && <button type="button" disabled={salvandoPerfil || preparandoFoto} onClick={() => setPerfil(prev => ({ ...prev, fotoPerfilNova: null, fotoPerfilUrl: '', fotoPerfilRemover: true }))} className="text-xs text-rose-500">Remover imagem</button>}
+                </div>
+              </div>
+              <p className="text-xs text-zinc-500">A imagem aparecerá nos relatórios junto com seu nome profissional ou da empresa. Toque em Salvar alterações para confirmar.</p>
+              {erroFoto && <p role="alert" className="text-xs text-rose-500">{erroFoto}</p>}
+            </div>
             <div className="space-y-2">
               <span className="text-[10px] font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest ml-1">Nome da Empresa</span>
               <input value={perfil.empresa || ''} onChange={e => setPerfil({ ...perfil, empresa: e.target.value })} className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl outline-none focus:border-teal-400 text-sm font-bold" />
@@ -137,7 +182,7 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
           </div>
         </section>
 
-        <button onClick={salvarConfiguracoes} disabled={salvandoPerfil} className={`w-full py-4 rounded-xl font-bold ${gradBtn} flex items-center justify-center gap-2 disabled:opacity-50`}>
+        <button onClick={salvarConfiguracoes} disabled={salvandoPerfil || preparandoFoto} className={`w-full py-4 rounded-xl font-bold ${gradBtn} flex items-center justify-center gap-2 disabled:opacity-50`}>
           <Save size={20} /> {salvandoPerfil ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
         </button>
 

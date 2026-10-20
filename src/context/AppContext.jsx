@@ -6,27 +6,9 @@ import { criarProcessadorRetorno, mensagemErroAuth } from '../services/authServi
 import { carregarPerfil as obterPerfil, mapearPerfil, salvarPerfilProfissional, salvarTipoPerfil, normalizarTipoPerfil } from '../services/perfilService';
 import React, { createContext, useState, useEffect, useRef, useCallback } from 'react';
 import { consultarAssinatura } from '../services/assinaturaService';
-import { auth as firebaseAuth, db, storage } from '../firebase';
-import { createReportThumbnail } from '../utils/imageUtils';
-import {
-  doc,
-  setDoc,
-  updateDoc,
-  collection,
-  getDocs,
-  query,
-  where
-} from 'firebase/firestore';
-import {
-  getPendingVisits,
-  removePendingVisit
-} from '../db';
-import {
-  ref,
-  uploadString,
-  uploadBytes,
-  getDownloadURL
-} from 'firebase/storage';
+import { getPendingVisits, removePendingVisit, savePendingVisit } from '../db';
+import { sincronizarPendencia, pendenciasDaConta } from '../services/filaSupabase';
+import { carregarContextoEquipe, aplicarContextoEquipe } from '../services/equipeService';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AppContext = createContext();
@@ -98,6 +80,9 @@ export const AppProvider = ({ children }) => {
   });
 
   const [pendentesCount, setPendentesCount] = useState(0);
+  const [erroSincronizacao, setErroSincronizacao] = useState('');
+  const [pendentesLegados, setPendentesLegados] = useState(0);
+  const [contextoEquipe, setContextoEquipe] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const isSyncingRef = useRef(false);
 
@@ -151,6 +136,9 @@ export const AppProvider = ({ children }) => {
         setAuthLoading(Boolean(usuarioAtual));
         setErroPerfil('');
         setClientes([]);
+        setContextoEquipe(null);
+        setPendentesCount(0);
+        setErroSincronizacao('');
         consultaAssinaturaRef.current += 1;
         setVerificandoAssinatura(false);
         setErroAssinatura('');
@@ -230,10 +218,11 @@ export const AppProvider = ({ children }) => {
 
     const carregarPerfil = async () => {
       try {
-        const data = await obterPerfil(supabase, user.id);
+        const [data, equipe] = await Promise.all([obterPerfil(supabase, user.id), carregarContextoEquipe(supabase)]);
 
         if (!ativo) return;
-        setPerfil(prev => mapearPerfil(data, preferenciasPerfilRef.current, prev));
+        setContextoEquipe(equipe);
+        setPerfil(prev => aplicarContextoEquipe(mapearPerfil(data, preferenciasPerfilRef.current, prev), equipe));
         setNomeEmpresaSalvo(mapearPerfil(data).empresa);
         setErroPerfil('');
       } catch (erro) {
@@ -258,10 +247,12 @@ export const AppProvider = ({ children }) => {
     setVerificandoAssinatura(true);
     setErroAssinatura('');
     try {
-      const ativa = await consultarAssinatura(supabase, userId);
+      const [equipe, registro] = await Promise.all([carregarContextoEquipe(supabase), obterPerfil(supabase, userId)]);
+      const ativa = equipe ? equipe.assinatura_ativa === true : await consultarAssinatura(supabase, userId);
       if (!aindaAtual()) return null;
       // Não recarrega o formulário nem altera nome, produtos ou clientes.
-      setPerfil(prev => ({ ...prev, assinaturaAtiva: ativa }));
+      setContextoEquipe(equipe);
+      setPerfil(prev => aplicarContextoEquipe({ ...prev, tipoConta: normalizarTipoPerfil(registro?.tipo_conta), assinaturaAtiva: ativa }, equipe));
       return ativa;
     } catch (erro) {
       if (aindaAtual()) setErroAssinatura('Não foi possível verificar o acesso. Confira sua conexão e tente novamente.');
@@ -295,7 +286,7 @@ export const AppProvider = ({ children }) => {
     try {
       const salvo = await salvarPerfilProfissional(supabase, userId, perfil);
       if (ultimoUsuarioIdRef.current === userId) {
-        setPerfil(salvo);
+        setPerfil(aplicarContextoEquipe(salvo, contextoEquipe));
         setNomeEmpresaSalvo(salvo.empresa);
       }
       return salvo;
@@ -310,163 +301,65 @@ export const AppProvider = ({ children }) => {
     const salvo = await salvarTipoPerfil(supabase, userId, tipo, primeiroAcesso);
     if (ultimoUsuarioIdRef.current !== userId) throw new Error('Sua sessão mudou. Entre novamente.');
     if (primeiroAcesso) setNomeEmpresaSalvo(mapearPerfil(salvo).empresa);
-    setPerfil(prev => primeiroAcesso
+    setPerfil(prev => aplicarContextoEquipe(primeiroAcesso
       ? mapearPerfil(salvo, user.user_metadata?.preferencias_profissionais, prev)
-      : { ...prev, tipoConta: normalizarTipoPerfil(salvo.tipo_conta) });
+      : { ...prev, tipoConta: normalizarTipoPerfil(salvo.tipo_conta) }, contextoEquipe));
   };
 
-  // O perfil de funcionário e o vínculo com a empresa
-  // ainda precisam ser migrados para o Supabase.
-  const targetUid =
-    user &&
-    perfil?.tipoConta === 'funcionario' &&
-    perfil?.vinculoEmpresa
-      ? perfil.vinculoEmpresa
-      : user?.id;
+  const targetUid = contextoEquipe?.employer_uid || user?.id;
 
-  // ATENÇÃO: esta função ainda grava no Firebase.
-  // Não considera concluída a migração dos clientes.
-  const atualizarE_SalvarClientes = async (novosClientes) => {
-    if (!targetUid) {
-      throw new Error('Não há usuário identificado para salvar os clientes.');
-    }
-
-    await updateDoc(doc(db, 'usuarios', targetUid), {
-      clientes: novosClientes
-    });
-
-    setClientes(novosClientes);
-  };
-
-  // Sincronização antiga de fotos e visitas offline.
-  // Continua dependendo do Firebase e precisa ser migrada.
-  async function processarFilaSincronizacao(usuarioUid, currentClientesState, tUid) {
-    void currentClientesState;
-    // A fila legada exige a mesma identidade autenticada no Firebase.
-    if (firebaseAuth.currentUser?.uid !== usuarioUid) return false;
-    const donoUid = tUid || targetUid;
-    if (isSyncingRef.current || !navigator.onLine || !usuarioUid || !donoUid) return false;
-
+  const processarFilaSincronizacao = useCallback(async (usuarioUid) => {
+    if (isSyncingRef.current || !usuarioUid || ultimoUsuarioIdRef.current !== usuarioUid) return false;
     isSyncingRef.current = true;
     setIsSyncing(true);
-    console.log('🔄 Iniciando sincronização...');
-
+    setErroSincronizacao('');
+    const aindaAtual = () => ultimoUsuarioIdRef.current === usuarioUid;
     try {
-      const pendentes = await getPendingVisits();
-      if (pendentes.length === 0) {
-        setPendentesCount(0);
-        return true;
-      }
-      setPendentesCount(pendentes.length);
-
+      const pendentes = pendenciasDaConta(await getPendingVisits(), usuarioUid);
+      if (aindaAtual()) setPendentesCount(pendentes.length);
+      if (!navigator.onLine) return false;
       for (const pendente of pendentes) {
-        try {
-          const upImg = async (imagem, path) => {
-            if (!imagem) return imagem;
-            const storageRef = ref(storage, `usuarios/${donoUid}/${path}/${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`);
-            if (imagem instanceof Blob) {
-              await uploadBytes(storageRef, imagem, { contentType: 'image/jpeg' });
-            } else if (typeof imagem === 'string' && imagem.startsWith('data:image')) {
-              // Mantém compatibilidade com fotos salvas antes desta otimização.
-              await uploadString(storageRef, imagem, 'data_url');
-            } else {
-              return imagem;
-            }
-            return getDownloadURL(storageRef);
-          };
-
-          const fotosPrincipais = pendente.fotosArquivos?.length ? pendente.fotosArquivos : (pendente.fotosBase64 || []);
-          const fotosDeAlerta = pendente.fotosAlertaArquivos?.length ? pendente.fotosAlertaArquivos : (pendente.fotosAlertaBase64 || []);
-          const novasUrlsPrincipais = await Promise.all(fotosPrincipais.map(foto => upImg(foto, 'visitas')));
-          const novasUrlsAlerta = await Promise.all(fotosDeAlerta.map(foto => upImg(foto, 'alertas')));
-          const urlsPrincipais = [...new Set([...(pendente.fotosExistentes || []), ...novasUrlsPrincipais].filter(Boolean))];
-          const urlsAlerta = [...new Set([...(pendente.fotosAlertaExistentes || []), ...novasUrlsAlerta].filter(Boolean))];
-
-          const completarMiniaturas = async (miniaturasSalvas = [], fotosOriginais = [], limite = 8) => {
-            const miniaturas = miniaturasSalvas.filter(Boolean).slice(0, limite);
-            const faltam = Math.max(0, limite - miniaturas.length);
-            if (faltam === 0) return miniaturas;
-
-            const geradas = await Promise.all(
-              fotosOriginais.slice(0, faltam).map(async (foto) => {
-                try {
-                  return await createReportThumbnail(foto);
-                } catch (thumbnailError) {
-                  console.warn('Não foi possível criar uma miniatura para o relatório:', thumbnailError);
-                  return null;
-                }
-              })
-            );
-            return [...miniaturas, ...geradas.filter(Boolean)];
-          };
-
-          const miniaturasPrincipais = await completarMiniaturas(pendente.fotosMiniaturas || [], fotosPrincipais, 8);
-          const miniaturasAlerta = await completarMiniaturas(pendente.fotosAlertaMiniaturas || [], fotosDeAlerta, 4);
-          const visitasRef = collection(db, 'usuarios', donoUid, 'clientes', String(pendente.clienteId), 'visitas');
-          const visitaQuery = query(visitasRef, where('vId', '==', pendente.vId || pendente.id));
-          const querySnapshot = await getDocs(visitaQuery);
-
-          const visitaSincronizada = {
-            ...pendente,
-            // Arquivos grandes pertencem somente ao aparelho. No Firestore ficam
-            // apenas as URLs, que são o que o relatório e o PDF conseguem abrir.
-            fotosBase64: [],
-            fotosAlertaBase64: [],
-            fotosArquivos: [],
-            fotosAlertaArquivos: [],
-            fotosExistentes: [],
-            fotosAlertaExistentes: [],
-            fotos: urlsPrincipais,
-            fotosA: urlsAlerta,
-            fotosMiniaturas: miniaturasPrincipais,
-            fotosAlertaMiniaturas: miniaturasAlerta,
-            pendenteSync: false
-          };
-
-          if (querySnapshot.empty) {
-            // Usa um id estável para não criar duas visitas ao repetir o envio.
-            await setDoc(doc(visitasRef, String(pendente.vId || pendente.id)), visitaSincronizada);
-          } else {
-            await updateDoc(querySnapshot.docs[0].ref, visitaSincronizada);
-          }
-
-          await removePendingVisit(pendente.id);
-          const restantes = await getPendingVisits();
-          setPendentesCount(restantes.length);
-        } catch (error) {
-          console.error(`❌ Falha no item ${pendente.id}`, error);
-          console.log('⚠️ O item será mantido na fila para uma nova tentativa.');
-          break;
-        }
+        await sincronizarPendencia({ client: supabase, pendente, userId: usuarioUid,
+          salvar: savePendingVisit, remover: removePendingVisit, aindaAtual });
       }
-
-      const restantes = await getPendingVisits();
-      setPendentesCount(restantes.length);
-      return restantes.length === 0;
-    } catch (error) {
-      console.error('❌ Erro na fila:', error);
+      return true;
+    } catch (erro) {
+      if (aindaAtual()) setErroSincronizacao('Envio pendente: ' + erro.message);
       return false;
     } finally {
-      isSyncingRef.current = false;
-      setIsSyncing(false);
-      console.log('🏁 Fila processada.');
+      try {
+        const fila = await getPendingVisits();
+        if (aindaAtual()) {
+          setPendentesCount(pendenciasDaConta(fila, usuarioUid).length);
+          setPendentesLegados(fila.filter(p => !p.userId).length);
+        }
+      } catch (erro) {
+        if (aindaAtual()) setErroSincronizacao('Não foi possível ler a fila local: ' + erro.message);
+      } finally {
+        isSyncingRef.current = false;
+        setIsSyncing(false);
+      }
     }
-  }
-
+  }, []);
 
   useEffect(() => {
-    const handleOnline = () => {
-      if (user && navigator.onLine) {
-        processarFilaSincronizacao(user.id, clientes, targetUid);
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
-
+    if (!user?.id || authLoading) return;
+    let ativo = true;
+    getPendingVisits().then(fila => {
+      if (!ativo) return;
+      setPendentesCount(pendenciasDaConta(fila, user.id).length);
+      setPendentesLegados(fila.filter(p => !p.userId).length);
+    }).catch(erro => { if (ativo) setErroSincronizacao(erro.message); });
+    const sincronizar = () => { void processarFilaSincronizacao(user.id); };
+    sincronizar();
+    window.addEventListener('online', sincronizar);
+    window.addEventListener('focus', sincronizar);
     return () => {
-      window.removeEventListener('online', handleOnline);
+      ativo = false;
+      window.removeEventListener('online', sincronizar);
+      window.removeEventListener('focus', sincronizar);
     };
-  }, [user, clientes, targetUid]);
+  }, [user?.id, authLoading, processarFilaSincronizacao]);
 
   const values = {
     user,
@@ -492,9 +385,10 @@ export const AppProvider = ({ children }) => {
     modoEscuro,
     setModoEscuro,
     pendentesCount,
+    pendentesLegados,
+    erroSincronizacao,
     setPendentesCount,
     isSyncing,
-    atualizarE_SalvarClientes,
     gradText,
     gradBtn,
     diaAtual,

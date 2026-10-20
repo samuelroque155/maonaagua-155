@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
-import { db } from '../firebase';
-import { collection, doc, getDocs, deleteDoc, updateDoc, query, orderBy, writeBatch } from 'firebase/firestore';
+import { supabase } from '../supabase';
+import { listarFuncionarios, listarAlertas, resolverAlerta, salvarFuncionario as gravarFuncionario, removerFuncionario as excluirFuncionario } from '../services/equipeService';
 import { UserPlus, UserMinus, ShieldAlert, CheckCircle, Bell, Users, Pencil } from 'lucide-react';
 import { abrirWhatsApp } from '../utils/whatsapp';
 
@@ -10,6 +10,7 @@ export default function GestaoEquipe({ setTela }) {
   const [funcionarios, setFuncionarios] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState('');
   const [tab, setTab] = useState('equipe'); // 'equipe' ou 'alertas'
   
   // Form estado
@@ -21,17 +22,16 @@ export default function GestaoEquipe({ setTela }) {
 
   const carregarAlertas = async () => {
     try {
-      const q = query(collection(db, 'usuarios', user.uid, 'alertasProdutos'), orderBy('ts', 'desc'));
-      const snap = await getDocs(q);
-      setAlertas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAlertas(await listarAlertas(supabase, user.id));
     } catch (e) {
       console.error(e);
+      setErroCarregamento('Não foi possível carregar os alertas: ' + e.message);
     }
   };
 
   const marcarAlertaComoLido = async (alertaId) => {
     try {
-      await updateDoc(doc(db, 'usuarios', user.uid, 'alertasProdutos', alertaId), { lido: true });
+      await resolverAlerta(supabase, user.id, alertaId);
       carregarAlertas();
     } catch (e) {
       alert("Erro ao marcar como lido: " + e.message);
@@ -40,11 +40,10 @@ export default function GestaoEquipe({ setTela }) {
 
   const carregarFuncionarios = async () => {
     try {
-      const snap = await getDocs(collection(db, 'usuarios', user.uid, 'funcionarios'));
-      const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setFuncionarios(lista);
+      setFuncionarios(await listarFuncionarios(supabase, user.id));
     } catch (e) {
       console.error(e);
+      setErroCarregamento('Não foi possível carregar a equipe: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -60,7 +59,7 @@ export default function GestaoEquipe({ setTela }) {
 
   useEffect(() => {
     if (user) {
-      // Os estados são atualizados após as leituras assíncronas do Firestore.
+      // Os estados são atualizados após as leituras assíncronas do Supabase.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       carregarFuncionarios();
       carregarAlertas();
@@ -73,7 +72,7 @@ export default function GestaoEquipe({ setTela }) {
     setFuncionarioEditando(funcionario);
     setNome(funcionario.nome || '');
     setEmail(funcionario.email || '');
-    setRotasSelecionadas(funcionario.rotas || []);
+    setRotasSelecionadas((funcionario.rotas || []).map(String));
     setIsAdding(true);
   };
 
@@ -82,23 +81,9 @@ export default function GestaoEquipe({ setTela }) {
     const emailFormatado = email.trim().toLowerCase();
     
     try {
-      const funcRef = funcionarioEditando
-        ? doc(db, 'usuarios', user.uid, 'funcionarios', funcionarioEditando.id)
-        : doc(collection(db, 'usuarios', user.uid, 'funcionarios'));
-      const dadosFuncionario = {
-        nome,
-        email: emailFormatado,
-        rotas: rotasSelecionadas,
-        ...(funcionarioEditando ? {} : { criadoEm: Date.now() })
-      };
-      const batch = writeBatch(db);
-      batch.set(funcRef, dadosFuncionario, { merge: true });
-      batch.set(doc(db, 'equipes_links', emailFormatado), {
-        employerUid: user.uid,
-        nome,
-        rotas: rotasSelecionadas
-      }, { merge: true });
-      await batch.commit();
+      await gravarFuncionario(supabase, user.id, {
+        id: funcionarioEditando?.id, nome, email: emailFormatado, rotas: rotasSelecionadas
+      });
 
       alert(funcionarioEditando ? "Rotas do funcionário atualizadas!" : "Funcionário adicionado! Ele já pode criar uma conta com esse e-mail.");
       limparFormulario();
@@ -108,11 +93,10 @@ export default function GestaoEquipe({ setTela }) {
     }
   };
 
-  const removerFuncionario = async (funcId, funcEmail) => {
+  const removerFuncionario = async (funcId) => {
     if (!window.confirm("Remover este funcionário?")) return;
     try {
-      await deleteDoc(doc(db, 'usuarios', user.uid, 'funcionarios', funcId));
-      await deleteDoc(doc(db, 'equipes_links', funcEmail));
+      await excluirFuncionario(supabase, user.id, funcId);
       carregarFuncionarios();
     } catch (e) {
       alert("Erro ao remover: " + e.message);
@@ -120,10 +104,10 @@ export default function GestaoEquipe({ setTela }) {
   };
 
   const toggleRota = (clienteId) => {
-    if (rotasSelecionadas.includes(clienteId)) {
-      setRotasSelecionadas(rotasSelecionadas.filter(id => id !== clienteId));
+    if (rotasSelecionadas.includes(String(clienteId))) {
+      setRotasSelecionadas(rotasSelecionadas.filter(id => id !== String(clienteId)));
     } else {
-      setRotasSelecionadas([...rotasSelecionadas, clienteId]);
+      setRotasSelecionadas([...rotasSelecionadas, String(clienteId)]);
     }
   };
 
@@ -140,6 +124,7 @@ export default function GestaoEquipe({ setTela }) {
       </header>
 
       <main className="p-6 max-w-md mx-auto space-y-6">
+        {erroCarregamento && <p role="alert" className="text-sm text-rose-500">{erroCarregamento}</p>}
         {/* Tabs */}
         <div className="flex bg-zinc-200 dark:bg-zinc-900 p-1 rounded-2xl">
           <button 
@@ -178,9 +163,9 @@ export default function GestaoEquipe({ setTela }) {
                     <label className="text-[10px] font-bold text-sky-500 uppercase tracking-wider ml-2 mb-2 block">Atribuir Rotas (Clientes)</label>
                     <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
                       {clientes.map(c => (
-                        <button key={c.id} onClick={() => toggleRota(c.id)} className={`w-full text-left p-3 rounded-xl border flex items-center justify-between transition-colors ${rotasSelecionadas.includes(c.id) ? 'bg-sky-50 dark:bg-sky-900/20 border-sky-300 dark:border-sky-700' : 'bg-transparent border-zinc-200 dark:border-zinc-800'}`}>
-                          <span className={`font-bold text-sm ${rotasSelecionadas.includes(c.id) ? 'text-sky-600 dark:text-sky-400' : 'text-zinc-600 dark:text-zinc-400'}`}>{c.nome}</span>
-                          {rotasSelecionadas.includes(c.id) && <CheckCircle size={16} className="text-sky-500" />}
+                        <button key={c.id} onClick={() => toggleRota(c.id)} className={`w-full text-left p-3 rounded-xl border flex items-center justify-between transition-colors ${rotasSelecionadas.includes(String(c.id)) ? 'bg-sky-50 dark:bg-sky-900/20 border-sky-300 dark:border-sky-700' : 'bg-transparent border-zinc-200 dark:border-zinc-800'}`}>
+                          <span className={`font-bold text-sm ${rotasSelecionadas.includes(String(c.id)) ? 'text-sky-600 dark:text-sky-400' : 'text-zinc-600 dark:text-zinc-400'}`}>{c.nome}</span>
+                          {rotasSelecionadas.includes(String(c.id)) && <CheckCircle size={16} className="text-sky-500" />}
                         </button>
                       ))}
                     </div>

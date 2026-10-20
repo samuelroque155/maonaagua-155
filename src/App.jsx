@@ -2,8 +2,6 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext } from './context/AppContext.jsx';
 import { supabase } from './supabase';
-import { db } from './firebase';
-import { collection, addDoc } from 'firebase/firestore';
 import { savePendingVisit } from './db';
 import { compressImage, fileToBase64 } from './utils/imageUtils';
 
@@ -137,6 +135,8 @@ export default function App() {
     }, 3000);
   };
 
+  const chaveRotas = JSON.stringify(perfil.rotas || []);
+
   // CLIENTES DO SUPABASE
   useEffect(() => {
     if (!user?.id) return;
@@ -147,7 +147,7 @@ export default function App() {
       const { data, error } = await supabase
         .from('clientes')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUid)
         .order('created_at', {
           ascending: true
         });
@@ -155,6 +155,7 @@ export default function App() {
       if (!ativo) return;
 
       if (error) {
+        setClientes([]);
         console.error(
           'Erro ao carregar clientes:',
           error
@@ -169,8 +170,8 @@ export default function App() {
       for (let inicio = 0; ; inicio += tamanhoPagina) {
         const { data: visitas, error: erroVisitas } = await supabase
           .from('visitas')
-          .select('id, cliente_id, data_visita, created_at')
-          .eq('user_id', user.id)
+          .select('id, cliente_id, data_visita, created_at').eq('tipo', 'visita')
+          .eq('user_id', targetUid)
           .order('id', { ascending: true })
           .range(inicio, inicio + tamanhoPagina - 1);
         if (!ativo) return;
@@ -203,7 +204,7 @@ export default function App() {
     return () => {
       ativo = false;
     };
-  }, [user?.id, setClientes]);
+  }, [user?.id, targetUid, chaveRotas, setClientes]);
 
   const handleSair = async () => {
     if (!window.confirm('Sair da conta?')) return;
@@ -295,7 +296,7 @@ export default function App() {
         .from('visitas')
         .select('*')
         .eq('cliente_id', cliente.id)
-        .eq('user_id', user.id)
+        .eq('user_id', targetUid)
         .order('data_visita', {
           ascending: false
         });
@@ -365,7 +366,7 @@ export default function App() {
             fotosA,
             fotosBase64: [],
             fotosAlertaBase64: [],
-            tipo: 'visita'
+            tipo: visita.tipo || 'visita'
           };
         })
       );
@@ -434,7 +435,7 @@ export default function App() {
         .select('*')
         .eq('id', visita.id)
         .eq('cliente_id', clienteAtual.id)
-        .eq('user_id', user.id)
+        .eq('user_id', targetUid)
         .maybeSingle();
 
       if (error) throw error;
@@ -1052,7 +1053,8 @@ export default function App() {
       const { error } = await supabase
         .from('visitas')
         .insert({
-          user_id: usuario.id,
+          user_id: targetUid,
+          criado_por: usuario.id,
           cliente_id: clienteAtual.id,
           data_visita: fim.toISOString(),
           horario,
@@ -1132,11 +1134,14 @@ export default function App() {
       return false;
     }
 
-    const ocorrenciaId = Date.now();
+    const ocorrenciaId = crypto.randomUUID();
     const dataOcorrencia = new Date();
 
     const novaOcorrencia = {
       id: ocorrenciaId,
+      supabaseId: ocorrenciaId,
+      userId: user.id,
+      ownerId: targetUid,
       vId: ocorrenciaId,
       clienteId: clienteAtual.id,
       tipo: 'problema',
@@ -1166,32 +1171,8 @@ export default function App() {
         novaOcorrencia
       );
 
-      await addDoc(
-        collection(
-          db,
-          'usuarios',
-          targetUid,
-          'clientes',
-          String(clienteAtual.id),
-          'visitas'
-        ),
-        {
-          ...novaOcorrencia,
-          fotosBase64: [],
-          fotosAlertaBase64: [],
-          fotos: [],
-          fotosA: []
-        }
-      );
-
-      processarFilaSincronizacao(
-        user.id,
-        clientes
-      ).catch(console.error);
-
-      showToast(
-        'Ocorrência enviada com sucesso!'
-      );
+      const enviada = await processarFilaSincronizacao(user.id);
+      showToast(enviada ? 'Ocorrência enviada ao Supabase!' : 'Ocorrência salva no aparelho; aguardando envio.');
 
       return true;
     } catch (erro) {
@@ -1219,7 +1200,7 @@ export default function App() {
         .from('visitas')
         .select('id')
         .eq('cliente_id', cliente.id)
-        .eq('user_id', user.id)
+        .eq('user_id', targetUid)
         .order('data_visita', {
           ascending: false
         })

@@ -9,13 +9,13 @@ import {
 export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toast, progressoPausado }) {
   const {
     user, perfil, clientes, modoEscuro, setModoEscuro,
-    pendentesCount, isSyncing, handleSair, gradText, gradBtn,
+    pendentesCount, pendentesLegados, erroSincronizacao, isSyncing, handleSair, gradText, gradBtn,
     diaAtual, dataHojeStr, processarFilaSincronizacao, tela, targetUid
   } = useContext(AppContext);
 
   let clientesFiltrados = clientes;
   if (perfil.tipoConta === 'funcionario' && perfil.rotas) {
-    clientesFiltrados = clientes.filter(c => perfil.rotas.includes(c.id));
+    clientesFiltrados = clientes.filter(c => perfil.rotas.map(String).includes(String(c.id)));
   }
 
   const piscinasDeHoje = clientesFiltrados.filter(c =>
@@ -90,6 +90,8 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
         </div>
       )}
 
+      {erroSincronizacao && <p role="alert" className="max-w-md mx-auto px-6 pt-3 text-xs text-amber-600">{erroSincronizacao}</p>}
+      {pendentesLegados > 0 && <p className="max-w-md mx-auto px-6 pt-3 text-xs text-amber-600">{pendentesLegados} registro(s) antigo(s) preservado(s) no aparelho, sem identificação da conta. Precisam de revisão antes do envio.</p>}
       <main className="p-6 max-w-md mx-auto space-y-6">
 
         {/* Status Bar */}

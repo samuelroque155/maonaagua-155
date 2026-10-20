@@ -1,3 +1,4 @@
+
 import jsPDF from 'jspdf';
 import { applyPlugin } from 'jspdf-autotable';
 import { Capacitor } from '@capacitor/core';
@@ -6,185 +7,301 @@ import { Share } from '@capacitor/share';
 
 applyPlugin(jsPDF);
 
-// Helper for converting network image URLs to base64
+// Converte imagens remotas em Base64.
 const urlToBase64 = async (url) => {
   if (!url) return null;
-  if (url.startsWith('data:')) return url; // Already base64
+  if (url.startsWith('data:')) return url;
+
   try {
     const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Erro ao carregar imagem: ${response.status}`);
+    }
+
     const blob = await response.blob();
-    return new Promise((resolve, reject) => {
+
+    return await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.error("Erro ao converter URL de imagem para base64:", error);
+    console.error('Erro ao converter imagem:', error);
     return null;
   }
 };
 
-// Helper for date formatting
+// Formata a data do histórico.
 const formatarDataCurta = (dataStr) => {
   if (!dataStr) return '';
-  const partes = dataStr.split(/[/\-\s]+/);
+
+  const partes = String(dataStr).split(/[/\-\s]+/);
+
   if (partes.length >= 2) {
     const dia = partes[0];
-    const mesOriginal = partes[1].toLowerCase().trim().replace('.', '');
-    
-    // Tenta converter se for número
+    const mesOriginal = partes[1]
+      .toLowerCase()
+      .trim()
+      .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+
     const mesNum = parseInt(mesOriginal, 10);
+
     if (!isNaN(mesNum)) {
-      const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      const meses = [
+        'Jan', 'Fev', 'Mar', 'Abr',
+        'Mai', 'Jun', 'Jul', 'Ago',
+        'Set', 'Out', 'Nov', 'Dez'
+      ];
+
       if (mesNum >= 1 && mesNum <= 12) {
         return `${dia}/${meses[mesNum - 1]}`;
       }
     }
-    
-    // Se for string
+
     const mesesMap = {
-      'jan': 'Jan', 'january': 'Jan', 'janeiro': 'Jan',
-      'feb': 'Fev', 'february': 'Fev', 'fevereiro': 'Fev', 'fev': 'Fev',
-      'mar': 'Mar', 'march': 'Mar', 'março': 'Mar',
-      'apr': 'Abr', 'april': 'Abr', 'abril': 'Abr',
-      'may': 'Mai', 'maio': 'Mai', 'mai': 'Mai',
-      'jun': 'Jun', 'june': 'Jun', 'junho': 'Jun',
-      'jul': 'Jul', 'july': 'Jul', 'julho': 'Jul',
-      'aug': 'Ago', 'august': 'Ago', 'agosto': 'Ago', 'ago': 'Ago',
-      'sep': 'Set', 'september': 'Set', 'setembro': 'Set', 'set': 'Set',
-      'oct': 'Out', 'october': 'Out', 'outubro': 'Out', 'out': 'Out',
-      'nov': 'Nov', 'november': 'Nov', 'novembro': 'Nov',
-      'dec': 'Dez', 'december': 'Dez', 'dezembro': 'Dez', 'dez': 'Dez'
+      jan: 'Jan', january: 'Jan', janeiro: 'Jan',
+      feb: 'Fev', february: 'Fev', fevereiro: 'Fev', fev: 'Fev',
+      mar: 'Mar', march: 'Mar', marco: 'Mar', 'março': 'Mar',
+      apr: 'Abr', april: 'Abr', abril: 'Abr',
+      may: 'Mai', maio: 'Mai', mai: 'Mai',
+      jun: 'Jun', june: 'Jun', junho: 'Jun',
+      jul: 'Jul', july: 'Jul', julho: 'Jul',
+      aug: 'Ago', august: 'Ago', agosto: 'Ago', ago: 'Ago',
+      sep: 'Set', september: 'Set', setembro: 'Set', set: 'Set',
+      oct: 'Out', october: 'Out', outubro: 'Out', out: 'Out',
+      nov: 'Nov', november: 'Nov', novembro: 'Nov',
+      dec: 'Dez', december: 'Dez', dezembro: 'Dez'
     };
-    
+
     const mesFormatado = mesesMap[mesOriginal];
+
     if (mesFormatado) {
       return `${dia}/${mesFormatado}`;
     }
   }
-  return dataStr;
+
+  return String(dataStr);
 };
 
+// Extrai horário, duração e temperatura.
 const extrairDadosRegistro = (v) => {
-  if (!v) return { hora: '', duracao: '', temp: '--' };
+  if (!v) {
+    return { hora: '', duracao: '', temp: '--' };
+  }
+
   let hora = '';
   let duracao = '';
-  let temp;
+  let temp = '--';
 
   if (v.h) {
-    const match = v.h.match(/(.*) \((.*)\)/);
+    const match = String(v.h).match(/^(.*?)\s*\((.*?)\)/);
+
     if (match) {
-      hora = match[1];
-      duracao = match[2];
+      hora = match[1].trim();
+      duracao = match[2].trim();
     } else {
-      hora = v.h;
+      hora = String(v.h);
     }
   }
 
   if (v.t) {
     const tStr = String(v.t).trim();
+
     if (tStr.endsWith('m')) {
-      if (!duracao) {
-        duracao = tStr;
-      }
-      temp = '--';
+      if (!duracao) duracao = tStr;
     } else {
       temp = tStr.includes('°') ? tStr : `${tStr}°C`;
     }
-  } else {
-    temp = '--';
   }
 
   return { hora, duracao, temp };
 };
 
-export const gerarRelatorioPDF = async (cliente, historico, perfil) => {
+// Descobre o formato da imagem.
+const obterFormatoImagem = (base64) => {
+  if (
+    typeof base64 === 'string' &&
+    base64.startsWith('data:image/png')
+  ) {
+    return 'PNG';
+  }
+
+  if (
+    typeof base64 === 'string' &&
+    base64.startsWith('data:image/webp')
+  ) {
+    return 'WEBP';
+  }
+
+  return 'JPEG';
+};
+
+// FUNÇÃO PRINCIPAL
+export const gerarRelatorioPDF = async (
+  cliente,
+  historico,
+  perfil
+) => {
   try {
     const pdf = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = pdf.internal.pageSize.width;
-    let y = 20;
 
-    // Cabeçalho (Empresa e Cidade)
+    const pageWidth = pdf.internal.pageSize.width;
+    const pageHeight = pdf.internal.pageSize.height;
+
+    const margem = 15;
+    const larguraConteudo = pageWidth - margem * 2;
+    const topoPagina = 20;
+    const limiteConteudo = pageHeight - 15;
+
+    let y = topoPagina;
+
+    const garantirEspaco = (alturaNecessaria) => {
+      if (y + alturaNecessaria > limiteConteudo) {
+        pdf.addPage();
+        y = topoPagina;
+      }
+    };
+
+    // CABEÇALHO
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(22);
-    pdf.setTextColor(13, 148, 136); // teal-600
-    pdf.text(perfil.empresa || 'Mão Na Água', 15, y);
-    
+    pdf.setTextColor(13, 148, 136);
+
+    pdf.text(
+      String(perfil?.empresa || 'Mão Na Água'),
+      margem,
+      y
+    );
+
     y += 6;
+
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
     pdf.setTextColor(100, 100, 100);
-    pdf.text(perfil.cidade || 'Sua Cidade', 15, y);
+
+    pdf.text(
+      String(perfil?.cidade || 'Sua Cidade'),
+      margem,
+      y
+    );
 
     y += 12;
 
-    // Card do Cliente
+    // CARD DO CLIENTE
     pdf.setFillColor(250, 250, 250);
-    pdf.roundedRect(15, y, pageWidth - 30, 25, 3, 3, 'F');
-    
+
+    pdf.roundedRect(
+      margem,
+      y,
+      larguraConteudo,
+      25,
+      3,
+      3,
+      'F'
+    );
+
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(14);
     pdf.setTextColor(30, 30, 30);
-    pdf.text(cliente.nome, 20, y + 10);
+
+    const nomeCliente = String(cliente?.nome || 'Cliente');
+
+    pdf.text(
+      pdf.splitTextToSize(
+        nomeCliente,
+        larguraConteudo - 10
+      ).slice(0, 1),
+      margem + 5,
+      y + 10
+    );
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
     pdf.setTextColor(100, 100, 100);
-    pdf.text(cliente.endereco, 20, y + 18);
+
+    const endereco = String(cliente?.endereco || '');
+
+    pdf.text(
+      pdf.splitTextToSize(
+        endereco,
+        larguraConteudo - 10
+      ).slice(0, 1),
+      margem + 5,
+      y + 18
+    );
 
     y += 35;
 
-    // Pré-carrega todas as imagens para converter em Base64 assincronamente
+    // CARREGAMENTO DAS FOTOS
     const historicoComImagens = await Promise.all(
-      historico.map(async (v) => {
+      (historico || []).map(async (v) => {
         const imagensPrincipais = [];
         const imagensAlerta = [];
 
-        // Fotos normais da piscina
-        if (v.fotosBase64 && v.fotosBase64.length > 0) {
-          for (let f of v.fotosBase64) {
-            if (f) imagensPrincipais.push(f);
+        if (
+          Array.isArray(v.fotosBase64) &&
+          v.fotosBase64.length > 0
+        ) {
+          for (const foto of v.fotosBase64) {
+            if (foto) imagensPrincipais.push(foto);
           }
-        } else if (v.fotos && v.fotos.length > 0) {
-          for (let url of v.fotos) {
-            const b64 = await urlToBase64(url);
-            if (b64) imagensPrincipais.push(b64);
-          }
-        }
-
-        // Fotos de alerta / ocorrência
-        if (v.fotosAlertaBase64 && v.fotosAlertaBase64.length > 0) {
-          for (let f of v.fotosAlertaBase64) {
-            if (f) imagensAlerta.push(f);
-          }
-        } else if (v.fotosA && v.fotosA.length > 0) {
-          for (let url of v.fotosA) {
-            const b64 = await urlToBase64(url);
-            if (b64) imagensAlerta.push(b64);
+        } else if (Array.isArray(v.fotos)) {
+          for (const url of v.fotos) {
+            const base64 = await urlToBase64(url);
+            if (base64) imagensPrincipais.push(base64);
           }
         }
 
-        return { ...v, imagensPrincipais, imagensAlerta };
+        if (
+          Array.isArray(v.fotosAlertaBase64) &&
+          v.fotosAlertaBase64.length > 0
+        ) {
+          for (const foto of v.fotosAlertaBase64) {
+            if (foto) imagensAlerta.push(foto);
+          }
+        } else if (Array.isArray(v.fotosA)) {
+          for (const url of v.fotosA) {
+            const base64 = await urlToBase64(url);
+            if (base64) imagensAlerta.push(base64);
+          }
+        }
+
+        return {
+          ...v,
+          imagensPrincipais,
+          imagensAlerta
+        };
       })
     );
 
-    // HISTÓRICO DE PARÂMETROS Title
+    // HISTÓRICO DE PARÂMETROS
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(11);
     pdf.setTextColor(50, 50, 50);
-    pdf.text("HISTORICO DE PARAMETROS", 15, y);
-    
+
+    pdf.text(
+      'HISTORICO DE PARAMETROS',
+      margem,
+      y
+    );
+
     y += 5;
 
-    // Filtra registros que são apenas ocorrências (tipo === 'problema') para a tabela de parâmetros
-    const visitasNormais = historicoComImagens.filter(v => v.tipo !== 'problema');
+    const visitasNormais = historicoComImagens.filter(
+      v => v.tipo !== 'problema'
+    );
 
-    // Tabela usando jspdf-autotable
     const tableData = visitasNormais.map(v => {
       const { hora, duracao, temp } = extrairDadosRegistro(v);
-      const asp = (v.asp || v.a || '').toUpperCase();
-      const horaCell = duracao ? `${hora}\n${duracao}` : hora;
+
+      const asp = String(v.asp || v.a || '').toUpperCase();
+
+      const horaCell = duracao
+        ? `${hora}\n${duracao}`
+        : hora;
+
       return [
         formatarDataCurta(v.d),
         asp,
@@ -198,196 +315,679 @@ export const gerarRelatorioPDF = async (cliente, historico, perfil) => {
 
     pdf.autoTable({
       startY: y,
-      head: [['DATA', 'STATUS', 'HORARIO', 'CL', 'PH', 'ALC', 'TEMP']],
+
+      head: [[
+        'DATA',
+        'STATUS',
+        'HORARIO',
+        'CL',
+        'PH',
+        'ALC',
+        'TEMP'
+      ]],
+
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [24, 24, 27], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
-      bodyStyles: { textColor: 80, fontSize: 8, halign: 'center', valign: 'middle' },
-      columnStyles: {
-        1: { fontStyle: 'bold' } // Status column
+
+      headStyles: {
+        fillColor: [24, 24, 27],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center'
       },
+
+      bodyStyles: {
+        textColor: 80,
+        fontSize: 8,
+        halign: 'center',
+        valign: 'middle'
+      },
+
+      columnStyles: {
+        1: { fontStyle: 'bold' }
+      },
+
       didParseCell: function (data) {
-        if (data.section === 'body' && data.column.index === 1) {
-          const text = data.cell.raw;
-          if (text.includes('CRISTALINA')) data.cell.styles.textColor = [20, 184, 166];
-          else if (text.includes('VERDE')) data.cell.styles.textColor = [16, 185, 129];
-          else if (text.includes('TURVA')) data.cell.styles.textColor = [245, 158, 11];
+        if (
+          data.section === 'body' &&
+          data.column.index === 1
+        ) {
+          const texto = String(data.cell.raw || '');
+
+          if (texto.includes('CRISTALINA')) {
+            data.cell.styles.textColor = [20, 184, 166];
+          } else if (texto.includes('VERDE')) {
+            data.cell.styles.textColor = [16, 185, 129];
+          } else if (texto.includes('TURVA')) {
+            data.cell.styles.textColor = [245, 158, 11];
+          }
         }
       },
-      margin: { left: 15, right: 15 }
+
+      margin: {
+        left: margem,
+        right: margem
+      }
     });
 
     y = pdf.lastAutoTable.finalY + 15;
 
-    // RESUMO FOTOGRÁFICO (VISITAS)
-    const visitasComFotos = historicoComImagens.filter(v => v.imagensPrincipais.length > 0);
+    // ==========================================
+    // RESUMO FOTOGRÁFICO ORGANIZADO POR VISITA
+    // ==========================================
+
+    // Correção: numerar pelo histórico completo.
+    // O histórico está ordenado do mais recente ao mais antigo.
+    const visitasComFotos = visitasNormais
+      .map((v, indice) => ({
+        ...v,
+        numeroVisita: visitasNormais.length - indice
+      }))
+      .filter(v => v.imagensPrincipais.length > 0);
+
     if (visitasComFotos.length > 0) {
-      if (y > 240) {
-        pdf.addPage();
-        y = 20;
-      }
+      garantirEspaco(22);
+
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
       pdf.setTextColor(50, 50, 50);
-      pdf.text("RESUMO FOTOGRAFICO (VISITAS)", 15, y);
-      y += 8;
 
-      let x = 15;
-      const imgWidth = 55;
-      const imgHeight = 55;
-      const gap = 5;
+      pdf.text(
+        'RESUMO FOTOGRAFICO (VISITAS)',
+        margem,
+        y
+      );
 
-      for (let v of visitasComFotos) {
-        for (let base64 of v.imagensPrincipais) {
-          if (x + imgWidth > pageWidth - 10) {
-            x = 15;
-            y += imgHeight + gap;
-            if (y > 230) {
-              pdf.addPage();
-              y = 20;
+      y += 9;
+
+      const colunas = 3;
+      const espacoFotos = 4;
+      const larguraInterna = larguraConteudo - 12;
+
+      const larguraFoto = (
+        larguraInterna -
+        espacoFotos * (colunas - 1)
+      ) / colunas;
+
+      const alturaFoto = 49;
+      const alturaLinha = alturaFoto + 4;
+      const alturaCabecalho = 18;
+      const paddingCard = 6;
+      const espacoEntreCards = 9;
+
+      for (
+        let indiceVisita = 0;
+        indiceVisita < visitasComFotos.length;
+        indiceVisita++
+      ) {
+        const visita = visitasComFotos[indiceVisita];
+
+        // Variáveis restauradas.
+        const fotos = visita.imagensPrincipais;
+        const { hora, duracao } = extrairDadosRegistro(visita);
+
+        const quantidadeLinhas = Math.ceil(
+          fotos.length / colunas
+        );
+
+        const alturaFotos =
+          quantidadeLinhas * alturaLinha - 4;
+
+        const alturaCard =
+          alturaCabecalho +
+          paddingCard +
+          alturaFotos +
+          paddingCard;
+
+        const alturaUtilPagina =
+          limiteConteudo - topoPagina;
+
+        if (alturaCard <= alturaUtilPagina) {
+          garantirEspaco(
+            alturaCard + espacoEntreCards
+          );
+        } else {
+          garantirEspaco(
+            alturaCabecalho +
+            paddingCard +
+            alturaFoto +
+            5
+          );
+        }
+
+        let cardY = y;
+
+        const desenharCabecalho = (
+          continuacao = false
+        ) => {
+          cardY = y;
+
+          pdf.setFillColor(250, 250, 250);
+          pdf.setDrawColor(225, 225, 225);
+
+          pdf.roundedRect(
+            margem,
+            cardY,
+            larguraConteudo,
+            alturaCabecalho + 4,
+            3,
+            3,
+            'FD'
+          );
+
+          pdf.setFillColor(24, 24, 27);
+
+          pdf.roundedRect(
+            margem,
+            cardY,
+            larguraConteudo,
+            alturaCabecalho,
+            3,
+            3,
+            'F'
+          );
+
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(11);
+          pdf.setTextColor(255, 255, 255);
+
+          const dataCompleta = String(
+            visita.d || 'Data não informada'
+          );
+
+          // NUMERAÇÃO CORRIGIDA
+          const tituloVisita =
+            `${dataCompleta} - VISITA ${visita.numeroVisita}` +
+            (continuacao ? ' (CONT.)' : '');
+
+          pdf.text(
+            tituloVisita,
+            margem + 5,
+            cardY + 7
+          );
+
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(190, 190, 190);
+
+          const detalhes = [
+            hora,
+            duracao ? `Duracao: ${duracao}` : ''
+          ].filter(Boolean).join('  |  ');
+
+          if (detalhes) {
+            pdf.text(
+              detalhes,
+              margem + 5,
+              cardY + 13
+            );
+          }
+
+          pdf.setFillColor(13, 148, 136);
+
+          pdf.roundedRect(
+            pageWidth - margem - 34,
+            cardY + 5,
+            29,
+            8,
+            2,
+            2,
+            'F'
+          );
+
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(8);
+          pdf.setTextColor(255, 255, 255);
+
+          pdf.text(
+            `${fotos.length} FOTOS`,
+            pageWidth - margem - 19.5,
+            cardY + 10.5,
+            { align: 'center' }
+          );
+
+          y =
+            cardY +
+            alturaCabecalho +
+            paddingCard;
+        };
+
+        desenharCabecalho();
+
+        // FOTOS DA VISITA
+        for (
+          let linha = 0;
+          linha < quantidadeLinhas;
+          linha++
+        ) {
+          if (
+            y + alturaFoto + paddingCard >
+            limiteConteudo
+          ) {
+            pdf.addPage();
+            y = topoPagina;
+            desenharCabecalho(true);
+          }
+
+          for (
+            let coluna = 0;
+            coluna < colunas;
+            coluna++
+          ) {
+            const indiceFoto =
+              linha * colunas + coluna;
+
+            if (indiceFoto >= fotos.length) {
+              break;
+            }
+
+            const base64 = fotos[indiceFoto];
+
+            const x =
+              margem +
+              paddingCard +
+              coluna * (
+                larguraFoto + espacoFotos
+              );
+
+            try {
+              const formato = obterFormatoImagem(base64);
+
+              pdf.addImage(
+                base64,
+                formato,
+                x,
+                y,
+                larguraFoto,
+                alturaFoto
+              );
+
+              pdf.setFillColor(0, 0, 0);
+
+              pdf.rect(
+                x,
+                y + alturaFoto - 7,
+                larguraFoto,
+                7,
+                'F'
+              );
+
+              pdf.setFont('helvetica', 'bold');
+              pdf.setFontSize(8);
+              pdf.setTextColor(255, 255, 255);
+
+              pdf.text(
+                `FOTO ${indiceFoto + 1}`,
+                x + larguraFoto / 2,
+                y + alturaFoto - 2.5,
+                { align: 'center' }
+              );
+            } catch (erro) {
+              console.warn(
+                'Erro ao inserir foto no PDF:',
+                erro
+              );
+
+              pdf.setDrawColor(220, 220, 220);
+
+              pdf.rect(
+                x,
+                y,
+                larguraFoto,
+                alturaFoto
+              );
+
+              pdf.setFontSize(8);
+              pdf.setTextColor(120, 120, 120);
+
+              pdf.text(
+                'Imagem indisponivel',
+                x + larguraFoto / 2,
+                y + alturaFoto / 2,
+                { align: 'center' }
+              );
             }
           }
-          
-          try {
-            pdf.addImage(base64, 'JPEG', x, y, imgWidth, imgHeight);
-            
-            pdf.setFillColor(0, 0, 0);
-            pdf.rect(x, y + imgHeight - 8, imgWidth, 8, 'F');
-            
-            pdf.setFontSize(8);
-            pdf.setTextColor(255, 255, 255);
-            pdf.text(formatarDataCurta(v.d).toUpperCase(), x + (imgWidth/2), y + imgHeight - 2.5, { align: 'center' });
-            
-          } catch (e) {
-            console.warn("Erro ao inserir imagem no PDF", e);
-          }
-          
-          x += imgWidth + gap;
+
+          y += alturaLinha;
         }
+
+        y += 2;
+
+        pdf.setDrawColor(225, 225, 225);
+
+        pdf.line(
+          margem,
+          y,
+          pageWidth - margem,
+          y
+        );
+
+        y += espacoEntreCards;
       }
-      y += imgHeight + 15;
+
+      y += 5;
     }
 
-    // SEÇÃO DEDICADA A OCORRÊNCIAS TÉCNICAS E ALERTAS
-    const ocorrencias = historicoComImagens.filter(v => v.tipo === 'problema' || (v.txtA && v.txtA.trim()) || v.imagensAlerta.length > 0);
+    // ==========================================
+    // OCORRÊNCIAS E ALERTAS
+    // ==========================================
+
+    const ocorrencias = historicoComImagens.filter(
+      v =>
+        v.tipo === 'problema' ||
+        Boolean(String(v.txtA || '').trim()) ||
+        v.imagensAlerta.length > 0
+    );
+
     if (ocorrencias.length > 0) {
-      if (y > 230) {
-        pdf.addPage();
-        y = 20;
-      }
+      garantirEspaco(25);
+
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
-      pdf.setTextColor(190, 24, 74); // rose-700
-      pdf.text("OCORRENCIAS E ALERTAS REGISTRADOS", 15, y);
+      pdf.setTextColor(190, 24, 74);
+
+      pdf.text(
+        'OCORRENCIAS E ALERTAS REGISTRADOS',
+        margem,
+        y
+      );
+
       y += 8;
 
-      for (let o of ocorrencias) {
-        if (y > 230) {
-          pdf.addPage();
-          y = 20;
+      for (const ocorrencia of ocorrencias) {
+        const descricao = String(
+          ocorrencia.txtA ||
+          'Nenhuma descrição fornecida.'
+        );
+
+        const linhasTexto = pdf.splitTextToSize(
+          descricao,
+          larguraConteudo - 10
+        );
+
+        const alturaTexto =
+          linhasTexto.length * 4.5;
+
+        const fotosOcorrencia =
+          ocorrencia.imagensAlerta;
+
+        const larguraFotoOcorrencia = 22;
+        const alturaFotoOcorrencia = 22;
+        const gapOcorrencia = 3;
+        const fotosPorLinha = 6;
+
+        const linhasFotos = Math.ceil(
+          fotosOcorrencia.length / fotosPorLinha
+        );
+
+        const alturaFotosOcorrencia =
+          linhasFotos > 0
+            ? 5 +
+              linhasFotos * (
+                alturaFotoOcorrencia +
+                gapOcorrencia
+              )
+            : 0;
+
+        const alturaCard =
+          14 +
+          alturaTexto +
+          alturaFotosOcorrencia +
+          5;
+
+        const alturaMaxima =
+          limiteConteudo - topoPagina;
+
+        if (alturaCard <= alturaMaxima) {
+          garantirEspaco(alturaCard + 6);
+        } else {
+          garantirEspaco(30);
         }
 
-        const descTexto = o.txtA || "Nenhuma descrição fornecida.";
-        const linhasTexto = pdf.splitTextToSize(descTexto, pageWidth - 40);
-        const textoHeight = linhasTexto.length * 4.5;
-        const boxHeight = o.imagensAlerta.length > 0 ? (20 + textoHeight + 25) : (14 + textoHeight);
+        const cardInicioY = y;
 
-        // Caixa vermelha clara para o card de ocorrência
-        pdf.setFillColor(254, 242, 242); 
+        const alturaVisivel = Math.min(
+          alturaCard,
+          limiteConteudo - cardInicioY
+        );
+
+        pdf.setFillColor(254, 242, 242);
         pdf.setDrawColor(252, 165, 165);
-        pdf.roundedRect(15, y, pageWidth - 30, boxHeight, 2, 2, 'FD');
+
+        pdf.roundedRect(
+          margem,
+          cardInicioY,
+          larguraConteudo,
+          alturaVisivel,
+          2,
+          2,
+          'FD'
+        );
 
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(9);
-        pdf.setTextColor(185, 28, 28); // red-700
-        pdf.text(`DATA: ${o.d} ${o.h ? `às ${o.h}` : ''} - OCORRÊNCIA`, 20, y + 6);
+        pdf.setTextColor(185, 28, 28);
+
+        const tituloOcorrencia =
+          `DATA: ${ocorrencia.d || ''} ` +
+          `${ocorrencia.h || ''} - OCORRENCIA`;
+
+        pdf.text(
+          pdf.splitTextToSize(
+            tituloOcorrencia,
+            larguraConteudo - 10
+          )[0],
+          margem + 5,
+          y + 6
+        );
+
+        y += 12;
 
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(8.5);
         pdf.setTextColor(60, 60, 60);
-        pdf.text(linhasTexto, 20, y + 12);
 
-        if (o.imagensAlerta.length > 0) {
-          let ox = 20;
-          const oimgWidth = 22;
-          const oimgHeight = 22;
-          const ogap = 3;
+        for (const linhaTexto of linhasTexto) {
+          garantirEspaco(5);
 
-          for (let img of o.imagensAlerta) {
-            try {
-              pdf.addImage(img, 'JPEG', ox, y + 14 + textoHeight, oimgWidth, oimgHeight);
-            } catch (e) {
-              console.warn("Erro ao inserir imagem de ocorrência no PDF", e);
+          pdf.text(
+            linhaTexto,
+            margem + 5,
+            y
+          );
+
+          y += 4.5;
+        }
+
+        if (fotosOcorrencia.length > 0) {
+          y += 5;
+
+          for (
+            let indice = 0;
+            indice < fotosOcorrencia.length;
+            indice++
+          ) {
+            const coluna =
+              indice % fotosPorLinha;
+
+            if (coluna === 0) {
+              garantirEspaco(
+                alturaFotoOcorrencia + 4
+              );
             }
-            ox += oimgWidth + ogap;
+
+            const x =
+              margem +
+              5 +
+              coluna * (
+                larguraFotoOcorrencia +
+                gapOcorrencia
+              );
+
+            try {
+              pdf.addImage(
+                fotosOcorrencia[indice],
+                obterFormatoImagem(
+                  fotosOcorrencia[indice]
+                ),
+                x,
+                y,
+                larguraFotoOcorrencia,
+                alturaFotoOcorrencia
+              );
+            } catch (erro) {
+              console.warn(
+                'Erro ao inserir foto da ocorrência:',
+                erro
+              );
+            }
+
+            const ultimaColuna =
+              coluna === fotosPorLinha - 1;
+
+            const ultimaFoto =
+              indice === fotosOcorrencia.length - 1;
+
+            if (ultimaColuna || ultimaFoto) {
+              y +=
+                alturaFotoOcorrencia +
+                gapOcorrencia;
+            }
           }
         }
 
-        y += boxHeight + 6;
+        y += 10;
       }
-      y += 10;
+
+      y += 5;
     }
 
-    // FOOTER (Always at the bottom of page)
+    // ==========================================
+    // RODAPÉ
+    // ==========================================
+
     if (y > 260) {
       pdf.addPage();
-      y = 20;
-    } else {
-      y = 260; // Push to bottom
     }
 
-    pdf.setFillColor(24, 24, 27); // zinc-900
-    pdf.rect(15, y, pageWidth - 30, 30, 'F');
-    // Top border teal
+    const rodapeY = 260;
+
+    pdf.setFillColor(24, 24, 27);
+
+    pdf.rect(
+      margem,
+      rodapeY,
+      larguraConteudo,
+      30,
+      'F'
+    );
+
     pdf.setFillColor(20, 184, 166);
-    pdf.rect(15, y, pageWidth - 30, 2, 'F');
+
+    pdf.rect(
+      margem,
+      rodapeY,
+      larguraConteudo,
+      2,
+      'F'
+    );
 
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(12);
     pdf.setTextColor(255, 255, 255);
-    pdf.text("Obrigado pela confianca!", pageWidth / 2, y + 10, { align: 'center' });
+
+    pdf.text(
+      'Obrigado pela confianca!',
+      pageWidth / 2,
+      rodapeY + 10,
+      { align: 'center' }
+    );
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8);
-    pdf.setTextColor(161, 161, 170); // zinc-400
-    pdf.text("Este servico utiliza a tecnologia e o padrao de qualidade Mao Na Agua.", pageWidth / 2, y + 16, { align: 'center' });
-    pdf.text("Para visualizar as fotos originais, acesse a plataforma.", pageWidth / 2, y + 22, { align: 'center' });
+    pdf.setTextColor(161, 161, 170);
 
-    const fileName = `Relatorio_${cliente.nome.replace(/\s+/g, '_')}.pdf`;
+    pdf.text(
+      'Este servico utiliza a tecnologia e o padrao de qualidade Mao Na Agua.',
+      pageWidth / 2,
+      rodapeY + 16,
+      { align: 'center' }
+    );
+
+    pdf.text(
+      'Para visualizar as fotos originais, acesse a plataforma.',
+      pageWidth / 2,
+      rodapeY + 22,
+      { align: 'center' }
+    );
+
+    // ==========================================
+    // SALVAR OU COMPARTILHAR
+    // ==========================================
+
+    const nomeArquivoSeguro = nomeCliente
+  .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+  .trim()
+  .replace(/\s+/g, '_');
+
+const fileName =
+  `Relatorio_${nomeArquivoSeguro || 'Cliente'}.pdf`;
 
     if (Capacitor.isNativePlatform()) {
-      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+      const pdfBase64 = pdf
+        .output('datauristring')
+        .split(',')[1];
+
       const writeRes = await Filesystem.writeFile({
         path: fileName,
         data: pdfBase64,
         directory: Directory.Cache
       });
-      
+
       await Share.share({
-        title: `Relatório - ${cliente.nome}`,
-        text: 'Segue em anexo o relatório de manutenção da piscina.',
+        title: `Relatório - ${nomeCliente}`,
+        text:
+          'Segue em anexo o relatório de manutenção da piscina.',
         url: writeRes.uri,
         dialogTitle: 'Compartilhar Relatório'
       });
     } else {
       const pdfBlob = pdf.output('blob');
-      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-      
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ 
-          title: `Relatório - ${cliente.nome}`, 
+
+      const file = new File(
+        [pdfBlob],
+        fileName,
+        { type: 'application/pdf' }
+      );
+
+      const podeCompartilhar =
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [file] });
+
+      if (podeCompartilhar) {
+        await navigator.share({
+          title: `Relatório - ${nomeCliente}`,
           text: 'Relatório de manutenção de piscina.',
-          files: [file] 
+          files: [file]
         });
       } else {
         pdf.save(fileName);
       }
     }
-
   } catch (error) {
     if (error.name !== 'AbortError') {
-      console.error("Erro ao processar PDF:", error);
-      alert("Erro ao processar PDF: " + error.message);
+      console.error(
+        'Erro ao processar PDF:',
+        error
+      );
+
+      alert(
+        'Erro ao processar PDF: ' +
+        error.message
+      );
     }
   }
 };

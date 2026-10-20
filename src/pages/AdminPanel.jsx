@@ -6,7 +6,6 @@ import {
 
 export default function AdminPanel({ setTela, todosUsuarios, carregandoAdmin, alternarStatusAssinatura }) {
   const { gradText, gradBtn } = useContext(AppContext);
-  const ADMIN_EMAIL = 'samuelroque155@gmail.com';
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 max-w-md mx-auto text-zinc-900 dark:text-zinc-100 font-sans pb-20">

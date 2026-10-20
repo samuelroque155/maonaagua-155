@@ -1,264 +1,1151 @@
-import React, { useContext, useState } from 'react';
+
+import React, { useContext, useMemo, useState } from 'react';
+import { visitasDoCliente } from '../services/visitaEstado';
 import { AppContext } from '../context/AppContext.jsx';
 import { gerarRelatorioPDF } from '../services/pdfService';
-import { 
-  ArrowLeft, Share2, Camera, CalendarDays, Droplets, Clock, MessageSquare, Loader2, MapPin, CheckCircle, AlertTriangle
+import {
+  ArrowLeft,
+  Share2,
+  Camera,
+  CalendarDays,
+  Droplets,
+  Clock,
+  MessageSquare,
+  Loader2,
+  MapPin,
+  AlertTriangle,
+  Pencil,
+  LockKeyhole,
+  Send,
+  FileText,
+  Images
 } from 'lucide-react';
 
-export default function VerRelatorio({ setTela, cliente, historico, carregando, enviarAvisoWhatsApp }) {
-  const { perfil, modoImpressao, setModoImpressao } = useContext(AppContext);
-  const [loadingPDF, setLoadingPDF] = useState(false);
+// Converte datas brasileiras para o formato YYYY-MM-DD.
+function obterDataVisita(visita) {
+  if (visita?.d) {
+    const match = String(visita.d).match(
+      /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+    );
+
+    if (match) {
+      const [, dia, mes, ano] = match;
+      return `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    }
+  }
+
+  if (visita?.ts) {
+    const data = new Date(visita.ts);
+
+    if (!Number.isNaN(data.getTime())) {
+      const ano = data.getFullYear();
+      const mes = String(
+        data.getMonth() + 1
+      ).padStart(2, '0');
+      const dia = String(
+        data.getDate()
+      ).padStart(2, '0');
+
+      return `${ano}-${mes}-${dia}`;
+    }
+  }
+
+  return '';
+}
+
+function formatarData(dataISO) {
+  if (!dataISO) return 'Data não informada';
+
+  const partes = dataISO.split('-');
+
+  if (partes.length !== 3) {
+    return dataISO;
+  }
+
+  return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
+function formatarMes(mesISO) {
+  if (!mesISO) return '';
+
+  const [ano, mes] = mesISO.split('-');
+  const numeroMes = Number(mes);
+
+  if (
+    !ano ||
+    numeroMes < 1 ||
+    numeroMes > 12
+  ) {
+    return mesISO;
+  }
+
+  const meses = [
+    'Janeiro',
+    'Fevereiro',
+    'Março',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro'
+  ];
+
+  return `${meses[numeroMes - 1]} de ${ano}`;
+}
+
+function extrairDadosRegistro(visita) {
+  let hora = visita?.h || '';
+  let duracao = '';
+  let temperatura = visita?.t || '--';
+
+  const match = String(hora).match(
+    /^(.*?)\s*\(([^)]*)\)/
+  );
+
+  if (match) {
+    hora = match[1].trim();
+    duracao = match[2].trim();
+  }
+
+  if (
+    String(temperatura).trim().endsWith('m')
+  ) {
+    if (!duracao) {
+      duracao = temperatura;
+    }
+
+    temperatura = '--';
+  } else if (
+    temperatura !== '--' &&
+    !String(temperatura).includes('°')
+  ) {
+    temperatura = `${temperatura}°C`;
+  }
+
+  return {
+    hora,
+    duracao,
+    temperatura
+  };
+}
+
+function listarFotos(visita, alerta = false) {
+  const urls = alerta
+    ? [
+        ...(Array.isArray(visita?.fotosAlertaBase64)
+          ? visita.fotosAlertaBase64
+          : []),
+        ...(Array.isArray(visita?.fotosA)
+          ? visita.fotosA
+          : [])
+      ]
+    : [
+        ...(Array.isArray(visita?.fotosBase64)
+          ? visita.fotosBase64
+          : []),
+        ...(Array.isArray(visita?.fotos)
+          ? visita.fotos
+          : [])
+      ];
+
+  return urls
+    .map(foto =>
+      typeof foto === 'string'
+        ? foto
+        : foto?.url || foto?.base64 || ''
+    )
+    .filter(Boolean)
+    .filter(
+      (url, index, lista) =>
+        lista.indexOf(url) === index
+    );
+}
+
+function obterTelefoneWhatsApp(cliente) {
+  let telefone = String(
+    cliente?.telefone || ''
+  ).replace(/\D/g, '');
+
+  if (
+    telefone.length === 10 ||
+    telefone.length === 11
+  ) {
+    telefone = `55${telefone}`;
+  }
+
+  return telefone;
+}
+
+export default function VerRelatorio({
+  setTela,
+  cliente,
+  historico = [],
+  carregando = false,
+  enviarAvisoWhatsApp,
+  editarVisitaFinalizada,
+  solicitarCorrecaoVisita
+}) {
+  const {
+    perfil,
+    modoImpressao
+  } = useContext(AppContext);
+
+  const [loadingPDF, setLoadingPDF] =
+    useState(false);
+
+  const [solicitandoId, setSolicitandoId] =
+    useState(null);
+
+  const [tipoRelatorio, setTipoRelatorio] =
+    useState('dia');
+
+  const [dataSelecionada, setDataSelecionada] =
+    useState('');
+
+  const [mesSelecionado, setMesSelecionado] =
+    useState('');
+
+  const tipoConta = String(
+    perfil?.tipoConta || ''
+  )
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  const funcionario =
+    tipoConta === 'funcionario';
+
+  const podeEditar =
+    tipoConta === 'autonomo' ||
+    tipoConta === 'empresa';
+
+  // Visitas finalizadas, sem ocorrências avulsas.
+  const visitasRegistradas = useMemo(() => {
+    return visitasDoCliente(historico, cliente?.id)
+      .filter(v => v.tipo !== 'problema')
+      .sort((a, b) => {
+        const dataA = obterDataVisita(a);
+        const dataB = obterDataVisita(b);
+
+        if (dataA !== dataB) {
+          return dataB.localeCompare(dataA);
+        }
+
+        return Number(b.ts || 0) -
+          Number(a.ts || 0);
+      });
+  }, [historico, cliente?.id]);
+
+  // Datas que realmente possuem visitas.
+  const datasDisponiveis = useMemo(() => {
+    return [
+      ...new Set(
+        visitasRegistradas
+          .map(obterDataVisita)
+          .filter(Boolean)
+      )
+    ].sort((a, b) => b.localeCompare(a));
+  }, [visitasRegistradas]);
+
+  const mesesDisponiveis = useMemo(() => {
+    return [
+      ...new Set(
+        datasDisponiveis.map(
+          data => data.slice(0, 7)
+        )
+      )
+    ].sort((a, b) => b.localeCompare(a));
+  }, [datasDisponiveis]);
+
+  // Seleciona automaticamente a visita mais recente.
+  const dataAtiva = datasDisponiveis.includes(
+    dataSelecionada
+  )
+    ? dataSelecionada
+    : datasDisponiveis[0] || '';
+
+  const mesAtivo = mesesDisponiveis.includes(
+    mesSelecionado
+  )
+    ? mesSelecionado
+    : mesesDisponiveis[0] || '';
+
+  // Filtra os registros conforme o período escolhido.
+  const historicoFiltrado = useMemo(() => {
+    const periodo = tipoRelatorio === 'dia'
+      ? dataAtiva
+      : mesAtivo;
+
+    if (!periodo) return [];
+
+    return visitasDoCliente(historico, cliente?.id).filter(visita => {
+      const data = obterDataVisita(visita);
+
+      return tipoRelatorio === 'dia'
+        ? data === periodo
+        : data.startsWith(periodo);
+    });
+  }, [
+    historico,
+    cliente?.id,
+    tipoRelatorio,
+    dataAtiva,
+    mesAtivo
+  ]);
+
+  const visitasFiltradas = useMemo(() => {
+    return historicoFiltrado
+      .filter(v => v.tipo !== 'problema')
+      .sort((a, b) =>
+        Number(b.ts || 0) -
+        Number(a.ts || 0)
+      );
+  }, [historicoFiltrado]);
+
+  // Cada visita fica em seu próprio grupo fotográfico.
+  const gruposFotograficos = useMemo(() => {
+    return visitasFiltradas
+      .map((visita, index) => ({
+        chave: visita.id ||
+          visita.vId ||
+          `${obterDataVisita(visita)}-${index}`,
+        visita,
+        data: obterDataVisita(visita),
+        fotos: listarFotos(visita)
+      }))
+      .filter(grupo => grupo.fotos.length > 0);
+  }, [visitasFiltradas]);
+
+  const ocorrenciasFiltradas = useMemo(() => {
+    return historicoFiltrado.filter(
+      visita =>
+        visita.tipo === 'problema' ||
+        Boolean(
+          String(visita.txtA || '').trim()
+        ) ||
+        listarFotos(visita, true).length > 0
+    );
+  }, [historicoFiltrado]);
+
+  const totalFotos = gruposFotograficos.reduce(
+    (total, grupo) =>
+      total + grupo.fotos.length,
+    0
+  );
+
+  const periodoDescricao =
+    tipoRelatorio === 'dia'
+      ? formatarData(dataAtiva)
+      : formatarMes(mesAtivo);
 
   const handleSharePDF = async () => {
+    if (loadingPDF || carregando) return;
+
+    if (!historicoFiltrado.length) {
+      alert(
+        'Não existem registros para o período selecionado.'
+      );
+      return;
+    }
+
     setLoadingPDF(true);
-    await gerarRelatorioPDF(cliente, historico, perfil);
-    setLoadingPDF(false);
+
+    try {
+      await gerarRelatorioPDF(
+        cliente,
+        historicoFiltrado,
+        perfil
+      );
+    } catch (erro) {
+      console.error(
+        'Erro ao gerar relatório PDF:',
+        erro
+      );
+
+      alert(
+        'Não foi possível gerar o PDF: ' +
+        erro.message
+      );
+    } finally {
+      setLoadingPDF(false);
+    }
   };
 
-  const formatarDataCurta = (dataStr) => {
-    if (!dataStr) return '';
-    const partes = dataStr.split(/[/\-\s]+/);
-    if (partes.length >= 2) {
-      const dia = partes[0];
-      const mesOriginal = partes[1].toLowerCase().trim().replace('.', '');
-      
-      // Tenta converter se for número
-      const mesNum = parseInt(mesOriginal, 10);
-      if (!isNaN(mesNum)) {
-        const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-        if (mesNum >= 1 && mesNum <= 12) {
-          return `${dia}/${meses[mesNum - 1]}`;
-        }
-      }
-      
-      // Se for string
-      const mesesMap = {
-        'jan': 'Jan', 'january': 'Jan', 'janeiro': 'Jan',
-        'feb': 'Fev', 'february': 'Fev', 'fevereiro': 'Fev', 'fev': 'Fev',
-        'mar': 'Mar', 'march': 'Mar', 'março': 'Mar',
-        'apr': 'Abr', 'april': 'Abr', 'abril': 'Abr',
-        'may': 'Mai', 'maio': 'Mai', 'mai': 'Mai',
-        'jun': 'Jun', 'june': 'Jun', 'junho': 'Jun',
-        'jul': 'Jul', 'july': 'Jul', 'julho': 'Jul',
-        'aug': 'Ago', 'august': 'Ago', 'agosto': 'Ago', 'ago': 'Ago',
-        'sep': 'Set', 'september': 'Set', 'setembro': 'Set', 'set': 'Set',
-        'oct': 'Out', 'october': 'Out', 'outubro': 'Out', 'out': 'Out',
-        'nov': 'Nov', 'november': 'Nov', 'novembro': 'Nov',
-        'dec': 'Dez', 'december': 'Dez', 'dezembro': 'Dez', 'dez': 'Dez'
-      };
-      
-      const mesFormatado = mesesMap[mesOriginal];
-      if (mesFormatado) {
-        return `${dia}/${mesFormatado}`;
-      }
+  const handleWhatsApp = () => {
+    if (!historicoFiltrado.length) {
+      alert(
+        'Não existem registros para compartilhar.'
+      );
+      return;
     }
-    return dataStr;
+
+    const titulo =
+      tipoRelatorio === 'dia'
+        ? 'RELATÓRIO DO DIA'
+        : 'RELATÓRIO MENSAL';
+
+    const linhas = [
+      `*${titulo} - MÃO NA ÁGUA*`,
+      '',
+      `Cliente: ${cliente.nome}`,
+      `Período: ${periodoDescricao}`,
+      `Visitas registradas: ${visitasFiltradas.length}`,
+      `Fotos registradas: ${totalFotos}`,
+      ''
+    ];
+
+    visitasFiltradas.forEach((visita, index) => {
+      const { hora, duracao } =
+        extrairDadosRegistro(visita);
+
+      linhas.push(
+        `*Visita ${index + 1} - ${visita.d}*`,
+        `Horário: ${hora || 'Não informado'}`,
+        `Duração: ${duracao || 'Não informada'}`,
+        `Aspecto: ${visita.asp || 'Não informado'}`,
+        `pH: ${visita.p || '--'}`,
+        `Cloro: ${visita.c || '--'}`,
+        `Alcalinidade: ${visita.al || '--'}`,
+        `Temperatura: ${visita.t || '--'}`,
+        ''
+      );
+    });
+
+    linhas.push(
+      'Relatório gerado pelo Mão na Água.'
+    );
+
+    const mensagem = linhas.join('\n');
+
+    const telefone = obterTelefoneWhatsApp(
+      cliente
+    );
+
+    const url = telefone
+      ? `https://api.whatsapp.com/send?phone=${telefone}&text=${encodeURIComponent(mensagem)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(mensagem)}`;
+
+    window.open(
+      url,
+      '_blank',
+      'noopener,noreferrer'
+    );
   };
 
-  const extrairDadosRegistro = (v) => {
-    if (!v) return { hora: '', duracao: '', temp: '--' };
-    let hora = '';
-    let duracao = '';
-    let temp;
-
-    if (v.h) {
-      const match = v.h.match(/(.*) \((.*)\)/);
-      if (match) {
-        hora = match[1];
-        duracao = match[2];
-      } else {
-        hora = v.h;
-      }
+  const handleEditarVisita = visita => {
+    if (!podeEditar) {
+      alert(
+        'Você não tem permissão para editar esta visita.'
+      );
+      return;
     }
 
-    if (v.t) {
-      const tStr = String(v.t).trim();
-      if (tStr.endsWith('m')) {
-        if (!duracao) {
-          duracao = tStr;
-        }
-        temp = '--';
-      } else {
-        temp = tStr.includes('°') ? tStr : `${tStr}°C`;
-      }
-    } else {
-      temp = '--';
+    if (
+      typeof editarVisitaFinalizada !== 'function'
+    ) {
+      alert(
+        'A edição ainda não está configurada.'
+      );
+      return;
     }
 
-    return { hora, duracao, temp };
+    editarVisitaFinalizada(visita);
+  };
+
+  const handleSolicitarCorrecao = async visita => {
+    if (!funcionario) return;
+
+    if (
+      typeof solicitarCorrecaoVisita !== 'function'
+    ) {
+      alert(
+        'A solicitação de correções ainda não está disponível.'
+      );
+      return;
+    }
+
+    const motivo = window.prompt(
+      'O que precisa ser corrigido nesta visita?'
+    );
+
+    if (motivo === null) return;
+
+    if (!motivo.trim()) {
+      alert('Informe o motivo da correção.');
+      return;
+    }
+
+    const id = visita.id || visita.vId;
+
+    setSolicitandoId(id);
+
+    try {
+      await solicitarCorrecaoVisita(
+        visita,
+        motivo.trim()
+      );
+    } catch (erro) {
+      alert(
+        'Não foi possível solicitar a correção: ' +
+        erro.message
+      );
+    } finally {
+      setSolicitandoId(null);
+    }
   };
 
   if (!cliente) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 font-sans pb-24">
-       {/* UI Buttons */}
-       {!modoImpressao && (
-          <header className="bg-white dark:bg-zinc-900 sticky top-0 z-30 border-b border-zinc-200 dark:border-zinc-800 px-6 py-5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setTela('relatorio')} className="w-10 h-10 bg-slate-50 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-500"><ArrowLeft size={20} /></button>
-              <h1 className="text-xl font-black uppercase tracking-tight dark:text-white">Relatório</h1>
-            </div>
-          </header>
-       )}
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 pb-24 font-sans">
 
-       <main className="p-6 max-w-md mx-auto space-y-6">
-          <div className="flex gap-2">
-            <button onClick={() => enviarAvisoWhatsApp(cliente)} className="flex-1 bg-green-500 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all">
-              <MessageSquare size={18} /> WhatsApp
-            </button>
-            <button onClick={handleSharePDF} disabled={loadingPDF} className="flex-1 bg-zinc-800 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all disabled:opacity-50">
-              {loadingPDF ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />} PDF Completo
-            </button>
-          </div>
+      {!modoImpressao && (
+        <header className="bg-white dark:bg-zinc-900 sticky top-0 z-30 border-b border-zinc-200 dark:border-zinc-800 px-6 py-5 flex items-center gap-3">
 
-          {/* NOVO LAYOUT DO RELATÓRIO */}
-          <div className="bg-slate-50">
-            {/* Card Topo */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-zinc-200">
-               <div className="flex justify-between items-start">
-                 <div className="flex-1">
-                   <h2 className="text-3xl font-black text-zinc-900 leading-tight">{cliente.nome}</h2>
-                   <p className="text-xs text-zinc-500 font-medium flex items-center gap-1 mt-3"><MapPin size={12} /> {cliente.endereco}</p>
-                 </div>
+          <button
+            onClick={() => setTela('relatorio')}
+            className="w-10 h-10 bg-slate-50 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-500"
+          >
+            <ArrowLeft size={20} />
+          </button>
 
-               </div>
-            </div>
+          <h1 className="text-xl font-black uppercase tracking-tight dark:text-white">
+            Relatório
+          </h1>
 
-            {/* HISTÓRICO DE PARÂMETROS */}
-            <div className="mt-10">
-              <h3 className="text-sm font-black text-zinc-800 uppercase flex items-center gap-2 mb-4">
-                 <div className="bg-sky-100 text-sky-500 p-1.5 rounded-lg"><Droplets size={16}/></div> Histórico de Parâmetros
-              </h3>
-              
-              <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm">
-                 {carregando ? (
-                    <div className="flex justify-center py-10 text-zinc-300 animate-pulse"><Loader2 size={32} className="animate-spin" /></div>
-                 ) : historico.filter(v => v.tipo !== 'problema').length === 0 ? (
-                    <div className="text-center py-10 text-zinc-400 text-sm">Nenhuma visita registrada este mês.</div>
-                 ) : (
-                    <table className="w-full text-center text-[10px]">
-                      <thead className="bg-zinc-900 text-white text-[9px] uppercase tracking-wider">
-                        <tr>
-                          <th className="py-3 font-black px-1">Data</th>
-                          <th className="py-3 font-black px-1">Status</th>
-                          <th className="py-3 font-black px-1 text-sky-400">Horário</th>
-                          <th className="py-3 font-black px-1">CL</th>
-                          <th className="py-3 font-black px-1">PH</th>
-                          <th className="py-3 font-black px-1">ALC</th>
-                          <th className="py-3 font-black px-1">TEMP</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 bg-white">
-                         {historico.filter(v => v.tipo !== 'problema').map((v, i) => {
-                           const aspText = v.asp || v.a || '';
-                           const aspLower = aspText.toLowerCase();
-                           let aspColor = 'text-zinc-400';
-                           if(aspLower.includes('cristalina')) aspColor = 'text-teal-500';
-                           else if(aspLower.includes('verde')) aspColor = 'text-emerald-500';
-                           else if(aspLower.includes('turva')) aspColor = 'text-amber-500';
+        </header>
+      )}
 
-                           const { hora, duracao, temp } = extrairDadosRegistro(v);
+      <main className="p-5 max-w-md mx-auto space-y-6">
 
-                           return (
-                             <tr key={i} className="font-bold text-zinc-700">
-                                <td className="py-4 px-1">{formatarDataCurta(v.d)}</td>
-                                <td className={`py-4 px-1 uppercase ${aspColor}`}>{aspText}</td>
-                                <td className="py-4 px-1">
-                                   <div className="flex flex-col items-center">
-                                     <span>{hora}</span>
-                                     {duracao && <span className="text-emerald-500 text-[8px] flex items-center gap-0.5 mt-0.5"><Clock size={8}/> {duracao}</span>}
-                                   </div>
-                                </td>
-                                <td className="py-4 px-1">{v.c}</td>
-                                <td className="py-4 px-1">{v.p}</td>
-                                <td className="py-4 px-1">{v.al}</td>
-                                <td className="py-4 px-1">{temp}</td>
-                             </tr>
-                           );
-                         })}
-                      </tbody>
-                    </table>
-                 )}
-              </div>
+        {/* IDENTIFICAÇÃO DO CLIENTE */}
+        <section className="bg-white dark:bg-zinc-900 p-6 rounded-[2rem] shadow-sm border border-zinc-200 dark:border-zinc-800">
+
+          <h2 className="text-2xl font-black text-zinc-900 dark:text-white leading-tight">
+            {cliente.nome}
+          </h2>
+
+          <p className="text-xs text-zinc-500 flex items-center gap-1 mt-3">
+            <MapPin size={13} />
+            {cliente.endereco || 'Endereço não informado'}
+          </p>
+
+        </section>
+
+        {/* ESCOLHER PERÍODO DO RELATÓRIO */}
+        {!modoImpressao && (
+          <section className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+
+            <h3 className="text-sm font-black uppercase text-zinc-800 dark:text-white flex items-center gap-2 mb-4">
+              <CalendarDays
+                size={18}
+                className="text-teal-500"
+              />
+              Escolha o relatório
+            </h3>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+
+              <button
+                type="button"
+                onClick={() => setTipoRelatorio('dia')}
+                className={`py-3 px-2 rounded-xl font-bold text-xs transition-all ${
+                  tipoRelatorio === 'dia'
+                    ? 'bg-teal-500 text-white shadow-md'
+                    : 'bg-slate-100 dark:bg-zinc-800 text-zinc-500'
+                }`}
+              >
+                RELATÓRIO DO DIA
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTipoRelatorio('mes')}
+                className={`py-3 px-2 rounded-xl font-bold text-xs transition-all ${
+                  tipoRelatorio === 'mes'
+                    ? 'bg-teal-500 text-white shadow-md'
+                    : 'bg-slate-100 dark:bg-zinc-800 text-zinc-500'
+                }`}
+              >
+                RELATÓRIO DO MÊS
+              </button>
+
             </div>
 
-            {/* RESUMO FOTOGRÁFICO */}
-            {historico.some(v => (v.fotos && v.fotos.length > 0) || (v.fotosBase64 && v.fotosBase64.length > 0)) && (
-              <div className="mt-10">
-                <h3 className="text-sm font-black text-zinc-800 uppercase flex items-center gap-2 mb-4">
-                   <div className="bg-emerald-100 text-emerald-500 p-1.5 rounded-lg"><Camera size={16}/></div> Resumo Fotográfico (Visitas)
-                </h3>
-                
-                <div className="grid grid-cols-3 gap-3">
-                   {historico.filter(v => v.tipo !== 'problema').map(v => {
-                     const fotosPiscina = [];
-                     if (v.fotosBase64 && v.fotosBase64.length > 0) fotosPiscina.push(...v.fotosBase64);
-                     if (v.fotos && v.fotos.length > 0) fotosPiscina.push(...v.fotos);
-                     
-                     return fotosPiscina.slice(0,3).map((f, fi) => (
-                       <div key={`${v.id || v.vId}-${fi}`} className="relative aspect-square rounded-2xl overflow-hidden shadow-sm">
-                         <img src={f} className="w-full h-full object-cover" alt="piscina" crossOrigin="anonymous" />
-                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-                         <span className="absolute bottom-2 left-0 right-0 text-center text-[10px] font-black text-white uppercase tracking-widest">{formatarDataCurta(v.d)}</span> 
-                       </div>
-                     ));
-                   })}
-                </div>
-              </div>
+            <label className="block text-xs font-bold text-zinc-500 mb-2">
+              {tipoRelatorio === 'dia'
+                ? 'Selecione o dia da visita'
+                : 'Selecione o mês'}
+            </label>
+
+            {tipoRelatorio === 'dia' ? (
+              <select
+                value={dataAtiva}
+                onChange={e =>
+                  setDataSelecionada(e.target.value)
+                }
+                disabled={!datasDisponiveis.length}
+                className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-white font-bold text-sm outline-none"
+              >
+                {datasDisponiveis.length === 0 && (
+                  <option value="">
+                    Nenhuma visita disponível
+                  </option>
+                )}
+
+                {datasDisponiveis.map(data => (
+                  <option
+                    key={data}
+                    value={data}
+                  >
+                    {formatarData(data)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                value={mesAtivo}
+                onChange={e =>
+                  setMesSelecionado(e.target.value)
+                }
+                disabled={!mesesDisponiveis.length}
+                className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-white font-bold text-sm outline-none"
+              >
+                {mesesDisponiveis.length === 0 && (
+                  <option value="">
+                    Nenhum mês disponível
+                  </option>
+                )}
+
+                {mesesDisponiveis.map(mes => (
+                  <option
+                    key={mes}
+                    value={mes}
+                  >
+                    {formatarMes(mes)}
+                  </option>
+                ))}
+              </select>
             )}
 
-            {/* OCORRÊNCIAS TÉCNICAS E ALERTAS */}
-            {historico.some(v => v.tipo === 'problema' || (v.txtA && v.txtA.trim()) || (v.fotosA && v.fotosA.length > 0) || (v.fotosAlertaBase64 && v.fotosAlertaBase64.length > 0)) && (
-              <div className="mt-10">
-                <h3 className="text-sm font-black text-rose-600 uppercase flex items-center gap-2 mb-4">
-                  <div className="bg-rose-100 text-rose-500 p-1.5 rounded-lg"><AlertTriangle size={16}/></div> Ocorrências e Alertas
-                </h3>
-                <div className="space-y-4">
-                  {historico.filter(v => v.tipo === 'problema' || (v.txtA && v.txtA.trim()) || (v.fotosA && v.fotosA.length > 0) || (v.fotosAlertaBase64 && v.fotosAlertaBase64.length > 0)).map((o, idx) => {
-                    const descTexto = o.txtA || "Nenhuma descrição fornecida.";
-                    const fotosAlertaList = [];
-                    if (o.fotosAlertaBase64 && o.fotosAlertaBase64.length > 0) fotosAlertaList.push(...o.fotosAlertaBase64);
-                    if (o.fotosA && o.fotosA.length > 0) fotosAlertaList.push(...o.fotosA);
+            <div className="mt-4 bg-teal-50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/40 p-3 rounded-xl">
+
+              <p className="text-xs font-bold text-teal-700 dark:text-teal-400">
+                Período selecionado: {periodoDescricao}
+              </p>
+
+              <p className="text-[11px] text-zinc-500 mt-1">
+                {visitasFiltradas.length} visita(s) e{' '}
+                {totalFotos} foto(s)
+              </p>
+
+            </div>
+
+          </section>
+        )}
+
+        {/* COMPARTILHAMENTO */}
+        {!modoImpressao && (
+          <section className="space-y-3">
+
+            <div className="grid grid-cols-2 gap-3">
+
+              <button
+                onClick={handleWhatsApp}
+                disabled={
+                  carregando ||
+                  !historicoFiltrado.length
+                }
+                className="bg-green-500 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs disabled:opacity-50"
+              >
+                <MessageSquare size={17} />
+                RESUMO WHATSAPP
+              </button>
+
+              <button
+                onClick={handleSharePDF}
+                disabled={
+                  loadingPDF ||
+                  carregando ||
+                  !historicoFiltrado.length
+                }
+                className="bg-zinc-800 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs disabled:opacity-50"
+              >
+                {loadingPDF ? (
+                  <Loader2
+                    size={17}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <FileText size={17} />
+                )}
+
+                GERAR PDF
+              </button>
+
+            </div>
+
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              O WhatsApp abre uma mensagem com os
+              parâmetros do período selecionado.
+              Para compartilhar o documento com fotos,
+              gere o PDF e anexe o arquivo na conversa.
+            </p>
+
+          </section>
+        )}
+
+        {/* CARREGAMENTO */}
+        {carregando && (
+          <div className="flex justify-center items-center gap-2 py-8 text-zinc-500">
+            <Loader2
+              size={22}
+              className="animate-spin"
+            />
+            Carregando registros...
+          </div>
+        )}
+
+        {/* HISTÓRICO DE PARÂMETROS */}
+        {!carregando && (
+          <section>
+
+            <h3 className="text-sm font-black text-zinc-800 dark:text-white uppercase flex items-center gap-2 mb-4">
+
+              <div className="bg-sky-100 text-sky-500 p-1.5 rounded-lg">
+                <Droplets size={16} />
+              </div>
+
+              Histórico de Parâmetros
+            </h3>
+
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+
+              {visitasFiltradas.length === 0 ? (
+                <p className="text-center text-sm text-zinc-400 py-10">
+                  Nenhuma visita neste período.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+
+                  <table className="w-full text-center text-[10px]">
+
+                    <thead className="bg-zinc-900 text-white text-[9px] uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-1">Data</th>
+                        <th className="py-3 px-1">Status</th>
+                        <th className="py-3 px-1 text-sky-400">Horário</th>
+                        <th className="py-3 px-1">CL</th>
+                        <th className="py-3 px-1">PH</th>
+                        <th className="py-3 px-1">ALC</th>
+                        <th className="py-3 px-1">TEMP</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+
+                      {visitasFiltradas.map((visita, index) => {
+                        const aspectoTexto =
+                          visita.asp || visita.a || '';
+
+                        const aspectoLower =
+                          String(aspectoTexto).toLowerCase();
+
+                        let corAspecto = 'text-zinc-500';
+
+                        if (
+                          aspectoLower.includes('cristalina')
+                        ) {
+                          corAspecto = 'text-teal-500';
+                        } else if (
+                          aspectoLower.includes('turva')
+                        ) {
+                          corAspecto = 'text-amber-500';
+                        } else if (
+                          aspectoLower.includes('verde')
+                        ) {
+                          corAspecto = 'text-emerald-500';
+                        }
+
+                        const {
+                          hora,
+                          duracao,
+                          temperatura
+                        } = extrairDadosRegistro(visita);
+
+                        return (
+                          <tr
+                            key={visita.id || index}
+                            className="font-bold text-zinc-700 dark:text-zinc-300"
+                          >
+                            <td className="py-4 px-1">
+                              {visita.d}
+                            </td>
+
+                            <td className={`py-4 px-1 uppercase ${corAspecto}`}>
+                              {aspectoTexto || '--'}
+                            </td>
+
+                            <td className="py-4 px-1">
+                              <div className="flex flex-col items-center">
+                                <span>{hora || '--'}</span>
+
+                                {duracao && (
+                                  <span className="text-emerald-500 text-[8px] flex items-center gap-1 mt-1">
+                                    <Clock size={9} />
+                                    {duracao}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-1">
+                              {visita.c || '--'}
+                            </td>
+
+                            <td className="py-4 px-1">
+                              {visita.p || '--'}
+                            </td>
+
+                            <td className="py-4 px-1">
+                              {visita.al || '--'}
+                            </td>
+
+                            <td className="py-4 px-1">
+                              {temperatura}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    </tbody>
+                  </table>
+
+                </div>
+              )}
+
+            </div>
+          </section>
+        )}
+
+        {/* FOTOS ORGANIZADAS POR VISITA */}
+        {!carregando && (
+          <section>
+
+            <h3 className="text-sm font-black text-zinc-800 dark:text-white uppercase flex items-center gap-2 mb-4">
+
+              <div className="bg-emerald-100 text-emerald-500 p-1.5 rounded-lg">
+                <Images size={16} />
+              </div>
+
+              Resumo Fotográfico
+            </h3>
+
+            {gruposFotograficos.length === 0 ? (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center text-sm text-zinc-400">
+                Nenhuma foto registrada neste período.
+              </div>
+            ) : (
+              <div className="space-y-6">
+
+                {gruposFotograficos.map(
+                  (grupo, index) => {
+                    const {
+                      hora,
+                      duracao
+                    } = extrairDadosRegistro(
+                      grupo.visita
+                    );
 
                     return (
-                      <div key={o.id || idx} className="bg-rose-50 border border-rose-200 rounded-2xl p-4 shadow-sm">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider">
-                            Data: {o.d} {o.h ? `às ${o.h}` : ''}
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-700 leading-relaxed font-medium mb-3">{descTexto}</p>
-                        {fotosAlertaList.length > 0 && (
-                          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                            {fotosAlertaList.map((f, fi) => (
-                              <div key={fi} className="relative w-16 h-16 rounded-xl overflow-hidden shadow-sm border border-rose-200 flex-shrink-0">
-                                <img src={f} className="w-full h-full object-cover" alt="Ocorrência" />
+                      <div
+                        key={grupo.chave}
+                        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm"
+                      >
+
+                        {/* CABEÇALHO DO GRUPO */}
+                        <div className="bg-zinc-900 px-4 py-4">
+
+                          <div className="flex justify-between items-center gap-3">
+
+                            <div className="flex items-center gap-2">
+
+                              <CalendarDays
+                                size={17}
+                                className="text-teal-400"
+                              />
+
+                              <div>
+                                <p className="text-white font-black text-sm">
+                                  {formatarData(grupo.data)}
+                                </p>
+
+                                <p className="text-zinc-400 text-[10px] mt-1">
+                                  Visita {index + 1}
+                                  {hora ? ` • ${hora}` : ''}
+                                  {duracao ? ` • ${duracao}` : ''}
+                                </p>
                               </div>
-                            ))}
+
+                            </div>
+
+                            <span className="bg-teal-500/20 text-teal-300 px-2.5 py-1.5 rounded-lg text-[10px] font-black whitespace-nowrap">
+                              {grupo.fotos.length} FOTOS
+                            </span>
+
                           </div>
-                        )}
+                        </div>
+
+                        {/* TODAS AS FOTOS DA VISITA */}
+                        <div className="p-3">
+
+                          <div className="grid grid-cols-3 gap-2">
+
+                            {grupo.fotos.map(
+                              (foto, fotoIndex) => (
+                                <a
+                                  key={`${grupo.chave}-${fotoIndex}`}
+                                  href={foto}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="relative aspect-square rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 block"
+                                >
+
+                                  <img
+                                    src={foto}
+                                    alt={`Foto ${fotoIndex + 1} da visita de ${formatarData(grupo.data)}`}
+                                    className="w-full h-full object-cover"
+                                    crossOrigin="anonymous"
+                                    loading="lazy"
+                                  />
+
+                                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 py-1 text-center">
+                                    <span className="text-[9px] text-white font-bold">
+                                      FOTO {fotoIndex + 1}
+                                    </span>
+                                  </div>
+
+                                </a>
+                              )
+                            )}
+
+                          </div>
+
+                          <p className="text-[10px] text-zinc-400 mt-3 text-center">
+                            Toque em uma foto para ampliar.
+                          </p>
+
+                        </div>
+
                       </div>
                     );
-                  })}
-                </div>
+                  }
+                )}
+
               </div>
             )}
 
-            {/* RODAPÉ PRETO */}
-            <div className="mt-12 bg-zinc-900 text-center p-8 rounded-t-[2rem] border-t-4 border-teal-500">
-               <h3 className="text-white text-lg font-black mb-3">Obrigado pela confiança!</h3>
-               <p className="text-zinc-400 text-[10px] font-medium leading-relaxed max-w-[200px] mx-auto">
-                 Este serviço utiliza a tecnologia e o padrão de qualidade **Mão Na Água**.
-               </p>
-               <div className="mt-6 bg-zinc-800/50 rounded-xl p-4">
-                  <p className="text-zinc-500 text-[8px] font-bold">
-                    Para visualizar a galeria fotográfica completa em alta resolução, solicite acesso à sua pasta virtual.
-                  </p>
-               </div>
-            </div>
+          </section>
+        )}
+
+        {/* OCORRÊNCIAS E ALERTAS */}
+        {!carregando &&
+          ocorrenciasFiltradas.length > 0 && (
+            <section>
+
+              <h3 className="text-sm font-black text-rose-600 uppercase flex items-center gap-2 mb-4">
+                <AlertTriangle size={18} />
+                Ocorrências e Alertas
+              </h3>
+
+              <div className="space-y-4">
+
+                {ocorrenciasFiltradas.map(
+                  (ocorrencia, index) => {
+                    const fotos = listarFotos(
+                      ocorrencia,
+                      true
+                    );
+
+                    return (
+                      <div
+                        key={ocorrencia.id || index}
+                        className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-2xl p-4"
+                      >
+
+                        <p className="text-xs font-black text-rose-600 mb-2">
+                          {ocorrencia.d}
+                          {ocorrencia.h
+                            ? ` • ${ocorrencia.h}`
+                            : ''}
+                        </p>
+
+                        <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-3 whitespace-pre-wrap">
+                          {ocorrencia.txtA ||
+                            'Ocorrência registrada sem descrição.'}
+                        </p>
+
+                        {fotos.length > 0 && (
+                          <div className="grid grid-cols-3 gap-2">
+
+                            {fotos.map((foto, fotoIndex) => (
+                              <a
+                                key={fotoIndex}
+                                href={foto}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="aspect-square rounded-xl overflow-hidden"
+                              >
+                                <img
+                                  src={foto}
+                                  alt={`Foto da ocorrência ${fotoIndex + 1}`}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                              </a>
+                            ))}
+
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  }
+                )}
+
+              </div>
+            </section>
+          )}
+
+        {/* GERENCIAR VISITAS */}
+        {!modoImpressao &&
+          !carregando &&
+          visitasFiltradas.length > 0 && (
+            <section>
+
+              <h3 className="text-sm font-black text-zinc-800 dark:text-white uppercase flex items-center gap-2 mb-4">
+
+                {funcionario ? (
+                  <LockKeyhole
+                    size={18}
+                    className="text-amber-500"
+                  />
+                ) : (
+                  <Pencil
+                    size={18}
+                    className="text-teal-500"
+                  />
+                )}
+
+                Gerenciar Visitas
+              </h3>
+
+              <div className="space-y-3">
+
+                {visitasFiltradas.map(
+                  (visita, index) => {
+                    const id =
+                      visita.id || visita.vId;
+
+                    const solicitando =
+                      solicitandoId === id;
+
+                    return (
+                      <div
+                        key={id || index}
+                        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 shadow-sm"
+                      >
+
+                        <div className="flex items-center justify-between mb-3">
+
+                          <div>
+                            <p className="font-black text-sm text-zinc-800 dark:text-white">
+                              Visita de {visita.d}
+                            </p>
+
+                            <p className="text-[11px] text-zinc-500 mt-1">
+                              {visita.h || 'Horário não informado'}
+                            </p>
+                          </div>
+
+                          <span className="text-[9px] font-bold uppercase text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-1 rounded-lg">
+                            Finalizada
+                          </span>
+
+                        </div>
+
+                        {funcionario ? (
+                          <button
+                            onClick={() =>
+                              handleSolicitarCorrecao(visita)
+                            }
+                            disabled={solicitando}
+                            className="w-full bg-amber-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {solicitando ? (
+                              <Loader2
+                                size={16}
+                                className="animate-spin"
+                              />
+                            ) : (
+                              <Send size={16} />
+                            )}
+
+                            SOLICITAR CORREÇÃO
+                          </button>
+                        ) : podeEditar ? (
+                          <button
+                            onClick={() =>
+                              handleEditarVisita(visita)
+                            }
+                            className="w-full bg-teal-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                          >
+                            <Pencil size={16} />
+                            EDITAR VISITA
+                          </button>
+                        ) : (
+                          <p className="text-xs text-zinc-500 text-center py-2">
+                            Edição indisponível para esta conta.
+                          </p>
+                        )}
+
+                      </div>
+                    );
+                  }
+                )}
+
+              </div>
+            </section>
+          )}
+
+        {/* RODAPÉ */}
+        <footer className="bg-zinc-900 text-center p-8 rounded-2xl border-t-4 border-teal-500 mt-8">
+
+          <h3 className="text-white text-lg font-black mb-3">
+            Obrigado pela confiança!
+          </h3>
+
+          <p className="text-zinc-400 text-xs leading-relaxed">
+            Este serviço utiliza a tecnologia e o
+            padrão de qualidade Mão Na Água.
+          </p>
+
+          <div className="mt-5 flex justify-center items-center gap-2 text-teal-400">
+            <Camera size={14} />
+
+            <span className="text-[10px] font-bold">
+              Registro fotográfico de manutenção
+            </span>
           </div>
-       </main>
+
+        </footer>
+
+      </main>
     </div>
   );
 }

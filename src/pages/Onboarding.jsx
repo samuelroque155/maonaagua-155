@@ -1,11 +1,10 @@
 
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
-import { supabase } from '../supabase';
 import { Briefcase, User } from 'lucide-react';
 
 export default function Onboarding() {
-  const { user, setPerfil, gradText } = useContext(AppContext);
+  const { user, definirTipoPerfil, gradText } = useContext(AppContext);
   const [loading, setLoading] = useState(false);
 
   const selecionarTipo = async (tipo) => {
@@ -17,46 +16,7 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
-      console.log('Usuário conectado:', user.id);
-      console.log('Tipo de conta selecionado:', tipo);
-
-      const resultado = await supabase
-        .from('perfis')
-        .upsert(
-          {
-            id: user.id,
-            tipo_conta: tipo
-          },
-          {
-            onConflict: 'id'
-          }
-        );
-
-      console.log(
-        'RESPOSTA COMPLETA DO SUPABASE:',
-        JSON.stringify(resultado, null, 2)
-      );
-
-      if (resultado.error) {
-        const erro = resultado.error;
-
-        alert(
-          'Falha ao salvar o perfil.\n\n' +
-          'Mensagem: ' + (erro.message || 'Não informada') + '\n' +
-          'Código: ' + (erro.code || 'Não informado') + '\n' +
-          'Detalhes: ' + (erro.details || 'Sem detalhes') + '\n' +
-          'Dica: ' + (erro.hint || 'Sem dica')
-        );
-
-        return;
-      }
-
-      setPerfil(prev => ({
-        ...prev,
-        tipoConta: tipo
-      }));
-
-      alert('Tipo de conta salvo com sucesso!');
+      await definirTipoPerfil(tipo, true);
     } catch (error) {
       console.error('ERRO INESPERADO AO DEFINIR TIPO:', error);
 
@@ -96,7 +56,7 @@ export default function Onboarding() {
 
             <div>
               <h3 className="text-xl font-bold text-white mb-1">
-                Sou Autônomo
+                Autônomo
               </h3>
 
               <p className="text-sm text-zinc-400 leading-tight">
@@ -116,11 +76,11 @@ export default function Onboarding() {
 
             <div>
               <h3 className="text-xl font-bold text-white mb-1">
-                Sou Empresa
+                Empresa
               </h3>
 
               <p className="text-sm text-zinc-400 leading-tight">
-                Tenho uma equipe de piscinólogos e preciso atribuir rotas a eles.
+                Atribuir rotas à minha equipe de piscineiros
               </p>
             </div>
           </button>

@@ -1,13 +1,12 @@
 
 import React, { useContext } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
-import { supabase } from '../supabase';
 import {
   ArrowLeft, Pencil, ShoppingCart, Plus, Trash2, Save, Briefcase, User
 } from 'lucide-react';
 
 export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair }) {
-  const { user, perfil, setPerfil, gradText, gradBtn } = useContext(AppContext);
+  const { user, perfil, setPerfil, gradText, gradBtn, definirTipoPerfil, salvandoPerfil } = useContext(AppContext);
 
   const alternarTipoConta = async (novoTipo) => {
     if (!user) {
@@ -16,25 +15,7 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
     }
 
     try {
-      const { error } = await supabase
-        .from('perfis')
-        .upsert(
-          {
-            id: user.id,
-            tipo_conta: novoTipo
-          },
-          {
-            onConflict: 'id'
-          }
-        );
-
-      if (error) {
-        console.error('Erro ao alterar tipo de conta:', error);
-        alert('Erro ao alterar tipo de conta: ' + error.message);
-        return;
-      }
-
-      setPerfil(prev => ({ ...prev, tipoConta: novoTipo }));
+      await definirTipoPerfil(novoTipo);
       alert('Tipo de conta alterado para: ' + novoTipo);
     } catch (e) {
       console.error('Erro inesperado ao alterar tipo de conta:', e);
@@ -156,8 +137,8 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
           </div>
         </section>
 
-        <button onClick={salvarConfiguracoes} className={`w-full py-4 rounded-xl font-bold ${gradBtn} flex items-center justify-center gap-2`}>
-          <Save size={20} /> SALVAR ALTERAÇÕES
+        <button onClick={salvarConfiguracoes} disabled={salvandoPerfil} className={`w-full py-4 rounded-xl font-bold ${gradBtn} flex items-center justify-center gap-2 disabled:opacity-50`}>
+          <Save size={20} /> {salvandoPerfil ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
         </button>
 
         <button onClick={handleSair} className="w-full py-4 text-rose-500 font-bold border border-rose-200 dark:border-rose-900/30 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors">

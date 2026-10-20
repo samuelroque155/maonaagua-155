@@ -1,5 +1,5 @@
 
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext } from './context/AppContext.jsx';
 import { supabase } from './supabase';
 import { db } from './firebase';
@@ -7,7 +7,6 @@ import { collection, addDoc } from 'firebase/firestore';
 import { savePendingVisit } from './db';
 import imageCompression from 'browser-image-compression';
 
-// Componentes das Páginas
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Relatorios from './pages/Relatorios';
@@ -19,59 +18,146 @@ import AdminPanel from './pages/AdminPanel';
 import Configuracoes from './pages/Configuracoes';
 import Onboarding from './pages/Onboarding';
 import GestaoEquipe from './pages/GestaoEquipe';
+import AcessoPendente from './pages/AcessoPendente';
+import { temAcessoAoApp } from './services/assinaturaService';
 
-// Ícones Globais
-import { AlertTriangle } from 'lucide-react';
 import { enviarFotoVisita } from './services/fotosService';
-
-const ADMIN_EMAIL = 'samuelroque155@gmail.com';
+import { lerProgresso, salvarProgresso, removerProgresso } from './services/progressoVisita';
+import { criarControleBusca, fotosDaVisita } from './services/visitaEstado';
 
 const compressImage = async (file) => {
-  const options = {
+  return imageCompression(file, {
     maxSizeMB: 0.2,
     maxWidthOrHeight: 1024,
     useWebWorker: true,
     fileType: 'image/jpeg'
-  };
-  return await imageCompression(file, options);
+  });
 };
 
 const fileToBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+
     reader.readAsDataURL(file);
+
     reader.onload = () => resolve(reader.result);
-    reader.onerror = error => reject(error);
+    reader.onerror = reject;
   });
+};
+
+const normalizarTipoConta = (tipo) => {
+  return String(tipo || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 };
 
 export default function App() {
   const {
-    user, authLoading, perfil, setPerfil, clientes, setClientes,
-    tela, setTela, atualizarE_SalvarClientes, dataHojeStr,
-    gradBtn, processarFilaSincronizacao, setPendentesCount, targetUid
+    user,
+    authLoading,
+    perfil,
+    clientes,
+    setClientes,
+    tela,
+    setTela,
+    dataHojeStr,
+    processarFilaSincronizacao,
+    targetUid,
+    salvarConfiguracoes,
+    recuperandoSenha
   } = useContext(AppContext);
 
   const [clienteAtual, setClienteAtual] = useState(null);
   const [clienteEditando, setClienteEditando] = useState(null);
-  const [historicoDoRelatorio, setHistoricoDoRelatorio] = useState([]);
-  const [carregandoRelatorio, setCarregandoRelatorio] = useState(false);
+
+  const [historicoDoRelatorio, setHistoricoDoRelatorio] =
+    useState([]);
+
+  const [carregandoRelatorio, setCarregandoRelatorio] =
+    useState(false);
+
   const [toast, setToast] = useState(null);
   const [salvandoVisita, setSalvandoVisita] = useState(false);
 
-  // Estados dos Formulários
   const [aspecto, setAspecto] = useState('Cristalina');
   const [ph, setPh] = useState('');
   const [cloro, setCloro] = useState('');
   const [alcalinidade, setAlcalinidade] = useState('');
   const [temperatura, setTemperatura] = useState('');
+
   const [fotosVisita, setFotosVisita] = useState([]);
   const [fotosAlerta, setFotosAlerta] = useState([]);
   const [textoAlerta, setTextoAlerta] = useState('');
   const [produtosFaltando, setProdutosFaltando] = useState([]);
-  const [horaInicioVisita, setHoraInicioVisita] = useState(null);
 
-  // Carrega os clientes cadastrados no Supabase
+  const [horaInicioVisita, setHoraInicioVisita] =
+    useState(null);
+
+  const [progressoPausado, setProgressoPausado] = useState(null);
+  const [progressoCarregado, setProgressoCarregado] = useState(null);
+  const controleRelatorio = useRef(criarControleBusca());
+  const controleEdicao = useRef(criarControleBusca());
+  const sessaoFoto = useRef(0);
+  const pausandoVisita = useRef(false);
+  // Identifica qual visita finalizada está sendo editada.
+  const [visitaEmEdicao, setVisitaEmEdicao] = useState(null);
+
+  useEffect(() => {
+    let ativo = true;
+    Promise.resolve().then(() => {
+      if (!ativo) return null;
+      setProgressoPausado(null);
+      setProgressoCarregado(null);
+      setClienteAtual(null);
+      setVisitaEmEdicao(null);
+      setHoraInicioVisita(null);
+      pausandoVisita.current = false;
+      setFotosVisita([]);
+      setFotosAlerta([]);
+      setTela('lista');
+      return user?.id ? lerProgresso(user.id) : null;
+    }).then(progresso => {
+      if (ativo && user?.id) {
+        setProgressoPausado(progresso);
+        setProgressoCarregado(user.id);
+      }
+    }).catch(erro => {
+      console.error('Erro ao recuperar rascunho:', erro);
+      if (ativo) alert('Não foi possível recuperar a limpeza pausada. Reabra o app antes de iniciar outra.');
+    });
+    return () => { ativo = false; sessaoFoto.current += 1; };
+  }, [user?.id, setTela]);
+
+  useEffect(() => {
+    if (tela !== 'ver_relatorio') controleRelatorio.current.invalidar();
+    if (tela !== 'ver_relatorio' && tela !== 'editar_visita') controleEdicao.current.invalidar();
+  }, [tela, user?.id]);
+
+  useEffect(() => {
+    const relatorio = controleRelatorio.current;
+    const edicao = controleEdicao.current;
+    return () => { relatorio.invalidar(); edicao.invalidar(); };
+  }, [user?.id]);
+
+  const tipoConta = normalizarTipoConta(perfil?.tipoConta);
+
+  const funcionario = tipoConta === 'funcionario';
+
+  const podeEditarVisita =
+    tipoConta === 'autonomo' ||
+    tipoConta === 'empresa';
+
+  const showToast = (message) => {
+    setToast(message);
+
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  };
+
+  // CLIENTES DO SUPABASE
   useEffect(() => {
     if (!user?.id) return;
 
@@ -82,20 +168,54 @@ export default function App() {
         .from('clientes')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: true });
+        .order('created_at', {
+          ascending: true
+        });
 
       if (!ativo) return;
 
       if (error) {
-        console.error('Erro ao carregar clientes do Supabase:', error);
+        console.error(
+          'Erro ao carregar clientes:',
+          error
+        );
+
         return;
       }
 
-      setClientes((data || []).map(c => ({
-        ...c,
-        diasVisita: c.dias_visita || [],
-        horaVisita: c.hora_visita || ''
-      })));
+      // Recupera o estado a partir das visitas existentes, sem alterar registros.
+      const ultimas = new Map();
+      const tamanhoPagina = 500;
+      for (let inicio = 0; ; inicio += tamanhoPagina) {
+        const { data: visitas, error: erroVisitas } = await supabase
+          .from('visitas')
+          .select('id, cliente_id, data_visita, created_at')
+          .eq('user_id', user.id)
+          .order('id', { ascending: true })
+          .range(inicio, inicio + tamanhoPagina - 1);
+        if (!ativo) return;
+        if (erroVisitas) {
+          console.error('Erro ao recuperar conclusões:', erroVisitas);
+          alert('Não foi possível recuperar as limpezas concluídas. Verifique a conexão e reabra o app.');
+          return;
+        }
+        for (const visita of visitas || []) {
+          const dataVisita = visita.data_visita || visita.created_at;
+          const chave = String(visita.cliente_id);
+          if (!ultimas.has(chave) || new Date(dataVisita) > new Date(ultimas.get(chave))) {
+            ultimas.set(chave, dataVisita);
+          }
+        }
+        if ((visitas || []).length < tamanhoPagina) break;
+      }
+      setClientes(
+        (data || []).map(c => ({
+          ...c,
+          diasVisita: c.dias_visita || [],
+          horaVisita: c.hora_visita || '',
+          ultimaVisita: ultimas.get(String(c.id)) || null
+        }))
+      );
     };
 
     carregarClientes();
@@ -105,248 +225,39 @@ export default function App() {
     };
   }, [user?.id, setClientes]);
 
-  const showToast = (message) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const handleSair = async () => {
     if (!window.confirm('Sair da conta?')) return;
 
     const { error } = await supabase.auth.signOut();
 
     if (error) {
-      console.error('Erro ao sair da conta:', error);
-      alert('Não foi possível sair da conta: ' + error.message);
+      alert(
+        'Não foi possível sair: ' +
+        error.message
+      );
+
       return;
     }
 
     setTela('lista');
   };
 
-  // Salva o progresso da visita no navegador
+  // SALVAMENTO AUTOMÁTICO DE VISITA EM ANDAMENTO
   useEffect(() => {
-    if (tela === 'visita' && clienteAtual) {
-      const progresso = {
-        clienteId: clienteAtual.id,
-        ph,
-        cloro,
-        alcalinidade,
-        temperatura,
-        aspecto,
-        textoAlerta,
-        fotosVisita,
-        fotosAlerta,
-        produtosFaltando,
-        horaInicioVisita: horaInicioVisita
-          ? horaInicioVisita.getTime()
-          : null
-      };
-
-      localStorage.setItem(
-        'maonagua_visita_progresso',
-        JSON.stringify(progresso)
-      );
+    // Não sobrescreve uma visita pausada ao editar relatório.
+    if (
+      tela !== 'visita' ||
+      !clienteAtual ||
+      visitaEmEdicao ||
+      pausandoVisita.current ||
+      progressoCarregado !== user?.id
+    ) {
+      return;
     }
-  }, [
-    ph,
-    cloro,
-    alcalinidade,
-    temperatura,
-    aspecto,
-    textoAlerta,
-    fotosVisita,
-    fotosAlerta,
-    produtosFaltando,
-    clienteAtual,
-    tela,
-    horaInicioVisita
-  ]);
-
-  // Busca visitas no Supabase e gera links temporários para fotos privadas.
-  const abrirRelatorio = async (cliente) => {
-    setClienteAtual(cliente);
-    setTela('ver_relatorio');
-    setCarregandoRelatorio(true);
-    setHistoricoDoRelatorio([]);
-    try {
-      const { data, error } = await supabase
-        .from('visitas')
-        .select('*')
-        .eq('cliente_id', cliente.id)
-        .order('data_visita', { ascending: false });
-      if (error) throw error;
-
-      const criarLinks = async (caminhos = []) => {
-        const links = await Promise.all((Array.isArray(caminhos) ? caminhos : []).map(async caminho => {
-          if (typeof caminho !== 'string') return null;
-          const { data: urlData, error: urlError } = await supabase.storage
-            .from('fotos-visitas').createSignedUrl(caminho, 3600);
-          if (urlError) {
-            console.error('Erro ao abrir foto:', urlError);
-            return null;
-          }
-          return urlData.signedUrl;
-        }));
-        return links.filter(Boolean);
-      };
-
-      const historico = await Promise.all((data || []).map(async visita => {
-        const fotos = await criarLinks(visita.fotos);
-        const fotosA = await criarLinks(visita.fotos_alerta);
-        const dataVisita = new Date(visita.data_visita || visita.created_at);
-        return {
-          id: visita.id,
-          vId: visita.id,
-          clienteId: visita.cliente_id,
-          d: dataVisita.toLocaleDateString('pt-BR'),
-          h: visita.horario || '',
-          ts: dataVisita.getTime(),
-          p: visita.ph || '',
-          c: visita.cloro || '',
-          al: visita.alcalinidade || '',
-          t: visita.temperatura || '',
-          asp: visita.aspecto || '',
-          txtA: visita.observacoes || '',
-          prods: visita.produtos || [],
-          fotos,
-          fotosA,
-          fotosBase64: [],
-          fotosAlertaBase64: [],
-          tipo: 'visita'
-        };
-      }));
-      setHistoricoDoRelatorio(historico);
-    } catch (erro) {
-      console.error('Erro ao carregar relatório:', erro);
-      alert('Não foi possível abrir o relatório: ' + erro.message);
-    } finally {
-      setCarregandoRelatorio(false);
-    }
-  };
-
-  const abrirEdicaoCliente = (cliente) => {
-    setClienteEditando(cliente);
-    setTela('editar_cliente');
-  };
-
-  const iniciarVisita = async (cliente) => {
-    const horaInicioMs = Date.now();
-
-    const estavaEmAndamento =
-      cliente.visitaEmAndamentoData === dataHojeStr;
-
-    let novosClientes;
-
-    if (!estavaEmAndamento) {
-      novosClientes = clientes.map(c =>
-        c.id === cliente.id
-          ? {
-              ...c,
-              visitaEmAndamentoData: dataHojeStr,
-              tempoTrabalhadoAcumulado: 0,
-              horaInicioVisitaMs: horaInicioMs
-            }
-          : c
-      );
-
-      setClientes(novosClientes);
-      setHoraInicioVisita(new Date(horaInicioMs));
-    } else {
-      novosClientes = clientes.map(c =>
-        c.id === cliente.id
-          ? {
-              ...c,
-              horaInicioVisitaMs: horaInicioMs
-            }
-          : c
-      );
-
-      setClientes(novosClientes);
-      setHoraInicioVisita(new Date(horaInicioMs));
-    }
-
-    const clienteAtualizado =
-      novosClientes.find(c => c.id === cliente.id) || cliente;
-
-    setClienteAtual(clienteAtualizado);
-
-    // Recupera uma visita em andamento
-    const salvo = localStorage.getItem(
-      'maonagua_visita_progresso'
-    );
-
-    if (salvo) {
-      try {
-        const progresso = JSON.parse(salvo);
-
-        if (progresso.clienteId === cliente.id) {
-          setAspecto(progresso.aspecto || 'Cristalina');
-          setPh(progresso.ph || '');
-          setCloro(progresso.cloro || '');
-          setAlcalinidade(progresso.alcalinidade || '');
-          setTemperatura(progresso.temperatura || '');
-          setFotosVisita(progresso.fotosVisita || []);
-          setFotosAlerta(progresso.fotosAlerta || []);
-          setTextoAlerta(progresso.textoAlerta || '');
-          setProdutosFaltando(progresso.produtosFaltando || []);
-          setTela('visita');
-          return;
-        }
-      } catch (e) {
-        console.error(
-          'Erro ao carregar progresso da visita:',
-          e
-        );
-      }
-    }
-
-    setAspecto('Cristalina');
-    setPh('');
-    setCloro('');
-    setAlcalinidade('');
-    setTemperatura('');
-    setFotosVisita([]);
-    setFotosAlerta([]);
-    setTextoAlerta('');
-    setProdutosFaltando([]);
-    setTela('visita');
-  };
-
-  const pausarVisita = async () => {
-    if (!clienteAtual) return;
-
-    const agora = Date.now();
-
-    const tempoSessao = horaInicioVisita
-      ? Math.floor(
-          (agora - horaInicioVisita.getTime()) / 1000
-        )
-      : 0;
-
-    const cliente = clientes.find(
-      c => c.id === clienteAtual.id
-    );
-
-    const acumuladoAnterior =
-      cliente?.tempoTrabalhadoAcumulado || 0;
-
-    const novoAcumulado =
-      acumuladoAnterior + tempoSessao;
-
-    const novosClientes = clientes.map(c =>
-      c.id === clienteAtual.id
-        ? {
-            ...c,
-            tempoTrabalhadoAcumulado: novoAcumulado,
-            horaInicioVisitaMs: null
-          }
-        : c
-    );
-
-    setClientes(novosClientes);
 
     const progresso = {
+      userId: user.id,
+      salvoEm: Date.now(),
       clienteId: clienteAtual.id,
       ph,
       cloro,
@@ -357,101 +268,870 @@ export default function App() {
       fotosVisita,
       fotosAlerta,
       produtosFaltando,
-      horaInicioVisita: null
+      horaInicioVisita: horaInicioVisita
+        ? horaInicioVisita.getTime()
+        : null,
+      inicioOriginalMs:
+        clienteAtual.inicioOriginalMs ||
+        horaInicioVisita?.getTime() ||
+        null,
+      tempoTrabalhadoAcumulado:
+        clienteAtual.tempoTrabalhadoAcumulado || 0
     };
 
-    localStorage.setItem(
-      'maonagua_visita_progresso',
-      JSON.stringify(progresso)
-    );
+    salvarProgresso(user.id, progresso).catch(erro => {
+      console.error('Erro ao salvar rascunho:', erro);
+      alert('Não foi possível guardar o progresso neste aparelho. Mantenha o app aberto e tente pausar novamente.');
+    });
+  }, [
+    tela,
+    clienteAtual,
+    visitaEmEdicao,
+    ph,
+    cloro,
+    alcalinidade,
+    temperatura,
+    aspecto,
+    textoAlerta,
+    fotosVisita,
+    fotosAlerta,
+    produtosFaltando,
+    horaInicioVisita,
+    user?.id,
+    progressoCarregado
+  ]);
 
-    showToast('Visita pausada. Tempo salvo!');
-    setTela('lista');
-  };
+  // RELATÓRIOS DO SUPABASE
+  const abrirRelatorio = async (cliente) => {
+    const pedido = controleRelatorio.current.iniciar();
+    controleEdicao.current.invalidar();
+    setClienteAtual(cliente);
+    setTela('ver_relatorio');
+    setCarregandoRelatorio(true);
+    setHistoricoDoRelatorio([]);
 
-  // Compacta primeiro; depois envia ao Storage e mantém o caminho salvo no estado.
-  const adicionarFoto = async (evento, atualizarEstado) => {
-    const arquivo = evento.target.files?.[0];
-    if (!arquivo) return;
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const urlLocal = URL.createObjectURL(arquivo);
-    atualizarEstado(anteriores => [...anteriores, { id, url: urlLocal, status: 'compressing' }]);
     try {
-      const comprimida = await compressImage(arquivo);
-      const base64 = await fileToBase64(comprimida);
-      const caminho = await enviarFotoVisita(comprimida);
-      atualizarEstado(anteriores => anteriores.map(foto =>
-        foto.id === id
-          ? { ...foto, base64, caminho, status: 'ready' }
-          : foto
-      ));
+      const { data, error } = await supabase
+        .from('visitas')
+        .select('*')
+        .eq('cliente_id', cliente.id)
+        .eq('user_id', user.id)
+        .order('data_visita', {
+          ascending: false
+        });
+
+      if (error) throw error;
+
+      const criarLinks = async (caminhos = []) => {
+        const links = await Promise.all(
+          (Array.isArray(caminhos) ? caminhos : []).map(
+            async caminho => {
+              if (typeof caminho !== 'string') {
+                return null;
+              }
+
+              const { data: urlData, error: urlError } =
+                await supabase.storage
+                  .from('fotos-visitas')
+                  .createSignedUrl(caminho, 3600);
+
+              if (urlError) {
+                console.error(
+                  'Erro ao abrir foto:',
+                  urlError
+                );
+
+                return null;
+              }
+
+              return urlData.signedUrl;
+            }
+          )
+        );
+
+        return links.filter(Boolean);
+      };
+
+      const historico = await Promise.all(
+        (data || []).map(async visita => {
+          const fotos = await criarLinks(
+            visita.fotos
+          );
+
+          const fotosA = await criarLinks(
+            visita.fotos_alerta
+          );
+
+          const dataVisita = new Date(
+            visita.data_visita ||
+            visita.created_at
+          );
+
+          return {
+            id: visita.id,
+            vId: visita.id,
+            clienteId: visita.cliente_id,
+            d: dataVisita.toLocaleDateString('pt-BR'),
+            h: visita.horario || '',
+            ts: dataVisita.getTime(),
+            p: visita.ph || '',
+            c: visita.cloro || '',
+            al: visita.alcalinidade || '',
+            t: visita.temperatura || '',
+            asp: visita.aspecto || '',
+            txtA: visita.observacoes || '',
+            prods: visita.produtos || [],
+            fotos,
+            fotosA,
+            fotosBase64: [],
+            fotosAlertaBase64: [],
+            tipo: 'visita'
+          };
+        })
+      );
+
+      if (!controleRelatorio.current.atual(pedido)) return;
+      setHistoricoDoRelatorio(historico);
     } catch (erro) {
-      console.error('Erro ao enviar foto ao Supabase:', erro);
-      atualizarEstado(anteriores => anteriores.map(foto =>
-        foto.id === id ? { ...foto, status: 'error' } : foto
-      ));
-      alert('Não foi possível enviar a foto: ' + erro.message);
+      if (!controleRelatorio.current.atual(pedido)) return;
+      console.error(
+        'Erro ao carregar relatório:',
+        erro
+      );
+
+      alert(
+        'Não foi possível abrir o relatório: ' +
+        erro.message
+      );
+    } finally {
+      if (controleRelatorio.current.atual(pedido)) setCarregandoRelatorio(false);
     }
-    evento.target.value = '';
   };
 
-  const handleNovaFoto = (evento) => adicionarFoto(evento, setFotosVisita);
-  const handleFotoAlerta = (evento) => adicionarFoto(evento, setFotosAlerta);
+  const abrirEdicaoCliente = (cliente) => {
+    setClienteEditando(cliente);
+    setTela('editar_cliente');
+  };
 
-  // Salva a visita e os caminhos das imagens na tabela public.visitas.
-  const salvarVisita = async () => {
-    if (!clienteAtual) return alert('Selecione um cliente.');
-    if (fotosVisita.length < 3) return alert('Adicione pelo menos 3 fotos da piscina.');
-    const todasFotos = [...fotosVisita, ...fotosAlerta];
-    if (todasFotos.some(f => f.status !== 'ready' || !f.caminho)) {
-      return alert('Aguarde todas as fotos serem enviadas. Se alguma falhou, remova e envie novamente.');
+  // ABRIR VISITA FINALIZADA PARA CORREÇÃO
+  const editarVisitaFinalizada = async (visita) => {
+    const pedido = controleEdicao.current.iniciar();
+    if (!podeEditarVisita || funcionario) {
+      alert(
+        'Você não tem autorização para editar esta visita.'
+      );
+
+      return;
+    }
+
+    if (!clienteAtual?.id || !visita?.id) {
+      alert('Visita não identificada.');
+      return;
+    }
+
+    // Evita misturar visita finalizada com outra pausada.
+    let progresso;
+    try {
+      progresso = await lerProgresso(user.id);
+    } catch (erro) {
+      console.error('Erro ao recuperar rascunho:', erro);
+      alert('Não foi possível conferir a limpeza pausada. Tente novamente.');
+      return;
+    }
+    if (!controleEdicao.current.atual(pedido)) return;
+
+    if (progresso) {
+      alert(
+        'Existe uma visita pausada. Finalize essa visita antes de editar um relatório antigo.'
+      );
+
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('visitas')
+        .select('*')
+        .eq('id', visita.id)
+        .eq('cliente_id', clienteAtual.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        throw new Error(
+          'Visita não encontrada ou sem permissão.'
+        );
+      }
+
+      const prepararFotos = async (caminhos) => {
+        const lista = Array.isArray(caminhos)
+          ? caminhos
+          : [];
+
+        const resultado = await Promise.all(
+          lista.map(async (caminho, index) => {
+            const { data: link, error: erroLink } =
+              await supabase.storage
+                .from('fotos-visitas')
+                .createSignedUrl(caminho, 3600);
+
+            return {
+              id: `existente-${index}-${caminho}`,
+              caminho,
+              url: erroLink
+                ? ''
+                : link.signedUrl,
+              status: 'ready'
+            };
+          })
+        );
+
+        return resultado;
+      };
+
+      const fotos = await prepararFotos(
+        data.fotos
+      );
+
+      const alertas = await prepararFotos(
+        data.fotos_alerta
+      );
+
+      if (!controleEdicao.current.atual(pedido)) return;
+      sessaoFoto.current += 1;
+      setVisitaEmEdicao(data);
+      setAspecto(data.aspecto || 'Cristalina');
+      setPh(data.ph || '');
+      setCloro(data.cloro || '');
+      setAlcalinidade(data.alcalinidade || '');
+      setTemperatura(data.temperatura || '');
+      setTextoAlerta(data.observacoes || '');
+      setProdutosFaltando(data.produtos || []);
+      setFotosVisita(fotos);
+      setFotosAlerta(alertas);
+
+      // A edição não inicia nem altera o cronômetro.
+      setHoraInicioVisita(null);
+
+      setTela('editar_visita');
+    } catch (erro) {
+      if (!controleEdicao.current.atual(pedido)) return;
+      console.error(
+        'Erro ao abrir visita para edição:',
+        erro
+      );
+
+      alert(
+        'Não foi possível abrir a visita: ' +
+        erro.message
+      );
+    }
+  };
+
+  // ATUALIZAR A MESMA VISITA NO SUPABASE
+  const salvarEdicaoVisita = async () => {
+    if (!visitaEmEdicao) return;
+
+    if (!podeEditarVisita || funcionario) {
+      alert('Você não tem autorização.');
+      return;
+    }
+
+    if (fotosVisita.length < 3) {
+      alert(
+        'A visita precisa manter pelo menos 3 fotos.'
+      );
+
+      return;
+    }
+
+    const todasFotos = [
+      ...fotosVisita,
+      ...fotosAlerta
+    ];
+
+    if (!fotosDaVisita(todasFotos, user.id, clienteAtual.id, visitaEmEdicao.id)) {
+      alert('Há fotos de outra visita neste formulário. Reabra a visita antes de salvar.');
+      return;
+    }
+
+    if (
+      todasFotos.some(
+        foto =>
+          foto.status !== 'ready' ||
+          !foto.caminho
+      )
+    ) {
+      alert(
+        'Aguarde o envio das fotos antes de salvar.'
+      );
+
+      return;
     }
 
     setSalvandoVisita(true);
-    try {
-      const { data: { user: usuario }, error: erroAuth } = await supabase.auth.getUser();
-      if (erroAuth || !usuario) throw new Error('Faça login novamente.');
 
-      const fim = new Date();
-      const inicio = horaInicioVisita || fim;
-      const minutos = Math.max(1, Math.round((fim.getTime() - inicio.getTime()) / 60000));
-      const horario = `${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${fim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (${minutos}m)`;
-      const { error } = await supabase.from('visitas').insert({
-        user_id: usuario.id,
-        cliente_id: clienteAtual.id,
-        data_visita: fim.toISOString(),
-        horario,
-        cloro: cloro || '',
+    try {
+      const {
+        data: { user: usuario },
+        error: erroAuth
+      } = await supabase.auth.getUser();
+
+      if (erroAuth || !usuario || usuario.id !== user.id) {
+        throw new Error(
+          'Faça login novamente.'
+        );
+      }
+
+      const alteracoes = {
+        aspecto: aspecto || '',
         ph: ph || '',
+        cloro: cloro || '',
         alcalinidade: alcalinidade || '',
         temperatura: temperatura || '',
-        aspecto: aspecto || '',
         observacoes: textoAlerta || '',
         produtos: produtosFaltando,
-        fotos: fotosVisita.map(f => f.caminho),
-        fotos_alerta: fotosAlerta.map(f => f.caminho)
-      });
+        fotos: fotosVisita.map(
+          foto => foto.caminho
+        ),
+        fotos_alerta: fotosAlerta.map(
+          foto => foto.caminho
+        )
+      };
+
+      const { data, error } = await supabase
+        .from('visitas')
+        .update(alteracoes)
+        .eq('id', visitaEmEdicao.id)
+        .eq('cliente_id', clienteAtual.id)
+        .eq('user_id', usuario.id)
+        .select('id')
+        .maybeSingle();
+
       if (error) throw error;
 
-      // Não chama mais o sincronizador Firebase para esta visita.
-      setClientes(anteriores => anteriores.map(c =>
-        c.id === clienteAtual.id
-          ? { ...c, ultimaVisita: dataHojeStr, visitaEmAndamentoData: null }
-          : c
-      ));
-      localStorage.removeItem('maonagua_visita_progresso');
-      setFotosVisita([]);
-      setFotosAlerta([]);
-      showToast('Visita salva no Supabase!');
-      setTela('lista');
+      if (!data) {
+        throw new Error(
+          'Visita não encontrada ou atualização não permitida.'
+        );
+      }
+
+      // Não altera data, horário ou duração originais.
+      setVisitaEmEdicao(null);
+
+      showToast(
+        'Relatório atualizado com sucesso!'
+      );
+
+      await abrirRelatorio(clienteAtual);
     } catch (erro) {
-      console.error('Erro ao salvar visita no Supabase:', erro);
-      alert('Erro ao salvar visita: ' + erro.message);
+      console.error(
+        'Erro ao atualizar visita:',
+        erro
+      );
+
+      alert(
+        'Não foi possível salvar a edição: ' +
+        erro.message
+      );
     } finally {
       setSalvandoVisita(false);
     }
   };
 
+  const cancelarEdicaoVisita = () => {
+    setVisitaEmEdicao(null);
+    abrirRelatorio(clienteAtual);
+  };
+
+  // SOLICITAÇÕES DE FUNCIONÁRIOS
+  const solicitarCorrecaoVisita = async () => {
+    alert(
+      'As solicitações de funcionários serão ativadas depois de configurar as permissões da equipe no Supabase.'
+    );
+  };
+
+  // INICIAR OU CONTINUAR VISITA
+  const iniciarVisita = async (cliente) => {
+    if (progressoCarregado !== user?.id) {
+      alert('Aguarde a recuperação da limpeza pausada.');
+      return;
+    }
+    const pedido = controleEdicao.current.iniciar();
+    setVisitaEmEdicao(null);
+
+    const agora = new Date().getTime();
+    let salvo;
+    try {
+      salvo = await lerProgresso(user.id);
+      if (!controleEdicao.current.atual(pedido)) return;
+    } catch (erro) {
+      console.error('Erro ao recuperar limpeza:', erro);
+      alert('Não foi possível recuperar a limpeza. Tente novamente antes de iniciar outra.');
+      return;
+    }
+
+    const retomando =
+      salvo &&
+      String(salvo.clienteId) ===
+        String(cliente.id);
+
+    if (
+      salvo &&
+      !retomando &&
+      !window.confirm(
+        'Existe outra visita pausada. Iniciar uma nova visita substituirá o progresso não finalizado. Deseja continuar?'
+      )
+    ) {
+      return;
+    }
+
+    const acumulado = retomando
+      ? Number(
+          salvo.tempoTrabalhadoAcumulado || 0
+        ) + (salvo.horaInicioVisita && salvo.salvoEm
+          ? Math.max(0, Math.floor((salvo.salvoEm - salvo.horaInicioVisita) / 1000))
+          : 0)
+      : 0;
+
+    const inicioOriginalMs = retomando
+      ? Number(
+          salvo.inicioOriginalMs || agora
+        )
+      : agora;
+
+    const clienteAtualizado = {
+      ...cliente,
+      visitaEmAndamentoData: dataHojeStr,
+      tempoTrabalhadoAcumulado: acumulado,
+      inicioOriginalMs,
+      horaInicioVisitaMs: agora
+    };
+
+    setClientes(anteriores =>
+      anteriores.map(c =>
+        c.id === cliente.id
+          ? clienteAtualizado
+          : c
+      )
+    );
+
+    setClienteAtual(clienteAtualizado);
+    pausandoVisita.current = false;
+    sessaoFoto.current += 1;
+    setHoraInicioVisita(new Date(agora));
+    setProgressoPausado(null);
+
+    if (retomando) {
+      setAspecto(
+        salvo.aspecto || 'Cristalina'
+      );
+      setPh(salvo.ph || '');
+      setCloro(salvo.cloro || '');
+      setAlcalinidade(
+        salvo.alcalinidade || ''
+      );
+      setTemperatura(
+        salvo.temperatura || ''
+      );
+      setFotosVisita(
+        (salvo.fotosVisita || []).map(restaurarPreview)
+      );
+      setFotosAlerta(
+        (salvo.fotosAlerta || []).map(restaurarPreview)
+      );
+      setTextoAlerta(
+        salvo.textoAlerta || ''
+      );
+      setProdutosFaltando(
+        salvo.produtosFaltando || []
+      );
+    } else {
+      setAspecto('Cristalina');
+      setPh('');
+      setCloro('');
+      setAlcalinidade('');
+      setTemperatura('');
+      setFotosVisita([]);
+      setFotosAlerta([]);
+      setTextoAlerta('');
+      setProdutosFaltando([]);
+    }
+
+    setTela('visita');
+    if (retomando) {
+      // Retoma também envios interrompidos quando o app foi fechado.
+      for (const [fotos, setter] of [
+        [salvo.fotosVisita || [], setFotosVisita],
+        [salvo.fotosAlerta || [], setFotosAlerta]
+      ]) {
+        for (const foto of fotos) recuperarFoto(foto, setter, sessaoFoto.current);
+      }
+    }
+  };
+
+  // PAUSAR VISITA
+  const pausarVisita = async () => {
+    if (!clienteAtual || pausandoVisita.current || salvandoVisita) return;
+    pausandoVisita.current = true;
+
+    const agora = Date.now();
+
+    const tempoSessao = horaInicioVisita
+      ? Math.max(
+          0,
+          Math.floor(
+            (agora -
+              horaInicioVisita.getTime()) /
+              1000
+          )
+        )
+      : 0;
+
+    const novoAcumulado =
+      Number(
+        clienteAtual.tempoTrabalhadoAcumulado || 0
+      ) + tempoSessao;
+
+    const progresso = {
+      userId: user.id,
+      clienteId: clienteAtual.id,
+      ph,
+      cloro,
+      alcalinidade,
+      temperatura,
+      aspecto,
+      textoAlerta,
+      fotosVisita,
+      fotosAlerta,
+      produtosFaltando,
+      horaInicioVisita: null,
+      inicioOriginalMs:
+        clienteAtual.inicioOriginalMs ||
+        horaInicioVisita?.getTime() ||
+        agora,
+      tempoTrabalhadoAcumulado: novoAcumulado
+    };
+
+    try {
+      await salvarProgresso(user.id, progresso);
+    } catch (erro) {
+      pausandoVisita.current = false;
+      console.error('Erro ao pausar:', erro);
+      alert('Não foi possível salvar a pausa. Mantenha o app aberto e tente novamente.');
+      return;
+    }
+
+    setClientes(anteriores =>
+      anteriores.map(c =>
+        c.id === clienteAtual.id
+          ? {
+              ...c,
+              visitaEmAndamentoData: dataHojeStr,
+              tempoTrabalhadoAcumulado:
+                novoAcumulado,
+              horaInicioVisitaMs: null
+            }
+          : c
+      )
+    );
+
+    setProgressoPausado(progresso);
+    setHoraInicioVisita(null);
+
+    showToast(
+      'Visita pausada. Tempo acumulado salvo!'
+    );
+
+    setTela('lista');
+    pausandoVisita.current = false;
+  };
+
+  // ENVIO DE FOTOS
+  function restaurarPreview(foto) {
+    return { ...foto, url: foto.base64 || (foto.arquivo ? URL.createObjectURL(foto.arquivo) : '') };
+  }
+
+  async function recuperarFoto(foto, setter, sessao) {
+    const atualizar = alteracoes => {
+      if (sessaoFoto.current !== sessao) return;
+      setter(anteriores => anteriores.map(item => item.id === foto.id ? { ...item, ...alteracoes } : item));
+    };
+    try {
+      if (foto.caminho) {
+        const { data, error } = await supabase.storage.from('fotos-visitas').createSignedUrl(foto.caminho, 3600);
+        if (error && !foto.base64 && !foto.arquivo) throw error;
+        atualizar({ url: foto.base64 || (foto.arquivo ? URL.createObjectURL(foto.arquivo) : data.signedUrl), status: 'ready' });
+      } else {
+        const arquivo = foto.arquivo || (foto.base64 ? await (await fetch(foto.base64)).blob() : null);
+        if (!arquivo) throw new Error('Esta foto antiga não tem arquivo recuperável. Remova e adicione a foto novamente.');
+        const comprimida = await compressImage(arquivo);
+        const base64 = await fileToBase64(comprimida);
+        atualizar({ base64, url: base64 });
+        const caminho = await enviarFotoVisita(comprimida);
+        atualizar({ caminho, status: 'ready' });
+      }
+    } catch (erro) {
+      atualizar({ status: 'error' });
+      console.error('Erro ao recuperar foto:', erro);
+    }
+  }
+
+  const adicionarFoto = async (
+    evento,
+    atualizarEstado
+  ) => {
+    const arquivo = evento.target.files?.[0];
+
+    if (!arquivo) return;
+    const sessao = sessaoFoto.current;
+
+    const id =
+      `${Date.now()}-` +
+      Math.random().toString(36).slice(2);
+
+    const urlLocal = URL.createObjectURL(
+      arquivo
+    );
+
+    atualizarEstado(anteriores => [
+      ...anteriores,
+      {
+        id,
+        arquivo,
+        userId: user.id,
+        clienteId: clienteAtual.id,
+        visitaId: visitaEmEdicao?.id || null,
+        url: urlLocal,
+        status: 'compressing'
+      }
+    ]);
+
+    try {
+      const comprimida = await compressImage(
+        arquivo
+      );
+
+      const base64 = await fileToBase64(
+        comprimida
+      );
+      if (sessaoFoto.current !== sessao) return;
+      atualizarEstado(anteriores => anteriores.map(foto => foto.id === id ? { ...foto, base64, url: base64 } : foto));
+
+      const caminho = await enviarFotoVisita(
+        comprimida
+      );
+      if (sessaoFoto.current !== sessao) return;
+
+      atualizarEstado(anteriores =>
+        anteriores.map(foto =>
+          foto.id === id
+            ? {
+                ...foto,
+                base64,
+                caminho,
+                status: 'ready'
+              }
+            : foto
+        )
+      );
+    } catch (erro) {
+      if (sessaoFoto.current !== sessao) return;
+      console.error(
+        'Erro ao enviar foto:',
+        erro
+      );
+
+      atualizarEstado(anteriores =>
+        anteriores.map(foto =>
+          foto.id === id
+            ? {
+                ...foto,
+                status: 'error'
+              }
+            : foto
+        )
+      );
+
+      alert(
+        'Não foi possível enviar a foto: ' +
+        erro.message
+      );
+    }
+
+    evento.target.value = '';
+  };
+
+  const handleNovaFoto = evento =>
+    adicionarFoto(
+      evento,
+      setFotosVisita
+    );
+
+  const handleFotoAlerta = evento =>
+    adicionarFoto(
+      evento,
+      setFotosAlerta
+    );
+
+  // FINALIZAR VISITA NOVA
+  const salvarVisita = async () => {
+    if (!clienteAtual) {
+      alert('Selecione um cliente.');
+      return;
+    }
+
+    if (fotosVisita.length < 3) {
+      alert(
+        'Adicione pelo menos 3 fotos da piscina.'
+      );
+      return;
+    }
+
+    const todasFotos = [
+      ...fotosVisita,
+      ...fotosAlerta
+    ];
+
+    if (!fotosDaVisita(todasFotos, user.id, clienteAtual.id)) {
+      alert('Há fotos de outra visita neste formulário. Reabra a limpeza antes de salvar.');
+      return;
+    }
+
+    if (
+      todasFotos.some(
+        foto =>
+          foto.status !== 'ready' ||
+          !foto.caminho
+      )
+    ) {
+      alert(
+        'Aguarde todas as fotos serem enviadas.'
+      );
+      return;
+    }
+
+    setSalvandoVisita(true);
+
+    try {
+      const {
+        data: { user: usuario },
+        error: erroAuth
+      } = await supabase.auth.getUser();
+
+      if (erroAuth || !usuario || usuario.id !== user.id) {
+        throw new Error(
+          'Faça login novamente.'
+        );
+      }
+
+      const fim = new Date();
+
+      const inicio = new Date(
+        clienteAtual.inicioOriginalMs ||
+          horaInicioVisita?.getTime() ||
+          fim.getTime()
+      );
+
+      const tempoAtual = horaInicioVisita
+        ? Math.max(
+            0,
+            Math.floor(
+              (fim.getTime() -
+                horaInicioVisita.getTime()) /
+                1000
+            )
+          )
+        : 0;
+
+      const segundosTotais =
+        Number(
+          clienteAtual.tempoTrabalhadoAcumulado ||
+            0
+        ) + tempoAtual;
+
+      const minutos = Math.max(
+        1,
+        Math.round(
+          segundosTotais / 60
+        )
+      );
+
+      const horario =
+        `${inicio.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })} - ` +
+        `${fim.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })} (${minutos}m)`;
+
+      const { error } = await supabase
+        .from('visitas')
+        .insert({
+          user_id: usuario.id,
+          cliente_id: clienteAtual.id,
+          data_visita: fim.toISOString(),
+          horario,
+          cloro: cloro || '',
+          ph: ph || '',
+          alcalinidade: alcalinidade || '',
+          temperatura: temperatura || '',
+          aspecto: aspecto || '',
+          observacoes: textoAlerta || '',
+          produtos: produtosFaltando,
+          fotos: fotosVisita.map(
+            foto => foto.caminho
+          ),
+          fotos_alerta: fotosAlerta.map(
+            foto => foto.caminho
+          )
+        });
+
+      if (error) throw error;
+
+      setClientes(anteriores =>
+        anteriores.map(c =>
+          c.id === clienteAtual.id
+            ? {
+                ...c,
+                ultimaVisita: fim.toISOString(),
+                visitaEmAndamentoData: null
+              }
+            : c
+        )
+      );
+
+      await removerProgresso(usuario.id);
+
+      setProgressoPausado(null);
+      setFotosVisita([]);
+      setFotosAlerta([]);
+
+      showToast(
+        'Visita salva no Supabase!'
+      );
+
+      setTela('lista');
+    } catch (erro) {
+      console.error(
+        'Erro ao salvar visita:',
+        erro
+      );
+
+      alert(
+        'Erro ao salvar visita: ' +
+        erro.message
+      );
+    } finally {
+      setSalvandoVisita(false);
+    }
+  };
+
+  // OCORRÊNCIAS TÉCNICAS
   const enviarOcorrenciaImediata = async (
     base64Foto,
     descricao
@@ -475,12 +1155,14 @@ export default function App() {
     const ocorrenciaId = Date.now();
     const dataOcorrencia = new Date();
 
-    let novaOcorrencia = {
+    const novaOcorrencia = {
       id: ocorrenciaId,
       vId: ocorrenciaId,
       clienteId: clienteAtual.id,
       tipo: 'problema',
-      d: dataOcorrencia.toLocaleDateString('pt-BR'),
+      d: dataOcorrencia.toLocaleDateString(
+        'pt-BR'
+      ),
       h: dataOcorrencia.toLocaleTimeString(
         'pt-BR',
         {
@@ -490,7 +1172,9 @@ export default function App() {
       ),
       ts: Date.now(),
       fotosBase64: [],
-      fotosAlertaBase64: [base64Foto],
+      fotosAlertaBase64: [
+        base64Foto
+      ],
       txtA: descricao,
       pendenteSync: true,
       fotos: [],
@@ -498,7 +1182,9 @@ export default function App() {
     };
 
     try {
-      await savePendingVisit(novaOcorrencia);
+      await savePendingVisit(
+        novaOcorrencia
+      );
 
       await addDoc(
         collection(
@@ -521,53 +1207,170 @@ export default function App() {
       processarFilaSincronizacao(
         user.id,
         clientes
-      ).catch(err =>
-        console.error(err)
-      );
+      ).catch(console.error);
 
       showToast(
         'Ocorrência enviada com sucesso!'
       );
 
       return true;
-    } catch (e) {
+    } catch (erro) {
       alert(
-        'Erro ao salvar ocorrência: ' + e.message
+        'Erro ao salvar ocorrência: ' +
+        erro.message
       );
 
       return false;
     }
   };
 
+  // BOTÃO REABRIR VISITA DA HOME
   const reabrirTarefaDaHome = async (cliente) => {
-    const novosClientes = clientes.map(c =>
-      c.id === cliente.id
-        ? {
-            ...c,
-            ultimaVisita: null
-          }
-        : c
-    );
-
-    await atualizarE_SalvarClientes(novosClientes);
-    showToast('Visita reaberta.');
-  };
-
-  const excluirCliente = async (id) => {
-    if (
-      window.confirm(
-        'Excluir este cliente permanentemente?'
-      )
-    ) {
-      const novos = clientes.filter(
-        c => c.id !== id
+    if (!podeEditarVisita || funcionario) {
+      alert(
+        'Somente o autônomo ou o responsável pode corrigir uma visita finalizada.'
       );
+      return;
+    }
 
-      await atualizarE_SalvarClientes(novos);
-      setTela('lista');
+    // Busca a visita finalizada mais recente.
+    try {
+      const { data, error } = await supabase
+        .from('visitas')
+        .select('id')
+        .eq('cliente_id', cliente.id)
+        .eq('user_id', user.id)
+        .order('data_visita', {
+          ascending: false
+        })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        alert(
+          'Nenhuma visita finalizada foi encontrada.'
+        );
+        return;
+      }
+
+      setClienteAtual(cliente);
+
+      // O estado será carregado pela função de edição
+      // quando o relatório for aberto.
+      await abrirRelatorio(cliente);
+
+      showToast(
+        'Selecione EDITAR VISITA no relatório.'
+      );
+    } catch (erro) {
+      alert(
+        'Erro ao localizar visita: ' +
+        erro.message
+      );
     }
   };
 
+  // EXCLUSÃO SEGURA DE CLIENTES
+  const excluirCliente = async (id) => {
+    try {
+      const {
+        data: { user: usuario },
+        error: erroAuth
+      } = await supabase.auth.getUser();
+
+      if (erroAuth || !usuario) {
+        throw new Error(
+          'Faça login novamente.'
+        );
+      }
+
+      const { count, error: erroVisitas } =
+        await supabase
+          .from('visitas')
+          .select('id', {
+            count: 'exact',
+            head: true
+          })
+          .eq('cliente_id', id)
+          .eq('user_id', usuario.id);
+
+      if (erroVisitas) throw erroVisitas;
+
+      if ((count || 0) > 0) {
+        alert(
+          `Este cliente possui ${count} visita(s) registrada(s). ` +
+          'Para proteger os relatórios e as fotos, não é possível excluí-lo.'
+        );
+
+        return;
+      }
+
+      const cliente = clientes.find(
+        c => c.id === id
+      );
+
+      const confirmado = window.confirm(
+        `Excluir permanentemente o cliente "${cliente?.nome || 'selecionado'}"?`
+      );
+
+      if (!confirmado) return;
+
+      const {
+        data: excluido,
+        error: erroExclusao
+      } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', usuario.id)
+        .select('id')
+        .maybeSingle();
+
+      if (erroExclusao) {
+        throw erroExclusao;
+      }
+
+      if (!excluido) {
+        throw new Error(
+          'Cliente não encontrado.'
+        );
+      }
+
+      setClientes(anteriores =>
+        anteriores.filter(
+          c => c.id !== id
+        )
+      );
+
+      setClienteAtual(atual =>
+        atual?.id === id ? null : atual
+      );
+
+      setClienteEditando(atual =>
+        atual?.id === id ? null : atual
+      );
+
+      showToast(
+        'Cliente excluído do Supabase!'
+      );
+
+      setTela('lista');
+    } catch (erro) {
+      console.error(
+        'Erro ao excluir cliente:',
+        erro
+      );
+
+      alert(
+        'Não foi possível excluir o cliente: ' +
+        erro.message
+      );
+    }
+  };
+
+  // AUTENTICAÇÃO
   if (authLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-teal-400 font-bold">
@@ -576,63 +1379,35 @@ export default function App() {
     );
   }
 
-  if (!user) return <Login />;
+  if (!user) {
+    return <Login />;
+  }
+
+  if (recuperandoSenha) return <Login redefinindoSenha />;
 
   if (!perfil.tipoConta) {
     return <Onboarding />;
   }
 
   if (
-    !perfil.assinaturaAtiva &&
-    tela !== 'configuracoes' &&
-    user.email !== ADMIN_EMAIL
+    !temAcessoAoApp(user, perfil) &&
+    tela !== 'configuracoes'
   ) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-white text-center">
-        <AlertTriangle
-          size={64}
-          className="text-rose-500 mb-6"
-        />
-
-        <h2 className="text-2xl font-black mb-4">
-          Assinatura Suspensa
-        </h2>
-
-        <p className="text-zinc-400 mb-8">
-          Regularize sua conta para continuar usando o app.
-        </p>
-
-        <button
-          onClick={() =>
-            window.open(
-              'https://kiwify.com.br',
-              '_blank'
-            )
-          }
-          className={`w-full max-w-xs py-4 rounded-xl font-bold ${gradBtn}`}
-        >
-          REGULARIZAR AGORA
-        </button>
-
-        <button
-          onClick={handleSair}
-          className="mt-6 text-zinc-500 font-bold"
-        >
-          Sair da Conta
-        </button>
-      </div>
-    );
+    return <AcessoPendente handleSair={handleSair} />;
   }
 
-  // Navegação entre as telas do aplicativo
+  // NAVEGAÇÃO
   switch (tela) {
     case 'lista':
       return (
         <Home
           setTela={setTela}
           iniciarVisita={iniciarVisita}
-          reabrirTarefaDaHome={reabrirTarefaDaHome}
+          reabrirTarefaDaHome={
+            reabrirTarefaDaHome
+          }
           toast={toast}
+          progressoPausado={progressoPausado}
         />
       );
 
@@ -645,7 +1420,9 @@ export default function App() {
           irParaNovoCliente={() =>
             setTela('novo_cliente')
           }
-          abrirEdicaoCliente={abrirEdicaoCliente}
+          abrirEdicaoCliente={
+            abrirEdicaoCliente
+          }
         />
       );
 
@@ -656,6 +1433,12 @@ export default function App() {
           cliente={clienteAtual}
           historico={historicoDoRelatorio}
           carregando={carregandoRelatorio}
+          editarVisitaFinalizada={
+            editarVisitaFinalizada
+          }
+          solicitarCorrecaoVisita={
+            solicitarCorrecaoVisita
+          }
         />
       );
 
@@ -683,21 +1466,26 @@ export default function App() {
           produtosFaltando={produtosFaltando}
           salvando={salvandoVisita}
           handleNovaFoto={handleNovaFoto}
-          removerFoto={(i) =>
+          removerFoto={i =>
             setFotosVisita(prev =>
-              prev.filter((_, idx) => idx !== i)
+              prev.filter(
+                (_, idx) => idx !== i
+              )
             )
           }
           handleFotoAlerta={handleFotoAlerta}
-          removerFotoAlerta={(i) =>
+          removerFotoAlerta={i =>
             setFotosAlerta(prev =>
-              prev.filter((_, idx) => idx !== i)
+              prev.filter(
+                (_, idx) => idx !== i
+              )
             )
           }
-          toggleProduto={(nome) => {
-            const existe = produtosFaltando.find(
-              p => p.nome === nome
-            );
+          toggleProduto={nome => {
+            const existe =
+              produtosFaltando.find(
+                p => p.nome === nome
+              );
 
             if (existe) {
               setProdutosFaltando(
@@ -711,7 +1499,7 @@ export default function App() {
                 {
                   nome,
                   qtd: 1,
-                  preco: 0
+                  preco: null
                 }
               ]);
             }
@@ -750,12 +1538,112 @@ export default function App() {
         />
       );
 
-    // CADASTRO DE CLIENTES PELO SUPABASE
+    // TELA DE EDIÇÃO DE VISITA FINALIZADA
+    case 'editar_visita':
+      return (
+        <Visita
+          setTela={setTela}
+          clienteAtual={clienteAtual}
+          modoEdicao={true}
+          visitaEmEdicao={visitaEmEdicao}
+          salvarVisita={salvarEdicaoVisita}
+          cancelarEdicao={cancelarEdicaoVisita}
+          aspecto={aspecto}
+          setAspecto={setAspecto}
+          ph={ph}
+          setPh={setPh}
+          cloro={cloro}
+          setCloro={setCloro}
+          alcalinidade={alcalinidade}
+          setAlcalinidade={setAlcalinidade}
+          temperatura={temperatura}
+          setTemperatura={setTemperatura}
+          fotosVisita={fotosVisita}
+          fotosContagem={fotosVisita.length}
+          fotosAlerta={fotosAlerta}
+          textoAlerta={textoAlerta}
+          setTextoAlerta={setTextoAlerta}
+          produtosFaltando={produtosFaltando}
+          salvando={salvandoVisita}
+          handleNovaFoto={handleNovaFoto}
+          removerFoto={i =>
+            setFotosVisita(prev =>
+              prev.filter(
+                (_, idx) => idx !== i
+              )
+            )
+          }
+          handleFotoAlerta={handleFotoAlerta}
+          removerFotoAlerta={i =>
+            setFotosAlerta(prev =>
+              prev.filter(
+                (_, idx) => idx !== i
+              )
+            )
+          }
+          toggleProduto={nome => {
+            const existe =
+              produtosFaltando.find(
+                p => p.nome === nome
+              );
+
+            if (existe) {
+              setProdutosFaltando(
+                produtosFaltando.filter(
+                  p => p.nome !== nome
+                )
+              );
+            } else {
+              setProdutosFaltando([
+                ...produtosFaltando,
+                {
+                  nome,
+                  qtd: 1,
+                  preco: null
+                }
+              ]);
+            }
+          }}
+          updateQtdProduto={(nome, delta) =>
+            setProdutosFaltando(
+              produtosFaltando.map(p =>
+                p.nome === nome
+                  ? {
+                      ...p,
+                      qtd: Math.max(
+                        1,
+                        p.qtd + delta
+                      )
+                    }
+                  : p
+              )
+            )
+          }
+          updatePrecoProduto={(nome, preco) =>
+            setProdutosFaltando(
+              produtosFaltando.map(p =>
+                p.nome === nome
+                  ? {
+                      ...p,
+                      preco
+                    }
+                  : p
+              )
+            )
+          }
+          pausarVisita={cancelarEdicaoVisita}
+          enviarOcorrenciaImediata={
+            enviarOcorrenciaImediata
+          }
+        />
+      );
+
+    // CADASTRO DE CLIENTES
     case 'novo_cliente':
       return (
         <NovoCliente
           setTela={setTela}
-          adicionarCliente={async (d) => {
+          adicionarCliente={async d => {
             try {
               const nome = d.nome?.trim();
 
@@ -773,7 +1661,7 @@ export default function App() {
 
               if (erroAuth || !usuario) {
                 throw new Error(
-                  'Sua sessão expirou. Faça login novamente.'
+                  'Faça login novamente.'
                 );
               }
 
@@ -790,16 +1678,16 @@ export default function App() {
                   numero: d.numero || '',
                   bairro: d.bairro || '',
                   endereco:
-                    `${d.rua || ''}, ${d.numero || ''}, ${d.bairro || ''}`,
+                    `${d.rua || ''}, ` +
+                    `${d.numero || ''}, ` +
+                    `${d.bairro || ''}`,
                   dias_visita: d.dias || [],
                   hora_visita: d.hora || null
                 })
                 .select()
                 .single();
 
-              if (error) {
-                throw error;
-              }
+              if (error) throw error;
 
               const novo = {
                 ...clienteSalvo,
@@ -823,7 +1711,7 @@ export default function App() {
               );
             } catch (erro) {
               console.error(
-                'Erro ao cadastrar cliente no Supabase:',
+                'Erro ao cadastrar cliente:',
                 erro
               );
 
@@ -836,27 +1724,42 @@ export default function App() {
         />
       );
 
-    // EDIÇÃO DE CLIENTES: atualiza apenas o registro do usuário autenticado.
+    // EDITAR CLIENTE
     case 'editar_cliente':
       return (
         <NovoCliente
           setTela={setTela}
           clienteExistente={clienteEditando}
-          salvarEdicaoCliente={async (id, dados) => {
+          salvarEdicaoCliente={async (
+            id,
+            dados
+          ) => {
             try {
               const nome = dados.nome?.trim();
+
               if (!nome) {
-                alert('Informe o nome do cliente.');
+                alert(
+                  'Informe o nome do cliente.'
+                );
                 return;
               }
 
-              const { data: { user: usuario }, error: erroAuth } =
-                await supabase.auth.getUser();
+              const {
+                data: { user: usuario },
+                error: erroAuth
+              } = await supabase.auth.getUser();
+
               if (erroAuth || !usuario) {
-                throw new Error('Sua sessão expirou. Faça login novamente.');
+                throw new Error(
+                  'Faça login novamente.'
+                );
               }
 
-              const endereco = `${dados.rua || ''}, ${dados.numero || ''}, ${dados.bairro || ''}`;
+              const endereco =
+                `${dados.rua || ''}, ` +
+                `${dados.numero || ''}, ` +
+                `${dados.bairro || ''}`;
+
               const alteracoes = {
                 nome,
                 telefone: dados.telefone || '',
@@ -868,7 +1771,10 @@ export default function App() {
                 hora_visita: dados.hora || null
               };
 
-              const { data: clienteSalvo, error } = await supabase
+              const {
+                data: clienteSalvo,
+                error
+              } = await supabase
                 .from('clientes')
                 .update(alteracoes)
                 .eq('id', id)
@@ -877,24 +1783,43 @@ export default function App() {
                 .single();
 
               if (error) throw error;
-              if (!clienteSalvo) throw new Error('Cliente não encontrado.');
 
-              // Mantém os nomes de campos esperados pelas telas existentes.
               const clienteAtualizado = {
                 ...clienteSalvo,
-                diasVisita: clienteSalvo.dias_visita || [],
-                horaVisita: clienteSalvo.hora_visita || ''
+                diasVisita:
+                  clienteSalvo.dias_visita || [],
+                horaVisita:
+                  clienteSalvo.hora_visita || ''
               };
 
-              setClientes(anteriores => anteriores.map(c =>
-                c.id === id ? { ...c, ...clienteAtualizado } : c
-              ));
+              setClientes(anteriores =>
+                anteriores.map(c =>
+                  c.id === id
+                    ? {
+                        ...c,
+                        ...clienteAtualizado
+                      }
+                    : c
+                )
+              );
+
               setClienteEditando(null);
-              showToast('Cliente atualizado no Supabase!');
+
+              showToast(
+                'Cliente atualizado no Supabase!'
+              );
+
               setTela('relatorio');
             } catch (erro) {
-              console.error('Erro ao editar cliente no Supabase:', erro);
-              alert('Erro ao editar cliente: ' + erro.message);
+              console.error(
+                'Erro ao editar cliente:',
+                erro
+              );
+
+              alert(
+                'Erro ao editar cliente: ' +
+                erro.message
+              );
             }
           }}
         />
@@ -909,14 +1834,14 @@ export default function App() {
       return (
         <Configuracoes
           setTela={setTela}
-          salvarConfiguracoes={() => {
-            atualizarE_SalvarClientes(clientes);
-
-            showToast(
-              'Configurações salvas!'
-            );
-
-            setTela('lista');
+          salvarConfiguracoes={async () => {
+            try {
+              await salvarConfiguracoes();
+              showToast('Configurações salvas!');
+              setTela('lista');
+            } catch (erro) {
+              alert('Não foi possível salvar: ' + erro.message);
+            }
           }}
           handleSair={handleSair}
         />
@@ -933,7 +1858,9 @@ export default function App() {
 
     case 'gestao_equipe':
       return (
-        <GestaoEquipe setTela={setTela} />
+        <GestaoEquipe
+          setTela={setTela}
+        />
       );
 
     default:
@@ -941,6 +1868,10 @@ export default function App() {
         <Home
           setTela={setTela}
           iniciarVisita={iniciarVisita}
+          reabrirTarefaDaHome={
+            reabrirTarefaDaHome
+          }
+          progressoPausado={progressoPausado}
         />
       );
   }

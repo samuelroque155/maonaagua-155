@@ -8,16 +8,18 @@ export async function carregarContextoEquipe(client) {
 export function aplicarContextoEquipe(perfil, equipe) {
   return equipe ? {
     ...perfil, tipoConta: 'funcionario', vinculoEmpresa: equipe.employer_uid,
-    rotas: equipe.rotas || [], assinaturaAtiva: equipe.assinatura_ativa === true
+    rotas: equipe.rotas || [], empresaResponsavel: equipe.empresa?.nome || 'Empresa responsável',
+    listaProdutos: equipe.empresa?.listaProdutos || perfil.listaProdutos,
+    listaAcessorios: equipe.empresa?.listaAcessorios || perfil.listaAcessorios, assinaturaAtiva: equipe.assinatura_ativa === true
   } : { ...perfil, vinculoEmpresa: null, rotas: [],
     tipoConta: perfil.tipoConta === 'funcionario' ? null : perfil.tipoConta };
 }
 
 export async function listarFuncionarios(client, ownerId) {
-  const { data, error } = await client.from('equipes_links').select('*')
-    .eq('employer_uid', ownerId).order('created_at');
+  if (!ownerId) return [];
+  const { data, error } = await client.rpc('dados_equipe');
   if (error) throw error;
-  return (data || []).map(f => ({ ...f, email: f.email_funcionario }));
+  return (data?.funcionarios || []).map(f => ({ ...f, email: f.email_funcionario }));
 }
 
 export async function salvarFuncionario(client, ownerId, funcionario) {
@@ -48,8 +50,50 @@ export async function listarAlertas(client, ownerId) {
     data: new Date(a.created_at).toLocaleDateString('pt-BR'), produtos: a.produtos || [] }));
 }
 
+export async function listarRelatoriosEquipe(client, ownerId) {
+  const visitas = [];
+  for (let inicio = 0; ; inicio += 500) {
+    const { data, error } = await client.from('visitas')
+      .select('id,cliente_id,criado_por,user_id,data_visita,horario,tipo,clientes(nome)')
+      .eq('user_id', ownerId).neq('criado_por', ownerId)
+      .order('data_visita', { ascending: false }).order('id')
+      .range(inicio, inicio + 499);
+    if (error) throw error;
+    visitas.push(...(data || []));
+    if ((data || []).length < 500) return visitas;
+  }
+}
+
 export async function resolverAlerta(client, ownerId, id) {
   const { error } = await client.from('alertas_produtos').update({ lido: true })
     .eq('id', id).eq('user_id', ownerId);
   if (error) throw error;
+}
+
+export async function salvarProdutosEquipe(client, ownerId, visitaId, produtos) {
+  const itens = produtos.map(p => {
+    const nome = String(p.nome || '').trim();
+    const qtd = Number(p.qtd);
+    const preco = p.preco === '' || p.preco == null ? null : Number(p.preco);
+    if (!nome || !Number.isFinite(qtd) || qtd < 1 || (preco !== null && (!Number.isFinite(preco) || preco < 0))) {
+      throw new Error('Informe o nome, quantidade válida e preço válido para cada item.');
+    }
+    return { nome, qtd, preco };
+  });
+  const { data, error } = await client.from('visitas').update({ produtos: itens })
+    .eq('id', visitaId).eq('user_id', ownerId).select('id').single();
+  if (error) throw error;
+  if (!data) throw new Error('Relatório não encontrado para esta empresa.');
+}
+
+export async function preencherProdutosDaEmpresa(client, ownerId, visitas) {
+  const equipe = visitas.filter(v => v.criado_por && v.criado_por !== v.user_id);
+  const produtos = new Map();
+  for (let inicio = 0; inicio < equipe.length; inicio += 100) {
+    const { data, error } = await client.from('alertas_produtos').select('visita_id,produtos')
+      .eq('user_id', ownerId).in('visita_id', equipe.slice(inicio, inicio + 100).map(v => v.id));
+    if (error) throw error;
+    for (const alerta of data || []) produtos.set(alerta.visita_id, alerta.produtos);
+  }
+  return visitas.map(v => produtos.has(v.id) ? { ...v, produtos: produtos.get(v.id) } : v);
 }

@@ -63,12 +63,19 @@ export async function salvarTipoPerfil(client, userId, tipo, primeiroAcesso = fa
 export async function salvarPerfilProfissional(client, userId, perfil) {
   const usuario = await conferirUsuario(client, userId);
   const empresa = nomeProfissional(perfil);
-  if (!empresa) throw new Error('Informe seu nome profissional ou o nome da empresa, sem usar o email.');
+  if (!empresa && perfil.tipoConta !== 'funcionario') throw new Error('Informe seu nome profissional ou o nome da empresa, sem usar o email.');
   let fotoPerfilCaminho = usuario.user_metadata?.preferencias_profissionais?.fotoPerfilCaminho || '';
   if (perfil.fotoPerfilNova) fotoPerfilCaminho = await enviarImagemPerfil(client, userId, perfil.fotoPerfilNova);
   else if (perfil.fotoPerfilRemover) fotoPerfilCaminho = '';
   if (fotoPerfilCaminho && !caminhoImagemPerfilValido(fotoPerfilCaminho, userId)) {
     throw new Error('A imagem de perfil precisa pertencer à sua conta.');
+  }
+  if (perfil.tipoConta === 'funcionario') {
+    const preferencias = { ...usuario.user_metadata?.preferencias_profissionais, fotoPerfilCaminho };
+    await conferirUsuario(client, userId);
+    const { error } = await client.auth.updateUser({ data: { preferencias_profissionais: preferencias } });
+    if (error) throw error;
+    return { ...perfil, fotoPerfilCaminho, fotoPerfilNova: null };
   }
   // Envia somente campos editáveis. Não altera assinatura, vínculo ou rotas.
   const { data, error } = await client.from('perfis')

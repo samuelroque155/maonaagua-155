@@ -71,3 +71,17 @@ test('PDF incorpora a logo e reserva espaço para nome longo; sem foto continua 
   assert.equal(identificacaoCliente({ nome: 'Ana Silva' }), 'Cliente: Ana Silva');
   assert.equal(identificacaoCliente({}), 'Cliente: Nome não informado');
 });
+
+test('funcionário salva somente sua imagem sem alterar perfil, empresa ou catálogos', async () => {
+  let preferencias;
+  const client = {
+    auth: {
+      getUser: async () => ({ data: { user: { id: 'a', user_metadata: { preferencias_profissionais: { fotoPerfilCaminho: 'a/perfil/logo.png', listaProdutos: ['Original'] } } } } }),
+      updateUser: async p => { preferencias = p.data.preferencias_profissionais; return {}; }
+    },
+    from: () => { throw new Error('Funcionário não deve gravar tabelas de perfil'); }
+  };
+  const salvo = await salvarPerfilProfissional(client, 'a', { tipoConta: 'funcionario', empresa: '', fotoPerfilRemover: true, listaProdutos: ['Alterado'] });
+  assert.equal(salvo.fotoPerfilCaminho, '');
+  assert.deepEqual(preferencias, { fotoPerfilCaminho: '', listaProdutos: ['Original'] });
+});

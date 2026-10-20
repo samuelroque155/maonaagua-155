@@ -8,7 +8,7 @@ import {
 
 export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toast, progressoPausado }) {
   const {
-    user, perfil, clientes, modoEscuro, setModoEscuro,
+    user, perfil, clientes, gerenciaEquipe, modoEscuro, setModoEscuro,
     pendentesCount, pendentesLegados, erroSincronizacao, isSyncing, handleSair, gradText, gradBtn,
     diaAtual, dataHojeStr, processarFilaSincronizacao, tela, targetUid
   } = useContext(AppContext);
@@ -136,6 +136,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
           </div>
         )}
 
+        {perfil.tipoConta === 'funcionario' && <p className="text-sm text-teal-600 dark:text-teal-400">Empresa responsável: {perfil.empresaResponsavel}. Seus atendimentos serão enviados para ela.</p>}
         {/* Lista de Clientes */}
         <div className="space-y-4">
           <div className="flex items-center justify-between ml-2">
@@ -233,10 +234,11 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
                     </button>
                   ) : (
                     <button
+                      disabled={perfil.tipoConta === 'funcionario'}
                       onClick={() => reabrirTarefaDaHome(cliente)}
                       className="w-full py-3.5 rounded-xl font-bold text-[10px] bg-slate-50 dark:bg-zinc-800 text-zinc-400 border border-zinc-100 dark:border-zinc-700 uppercase tracking-widest hover:bg-zinc-100 transition-colors"
                     >
-                      Reabrir Visita
+                      {perfil.tipoConta === 'funcionario' ? 'Limpeza enviada à empresa' : 'Reabrir Visita'}
                     </button>
                   )}
                 </div>
@@ -264,7 +266,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
           </button>
         )}
 
-        <button
+        {perfil.tipoConta !== 'funcionario' && <button
           onClick={() => setTela('relatorio')}
           className={`flex flex-col items-center gap-1 p-2 transition-all ${
             tela === 'relatorio'
@@ -276,9 +278,9 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
           <span className="text-[9px] font-black uppercase tracking-widest">
             Clientes
           </span>
-        </button>
+        </button>}
 
-        {perfil.tipoConta === 'empresa' && (
+        {perfil.tipoConta !== 'funcionario' && (perfil.tipoConta === 'empresa' || gerenciaEquipe) && (
           <button
             onClick={() => setTela('gestao_equipe')}
             className={`flex flex-col items-center gap-1 p-2 transition-all ${

@@ -22,6 +22,7 @@ import { temAcessoAoApp } from './services/assinaturaService';
 import { enviarFotoVisita } from './services/fotosService';
 import { lerProgresso, salvarProgresso, removerProgresso } from './services/progressoVisita';
 import { criarControleBusca, fotosDaVisita } from './services/visitaEstado';
+import { preencherProdutosDaEmpresa } from './services/equipeService';
 
 const normalizarTipoConta = (tipo) => {
   return String(tipo || '')
@@ -283,7 +284,7 @@ export default function App() {
   ]);
 
   // RELATÓRIOS DO SUPABASE
-  const abrirRelatorio = async (cliente) => {
+  const abrirRelatorio = async (cliente, filtro = {}) => {
     const pedido = controleRelatorio.current.iniciar();
     controleEdicao.current.invalidar();
     setClienteAtual(cliente);
@@ -292,14 +293,10 @@ export default function App() {
     setHistoricoDoRelatorio([]);
 
     try {
-      const { data, error } = await supabase
-        .from('visitas')
-        .select('*')
-        .eq('cliente_id', cliente.id)
-        .eq('user_id', targetUid)
-        .order('data_visita', {
-          ascending: false
-        });
+      let consulta = supabase.from('visitas').select('*')
+        .eq('cliente_id', cliente.id).eq('user_id', targetUid);
+      if (filtro.visitaId) consulta = consulta.eq('id', filtro.visitaId);
+      const { data, error } = await consulta.order('data_visita', { ascending: false });
 
       if (error) throw error;
 
@@ -333,8 +330,11 @@ export default function App() {
         return links.filter(Boolean);
       };
 
+      const { data: dadosEquipe, error: erroEquipe } = await supabase.rpc('dados_equipe');
+      if (erroEquipe) throw erroEquipe;
+      const visitasComProdutos = await preencherProdutosDaEmpresa(supabase, targetUid, data || []);
       const historico = await Promise.all(
-        (data || []).map(async visita => {
+        visitasComProdutos.map(async visita => {
           const fotos = await criarLinks(
             visita.fotos
           );
@@ -352,6 +352,8 @@ export default function App() {
             id: visita.id,
             vId: visita.id,
             clienteId: visita.cliente_id,
+            funcionarioNome: filtro.nome || dadosEquipe?.funcionarios?.find(f => f.usuario_id === visita.criado_por)?.nome || (visita.criado_por !== visita.user_id ? 'Funcionário (vínculo encerrado)' : null),
+            criadoPor: visita.criado_por,
             d: dataVisita.toLocaleDateString('pt-BR'),
             h: visita.horario || '',
             ts: dataVisita.getTime(),
@@ -472,6 +474,7 @@ export default function App() {
         return resultado;
       };
 
+      const [dadosComProdutos] = await preencherProdutosDaEmpresa(supabase, targetUid, [data]);
       const fotos = await prepararFotos(
         data.fotos
       );
@@ -489,7 +492,7 @@ export default function App() {
       setAlcalinidade(data.alcalinidade || '');
       setTemperatura(data.temperatura || '');
       setTextoAlerta(data.observacoes || '');
-      setProdutosFaltando(data.produtos || []);
+      setProdutosFaltando(dadosComProdutos.produtos || []);
       setFotosVisita(fotos);
       setFotosAlerta(alertas);
 
@@ -1358,7 +1361,8 @@ export default function App() {
   }
 
   // NAVEGAÇÃO
-  switch (tela) {
+  const telaPermitida = funcionario && !['lista', 'agenda', 'visita', 'configuracoes'].includes(tela) ? 'lista' : tela;
+  switch (telaPermitida) {
     case 'lista':
       return (
         <Home
@@ -1820,6 +1824,7 @@ export default function App() {
     case 'gestao_equipe':
       return (
         <GestaoEquipe
+          abrirRelatorio={abrirRelatorio}
           setTela={setTela}
         />
       );

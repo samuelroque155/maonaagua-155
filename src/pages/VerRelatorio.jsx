@@ -806,6 +806,7 @@ export default function VerRelatorio({
                           >
                             <td className="py-4 px-1">
                               {visita.d}
+                              {visita.funcionarioNome && <p className="text-[10px] font-normal text-teal-600">{visita.funcionarioNome}</p>}
                             </td>
 
                             <td className={`py-4 px-1 uppercase ${corAspecto}`}>
@@ -1088,6 +1089,7 @@ export default function VerRelatorio({
                             <p className="font-black text-sm text-zinc-800 dark:text-white">
                               Visita de {visita.d}
                             </p>
+                            {visita.funcionarioNome && <p className="text-xs text-teal-600">Responsável: {visita.funcionarioNome}</p>}
 
                             <p className="text-[11px] text-zinc-500 mt-1">
                               {visita.h || 'Horário não informado'}

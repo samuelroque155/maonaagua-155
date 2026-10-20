@@ -9,6 +9,7 @@ import {
 
 export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair }) {
   const { user, perfil, setPerfil, gradText, gradBtn, definirTipoPerfil, salvandoPerfil } = useContext(AppContext);
+  const funcionario = perfil.tipoConta === 'funcionario';
   const [preparandoFoto, setPreparandoFoto] = useState(false);
   const [erroFoto, setErroFoto] = useState('');
   const pedidoFoto = useRef(0);
@@ -102,10 +103,10 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
                   {(perfil.fotoPerfilUrl || perfil.fotoPerfilCaminho) && <button type="button" disabled={salvandoPerfil || preparandoFoto} onClick={() => setPerfil(prev => ({ ...prev, fotoPerfilNova: null, fotoPerfilUrl: '', fotoPerfilRemover: true }))} className="text-xs text-rose-500">Remover imagem</button>}
                 </div>
               </div>
-              <p className="text-xs text-zinc-500">A imagem aparecerá nos relatórios junto com seu nome profissional ou da empresa. Toque em Salvar alterações para confirmar.</p>
+              <p className="text-xs text-zinc-500">{funcionario ? 'Sua empresa gerencia clientes, rotas e relatórios. Aqui você pode alterar sua foto de perfil.' : 'A imagem aparecerá nos relatórios junto com seu nome profissional ou da empresa. Toque em Salvar alterações para confirmar.'}</p>
               {erroFoto && <p role="alert" className="text-xs text-rose-500">{erroFoto}</p>}
             </div>
-            <div className="space-y-2">
+            {!funcionario && <><div className="space-y-2">
               <span className="text-[10px] font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest ml-1">Nome da Empresa</span>
               <input value={perfil.empresa || ''} onChange={e => setPerfil({ ...perfil, empresa: e.target.value })} className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl outline-none focus:border-teal-400 text-sm font-bold" />
             </div>
@@ -113,10 +114,11 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
               <span className="text-[10px] font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest ml-1">Sua Cidade / Estado</span>
               <input value={perfil.cidade || ''} onChange={e => setPerfil({ ...perfil, cidade: e.target.value })} placeholder="Ex: Jataí - GO" className="w-full bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl outline-none focus:border-teal-400 text-sm font-bold" />
             </div>
+            </>}
           </div>
         </section>
 
-        <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
+        {!funcionario && <><section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
           <h3 className="font-bold text-sm mb-4 uppercase tracking-wider text-teal-600 flex items-center gap-2">
             <ShoppingCart size={16} /> Meus Produtos
           </h3>
@@ -182,6 +184,7 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
           </div>
         </section>
 
+        </>}
         <button onClick={salvarConfiguracoes} disabled={salvandoPerfil || preparandoFoto} className={`w-full py-4 rounded-xl font-bold ${gradBtn} flex items-center justify-center gap-2 disabled:opacity-50`}>
           <Save size={20} /> {salvandoPerfil ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
         </button>

@@ -8,7 +8,7 @@ import React, { createContext, useState, useEffect, useRef, useCallback } from '
 import { consultarAssinatura } from '../services/assinaturaService';
 import { getPendingVisits, removePendingVisit, savePendingVisit } from '../db';
 import { sincronizarPendencia, pendenciasDaConta } from '../services/filaSupabase';
-import { carregarContextoEquipe, aplicarContextoEquipe } from '../services/equipeService';
+import { carregarContextoEquipe, aplicarContextoEquipe, listarFuncionarios } from '../services/equipeService';
 import { resolverImagemPerfil } from '../services/imagemPerfilService';
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -83,6 +83,7 @@ export const AppProvider = ({ children }) => {
   const [pendentesCount, setPendentesCount] = useState(0);
   const [erroSincronizacao, setErroSincronizacao] = useState('');
   const [pendentesLegados, setPendentesLegados] = useState(0);
+  const [gerenciaEquipe, setGerenciaEquipe] = useState(false);
   const [contextoEquipe, setContextoEquipe] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const isSyncingRef = useRef(false);
@@ -138,6 +139,7 @@ export const AppProvider = ({ children }) => {
         setErroPerfil('');
         setClientes([]);
         setContextoEquipe(null);
+        setGerenciaEquipe(false);
         setPendentesCount(0);
         setErroSincronizacao('');
         consultaAssinaturaRef.current += 1;
@@ -220,6 +222,10 @@ export const AppProvider = ({ children }) => {
     const carregarPerfil = async () => {
       try {
         const [data, equipe] = await Promise.all([obterPerfil(supabase, user.id), carregarContextoEquipe(supabase)]);
+        const { data: dadosEquipe, error: erroEquipe } = await supabase.rpc('dados_equipe');
+        if (erroEquipe) throw erroEquipe;
+        if (equipe) equipe.empresa = dadosEquipe?.empresa;
+        if (ativo) setGerenciaEquipe(!equipe && (dadosEquipe?.funcionarios || []).length > 0);
         const identidade = mapearPerfil(data, preferenciasPerfilRef.current);
         const fotoPerfilUrl = await resolverImagemPerfil(supabase, identidade);
 
@@ -251,9 +257,16 @@ export const AppProvider = ({ children }) => {
     setErroAssinatura('');
     try {
       const [equipe, registro] = await Promise.all([carregarContextoEquipe(supabase), obterPerfil(supabase, userId)]);
+      const funcionarios = equipe ? [] : await listarFuncionarios(supabase, userId);
+      if (equipe) {
+        const { data, error } = await supabase.rpc('dados_equipe');
+        if (error) throw error;
+        equipe.empresa = data?.empresa;
+      }
       const ativa = equipe ? equipe.assinatura_ativa === true : await consultarAssinatura(supabase, userId);
       if (!aindaAtual()) return null;
       // Não recarrega o formulário nem altera nome, produtos ou clientes.
+      setGerenciaEquipe(!equipe && funcionarios.length > 0);
       setContextoEquipe(equipe);
       setPerfil(prev => aplicarContextoEquipe({ ...prev, tipoConta: normalizarTipoPerfil(registro?.tipo_conta), assinaturaAtiva: ativa }, equipe));
       return ativa;
@@ -398,7 +411,8 @@ export const AppProvider = ({ children }) => {
     diaAtual,
     dataHojeStr,
     processarFilaSincronizacao,
-    targetUid
+    targetUid,
+    gerenciaEquipe
   };
 
   if (erroPerfil) {

@@ -153,6 +153,7 @@ export default function Visita({
   };
 
   const enviarPedidoWhatsApp = (comValores) => {
+    if (perfil.tipoConta === 'funcionario') return;
     try {
       const mensagem = mensagemProdutos({
         cliente: clienteAtual,
@@ -341,7 +342,7 @@ export default function Visita({
                 </button>
               </div>
 
-              <div className="flex items-center gap-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 pt-1.5 w-full justify-end">
+              {perfil.tipoConta !== 'funcionario' && <div className="flex items-center gap-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 pt-1.5 w-full justify-end">
                 <span className="text-[10px] text-zinc-500 font-bold">
                   R$
                 </span>
@@ -360,7 +361,7 @@ export default function Visita({
                   }
                   className="w-20 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-bold rounded-lg p-1.5 text-center outline-none focus:border-teal-400 text-zinc-800 dark:text-zinc-200"
                 />
-              </div>
+              </div>}
             </div>
           )}
         </div>
@@ -843,7 +844,8 @@ export default function Visita({
         </section>
 
         {/* TOTAL DO PEDIDO */}
-        {produtosFaltando.length > 0 && (
+        {produtosFaltando.length > 0 && perfil.tipoConta === 'funcionario' && <p className="text-sm text-teal-600 dark:text-teal-400">Estes itens serão enviados somente à empresa ao salvar a limpeza. A empresa revisa os produtos e valores e faz o contato com o cliente.</p>}
+        {produtosFaltando.length > 0 && perfil.tipoConta !== 'funcionario' && (
           <section className="bg-gradient-to-br from-teal-500/5 to-emerald-500/5 dark:from-teal-950/10 dark:to-emerald-950/10 p-6 rounded-[1.5rem] border border-teal-200 dark:border-teal-800/50 shadow-sm transition-colors relative overflow-hidden flex flex-col gap-4">
 
             <div className="flex justify-between items-center">

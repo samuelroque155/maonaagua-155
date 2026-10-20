@@ -215,6 +215,15 @@ export const gerarRelatorioPDF = async (
     );
 
     y += alturaCliente + 10;
+    const responsaveis = [...new Set((historico || []).map(v => v.funcionarioNome).filter(Boolean))];
+    if (responsaveis.length) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      const linhas = pdf.splitTextToSize(`Responsavel: ${responsaveis.join(', ')}`, larguraConteudo);
+      garantirEspaco(linhas.length * 5 + 5);
+      pdf.text(linhas, margem, y);
+      y += linhas.length * 5 + 5;
+    }
 
     // CARREGAMENTO DAS FOTOS
     const historicoComImagens = await Promise.all(
@@ -269,7 +278,7 @@ export const gerarRelatorioPDF = async (
         : hora;
 
       return [
-        formatarDataCurta(v.d),
+        [formatarDataCurta(v.d), v.funcionarioNome].filter(Boolean).join('\n'),
         asp,
         horaCell,
         v.c || '-',

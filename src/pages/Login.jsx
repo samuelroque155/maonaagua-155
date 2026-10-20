@@ -74,6 +74,7 @@ export default function Login({ redefinindoSenha = false }) {
       provider: 'google',
       options: {
         redirectTo: authRedirectUrl,
+        queryParams: { prompt: 'select_account' },
         skipBrowserRedirect: Capacitor.isNativePlatform()
       }
     });

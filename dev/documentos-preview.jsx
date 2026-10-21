@@ -8,6 +8,10 @@ import Visita from '../src/pages/Visita.jsx';
 import { salvarArquivoLocal, lerArquivoLocal } from '../src/services/arquivoLocalService';
 
 const usuario = { id: 'previa-documentos-ficticios' };
+if (new URLSearchParams(window.location.search).has('pdf_pronto')) {
+ const pdf = await fetch('/output/pdf/orcamento-organizado.pdf').then(resposta => resposta.blob());
+ await salvarArquivoLocal(usuario.id, 'orcamentos', 'lista', [{ id: 'pdf-pronto-exemplo', nome: 'PDF pronto (exemplo)', telefone: '', descricao: '', valor: '', pdf, nomePdf: 'orcamento-organizado.pdf', criadoEm: new Date().toISOString() }]);
+}
 const imagem = await fetch('/logo.png').then(r => r.blob()).then(b => new Promise(resolve => { const f = new FileReader(); f.onload = () => resolve(f.result); f.readAsDataURL(b); }));
 if (!await lerArquivoLocal(usuario.id, 'ocorrencia', `${usuario.id}:previa-cliente:nova`)) await salvarArquivoLocal(usuario.id, 'ocorrencia', `${usuario.id}:previa-cliente:nova`, {
  foto: { base64: imagem, url: imagem, status: 'ready' }, texto: 'Vazamento identificado no filtro. Necessária avaliação técnica.',

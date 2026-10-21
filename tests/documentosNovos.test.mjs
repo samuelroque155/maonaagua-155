@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName, decodePDFRawStream } from 'pdf-lib';
 import { jsPDF } from 'jspdf';
 import { criarOcorrenciaPDF } from '../src/services/ocorrenciaPdfService.js';
 import { criarOrcamentoPDF, validarAnexoPDF, validarOrcamento } from '../src/services/orcamentoService.js';
@@ -43,6 +43,24 @@ test('orçamento cria apresentação e copia páginas do PDF sem alterar o anexo
   assert.throws(() => validarOrcamento({ nome: 'Ana', descricao: 'Filtro', valor: -1 }), /valor válido/);
   if (process.env.PREVIEW_PDF) await writeFile('tmp/pdfs/orcamento-avulso.pdf', Buffer.from(await blob.arrayBuffer()));
 });
+test('orçamento separa rótulos e valores por fonte e pagina descrições extensas', async () => {
+  const dados = { nome: 'Cliente de exemplo', telefone: '(64) 99999-0000', titulo: 'Manutencao da piscina', descricao: 'Limpeza e revisao dos equipamentos. '.repeat(600), valor: '250' };
+  const blob = await criarOrcamentoPDF(dados, { empresa: 'Empresa de exemplo', cidade: 'Jatai - GO' });
+  const documento = await PDFDocument.load(await blob.arrayBuffer());
+  assert.ok(documento.getPageCount() > 2);
+  const conteudos = documento.getPages().map(pagina => {
+    const conteudo = pagina.node.lookup(PDFName.of('Contents'));
+    const streams = typeof conteudo.asArray === 'function' ? conteudo.asArray() : [conteudo];
+    return streams.map(ref => Buffer.from(decodePDFRawStream(documento.context.lookup(ref)).decode()).toString('latin1')).join('\n');
+  });
+  assert.match(conteudos[0], /DADOS DO CLIENTE/);
+  assert.match(conteudos[0], /\/F2 11 Tf[\s\S]*\(Cliente:\) Tj[\s\S]*\/F1 11 Tf[\s\S]*\(Cliente de exemplo\) Tj/);
+  assert.match(conteudos[0], /Manutencao da piscina/);
+  for (const pagina of conteudos) {
+    for (const posicao of pagina.matchAll(/([\d.]+) ([\d.]+) Td/g)) assert.ok(Number(posicao[2]) >= 20 && Number(posicao[2]) <= 800, 'texto deve permanecer dentro das margens');
+  }
+});
+
 test('lembrete segue horário brasileiro, pendências e opção desligar', () => {
   const clientes = [{ id: 1, diasVisita: [3] }, { id: 2, diasVisita: [3], datasConcluidas: ['2026-10-21'] }];
   const opcoes = { ativo: true, horario: '08:00' };

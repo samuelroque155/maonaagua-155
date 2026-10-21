@@ -1,10 +1,10 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
 import { lerArquivoLocal, salvarArquivoLocal } from '../services/arquivoLocalService';
 import { validarOrcamento, validarAnexoPDF, criarOrcamentoPDF } from '../services/orcamentoService';
 import { compartilharDocumento } from '../services/documentoPdfService';
 
-const vazio = { nome: '', telefone: '', descricao: '', valor: '', pdf: null, nomePdf: '' };
+const vazio = { nome: '', telefone: '', titulo: '', descricao: '', valor: '', pdf: null, nomePdf: '' };
 export default function OrcamentoAvulso({ voltar }) {
   const { user, perfil, gradBtn } = useContext(AppContext);
   const [dados, setDados] = useState(vazio);
@@ -12,6 +12,7 @@ export default function OrcamentoAvulso({ voltar }) {
   const [pronto, setPronto] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState('');
+  const seletorPDF = useRef(null);
   useEffect(() => {
     let ativo = true;
     if (!user?.id) return;
@@ -27,11 +28,11 @@ export default function OrcamentoAvulso({ voltar }) {
     await salvarArquivoLocal(user.id, 'orcamentos', 'lista', novos); setLista(novos); setDados(registro);
   });
   const enviar = prontoPDF => executar(async () => {
-    validarOrcamento(dados);
+    if (!prontoPDF) validarOrcamento(dados);
     if (!perfil.empresa?.trim()) throw new Error('Salve o nome da empresa nas configurações.');
     if (prontoPDF && !dados.pdf) throw new Error('Adicione o PDF pronto antes de compartilhar.');
     const blob = prontoPDF ? dados.pdf : await criarOrcamentoPDF(dados, perfil);
-    await compartilharDocumento(blob, 'Orcamento.pdf', `Orçamento - ${perfil.empresa}`, `Olá, ${dados.nome}! Segue o orçamento de ${perfil.empresa}.`);
+    await compartilharDocumento(blob, prontoPDF ? (dados.nomePdf || 'Orcamento.pdf') : 'Orcamento.pdf', `Orçamento - ${perfil.empresa}`, `${dados.nome?.trim() ? `Olá, ${dados.nome.trim()}!` : 'Olá!'} Segue o orçamento de ${perfil.empresa}.`);
   });
   const classe = 'w-full p-3 mt-1 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100';
   return <div className="min-h-screen max-w-md mx-auto bg-slate-50 dark:bg-zinc-950 p-6 pb-24 space-y-5 text-zinc-800 dark:text-zinc-100">
@@ -41,13 +42,15 @@ export default function OrcamentoAvulso({ voltar }) {
     <fieldset disabled={!pronto || ocupado} className="space-y-4 disabled:opacity-60">
       <label className="block text-sm">Nome do cliente<input className={classe} value={dados.nome} onChange={e => setDados({ ...dados, nome: e.target.value })} /></label>
       <label className="block text-sm">Telefone<input type="tel" className={classe} value={dados.telefone} onChange={e => setDados({ ...dados, telefone: e.target.value })} /></label>
+      <label className="block text-sm">Título do orçamento (opcional)<input className={classe} value={dados.titulo || ''} onChange={e => setDados({ ...dados, titulo: e.target.value })} /></label>
       <label className="block text-sm">Descrição do orçamento<textarea className={classe} rows={5} value={dados.descricao} onChange={e => setDados({ ...dados, descricao: e.target.value })} /></label>
       <label className="block text-sm">Valor total (opcional)<input type="number" min="0" step="0.01" className={classe} value={dados.valor} onChange={e => setDados({ ...dados, valor: e.target.value })} /></label>
-      <label className="block text-sm">Adicionar PDF (opcional, até 10 MB)<input type="file" accept="application/pdf,.pdf" className="block w-full mt-2 text-xs" onChange={e => { const arquivo = e.target.files?.[0]; e.target.value = ''; if (arquivo) executar(async () => { await validarAnexoPDF(arquivo); setDados(atual => ({ ...atual, pdf: arquivo, nomePdf: arquivo.name })); }); }} /></label>
+      <label className="block text-sm">Adicionar PDF (opcional, até 10 MB)<input ref={seletorPDF} type="file" accept="application/pdf,.pdf" className="block w-full mt-2 text-xs" onChange={e => { const arquivo = e.target.files?.[0]; e.target.value = ''; if (arquivo) executar(async () => { await validarAnexoPDF(arquivo); setDados(atual => ({ ...atual, pdf: arquivo, nomePdf: arquivo.name })); }); }} /></label>
       {dados.nomePdf && <p className="text-xs break-all">Anexo: {dados.nomePdf} <button onClick={() => setDados({ ...dados, pdf: null, nomePdf: '' })} className="text-rose-500">Remover anexo</button></p>}
       <button onClick={salvar} className={`w-full rounded-xl p-3 font-bold ${gradBtn}`}>Salvar orçamento neste aparelho</button>
       <button onClick={() => enviar(false)} className="w-full rounded-xl p-3 border border-teal-400 text-teal-600 font-bold">Compartilhar PDF com empresa e logo + anexo</button>
-      <button disabled={!dados.pdf} onClick={() => enviar(true)} className="w-full rounded-xl p-3 border border-teal-400 text-teal-600 font-bold disabled:opacity-40">Compartilhar PDF pronto com mensagem da empresa</button>
+      <button onClick={() => dados.pdf ? enviar(true) : seletorPDF.current?.click()} className="w-full rounded-xl p-3 border border-teal-400 text-teal-600 font-bold">{dados.pdf ? 'Compartilhar PDF pronto com mensagem da empresa' : 'Selecionar PDF pronto para enviar'}</button>
+      {!dados.pdf && <p className="text-xs text-zinc-600 dark:text-zinc-400">Escolha o arquivo pronto e depois toque em compartilhar. No computador, se o navegador não oferecer compartilhamento, o PDF será baixado.</p>}
     </fieldset>
     {erro && <p role="alert" className="text-sm text-rose-600">{erro}</p>}
     <button onClick={() => setDados({ ...vazio })} className="text-teal-600 font-bold text-sm">Novo orçamento avulso</button>

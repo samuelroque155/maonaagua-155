@@ -239,7 +239,7 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
       </main>
 
       {/* Nav Bottom */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg border-t border-zinc-200 dark:border-zinc-800 p-4 flex justify-around items-center z-40 max-w-md mx-auto rounded-t-[2.5rem] shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+      {perfil.tipoConta !== 'funcionario' && <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg border-t border-zinc-200 dark:border-zinc-800 p-4 flex justify-around items-center z-40 max-w-md mx-auto rounded-t-[2.5rem] shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
         {perfil.tipoConta !== 'funcionario' && (
           <button
             onClick={() => setTela('novo_cliente')}
@@ -286,20 +286,7 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
           </button>
         )}
 
-        <button
-          onClick={() => setTela('configuracoes')}
-          className={`flex flex-col items-center gap-1 p-2 transition-all ${
-            tela === 'configuracoes'
-              ? 'text-teal-500 scale-110'
-              : 'text-zinc-400'
-          }`}
-        >
-          <Settings size={24} />
-          <span className="text-[9px] font-black uppercase tracking-widest">
-            Perfil
-          </span>
-        </button>
-      </nav>
+      </nav>}
     </div>
   );
 }

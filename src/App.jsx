@@ -1561,7 +1561,7 @@ export default function App() {
                 {
                   nome,
                   qtd: 1,
-                  preco: null
+                  preco: perfil.tipoConta === 'funcionario' ? null : perfil.precosProdutos?.[nome] ?? null
                 }
               ]);
             }
@@ -1661,7 +1661,7 @@ export default function App() {
                 {
                   nome,
                   qtd: 1,
-                  preco: null
+                  preco: perfil.tipoConta === 'funcionario' ? null : perfil.precosProdutos?.[nome] ?? null
                 }
               ]);
             }

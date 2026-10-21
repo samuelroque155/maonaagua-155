@@ -22,6 +22,7 @@ export function mapearPerfil(registro, preferencias = {}, padrao = {}) {
     fotoPerfilUrl: '',
     fotoPerfilNova: null,
     listaProdutos: Array.isArray(preferencias?.listaProdutos) ? preferencias.listaProdutos : padrao.listaProdutos || [],
+    precosProdutos: preferencias?.precosProdutos && typeof preferencias.precosProdutos === 'object' && !Array.isArray(preferencias.precosProdutos) ? preferencias.precosProdutos : {},
     listaAcessorios: Array.isArray(preferencias?.listaAcessorios) ? preferencias.listaAcessorios : padrao.listaAcessorios || []
   };
 }
@@ -86,6 +87,7 @@ export async function salvarPerfilProfissional(client, userId, perfil) {
     ...usuario.user_metadata?.preferencias_profissionais,
     fotoPerfilCaminho,
     listaProdutos: perfil.listaProdutos,
+    precosProdutos: perfil.precosProdutos || {},
     listaAcessorios: perfil.listaAcessorios
   };
   // Catálogos são preferências, nunca usados para autorização.

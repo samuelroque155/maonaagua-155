@@ -6,7 +6,7 @@ import { identificacaoCliente } from '../services/identidadeRelatorio';
 import { visitasDoCliente } from '../services/visitaEstado';
 import { AppContext } from '../context/AppContext.jsx';
 import { gerarRelatorioPDF } from '../services/pdfService';
-import { mensagemProdutosSimples } from '../services/whatsappService';
+import { mensagemProdutosSimples, mensagemProdutos } from '../services/whatsappService';
 import { abrirWhatsApp } from '../utils/whatsapp';
 import { formatarDataAgenda, FUSO_AGENDA } from '../services/agendaService';
 import {
@@ -341,10 +341,11 @@ export default function VerRelatorio({
       ? formatarData(dataAtiva)
       : formatarMes(mesAtivo);
   const adiamentosFiltrados = historicoFiltrado.filter(v => v.tipo === 'adiamento');
-  const enviarProdutosSalvos = visita => {
+  const enviarProdutosSalvos = (visita, comValores = false) => {
     if (funcionario) return;
     try {
-      const mensagem = mensagemProdutosSimples({ cliente, perfil, produtos: visita.prods || [] });
+      const produtos = (visita.prods || []).map(p => ({ ...p, preco: p.preco ?? perfil.precosProdutos?.[p.nome] ?? null }));
+      const mensagem = comValores ? mensagemProdutos({ cliente, perfil, produtos, comValores: true }) : mensagemProdutosSimples({ cliente, perfil, produtos });
       if (!abrirWhatsApp(cliente.telefone, mensagem)) alert('O telefone deste cliente precisa ter DDD para abrir o WhatsApp.');
     } catch (e) { alert(e.message); }
   };
@@ -1109,7 +1110,10 @@ export default function VerRelatorio({
 
                         </div>
 
-                        {!funcionario && <button onClick={() => enviarProdutosSalvos(visita)} className="w-full mb-3 py-3 rounded-xl border border-teal-300 dark:border-teal-800 text-teal-600 text-xs font-bold">Enviar produtos a repor pelo WhatsApp</button>}
+                        {!funcionario && <div className="space-y-2 mb-3">
+                          <button onClick={() => enviarProdutosSalvos(visita, false)} className="w-full py-3 rounded-xl border border-teal-300 dark:border-teal-800 text-teal-600 text-xs font-bold">Enviar somente a lista pelo WhatsApp</button>
+                          <button onClick={() => enviarProdutosSalvos(visita, true)} className="w-full py-3 rounded-xl border border-teal-300 dark:border-teal-800 text-teal-600 text-xs font-bold">Enviar com valores e total pelo WhatsApp</button>
+                        </div>}
                         {funcionario ? (
                           <button
                             onClick={() =>

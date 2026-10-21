@@ -133,6 +133,7 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
               {(perfil.listaProdutos || []).map((p, i) => (
                 <div key={i} className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 rounded-xl text-[11px] font-medium">
                   <span className="text-zinc-700 dark:text-zinc-300">{p}</span>
+                  <input aria-label={`Preço de ${p}`} type="number" min="0" step="0.01" placeholder="Preço R$" value={perfil.precosProdutos?.[p] ?? ''} onChange={e => { const valor = e.target.value; setPerfil(prev => ({ ...prev, precosProdutos: { ...prev.precosProdutos, [p]: valor === '' ? null : Number(valor) } })); }} className="w-24 min-w-0 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2 text-xs" />
                   <button onClick={() => setPerfil(prev => ({ ...prev, listaProdutos: prev.listaProdutos.filter((_, idx) => idx !== i) }))} className="text-rose-400 hover:text-rose-600">
                     <Trash2 size={14} />
                   </button>

@@ -1,5 +1,7 @@
 
-import React, { useContext, useState, useEffect, useRef } from 'react';
+import React, { useContext, useState, useEffect, useRef, useEffectEvent } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App as AppNativo } from '@capacitor/app';
 import { AppContext } from './context/AppContext.jsx';
 import { supabase } from './supabase';
 import { savePendingVisit } from './db';
@@ -23,6 +25,7 @@ import { enviarFotoVisita } from './services/fotosService';
 import { lerProgresso, salvarProgresso, removerProgresso } from './services/progressoVisita';
 import { criarControleBusca, fotosDaVisita } from './services/visitaEstado';
 import { preencherProdutosDaEmpresa } from './services/equipeService';
+import { executarVoltar, registrarVoltarWeb, registrarVoltarAndroid } from './services/navegacaoService';
 
 const normalizarTipoConta = (tipo) => {
   return String(tipo || '')
@@ -41,6 +44,7 @@ export default function App() {
     setClientes,
     tela,
     setTela,
+    voltarTela,
     dataHojeStr,
     processarFilaSincronizacao,
     targetUid,
@@ -1333,6 +1337,22 @@ export default function App() {
       );
     }
   };
+
+  const voltarDoSistema = useEffectEvent(() => executarVoltar({
+    tela, salvando: salvandoVisita,
+    pausarVisita, cancelarEdicao: cancelarEdicaoVisita, voltarTela,
+    avisarInicio: () => showToast('Você já está na tela inicial do app.')
+  }));
+
+  useEffect(() => {
+    if (!user?.id || authLoading) return;
+    const voltar = () => { void voltarDoSistema(); };
+    if (Capacitor.isNativePlatform()) {
+      if (Capacitor.getPlatform() === 'android') return registrarVoltarAndroid(AppNativo, voltar);
+      return;
+    }
+    return registrarVoltarWeb(window, voltar);
+  }, [user?.id, authLoading]);
 
   // AUTENTICAÇÃO
   if (authLoading) {

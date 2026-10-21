@@ -10,6 +10,7 @@ import { getPendingVisits, removePendingVisit, savePendingVisit } from '../db';
 import { sincronizarPendencia, pendenciasDaConta } from '../services/filaSupabase';
 import { carregarContextoEquipe, aplicarContextoEquipe, listarFuncionarios } from '../services/equipeService';
 import { resolverImagemPerfil } from '../services/imagemPerfilService';
+import { criarHistoricoTelas } from '../services/navegacaoService';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AppContext = createContext();
@@ -68,7 +69,14 @@ export const AppProvider = ({ children }) => {
   });
 
   const [clientes, setClientes] = useState([]);
-  const [tela, setTela] = useState('lista');
+  const [tela, setTelaEstado] = useState('lista');
+  const historicoTelas = useRef(criarHistoricoTelas());
+  const setTela = useCallback(destino => {
+    setTelaEstado(historicoTelas.current.navegar(destino));
+  }, []);
+  const voltarTela = useCallback(() => {
+    setTelaEstado(historicoTelas.current.voltar());
+  }, []);
 
   const [modoEscuro, setModoEscuro] = useState(() => {
     try {
@@ -399,6 +407,7 @@ export const AppProvider = ({ children }) => {
     setClientes,
     tela,
     setTela,
+    voltarTela,
     modoEscuro,
     setModoEscuro,
     pendentesCount,

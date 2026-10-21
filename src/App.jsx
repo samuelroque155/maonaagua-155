@@ -18,6 +18,7 @@ import AdminPanel from './pages/AdminPanel';
 import Configuracoes from './pages/Configuracoes';
 import Onboarding from './pages/Onboarding';
 import GestaoEquipe from './pages/GestaoEquipe';
+import AdiarVisita from './pages/AdiarVisita';
 import AcessoPendente from './pages/AcessoPendente';
 import { temAcessoAoApp } from './services/assinaturaService';
 
@@ -26,6 +27,8 @@ import { lerProgresso, salvarProgresso, removerProgresso } from './services/prog
 import { criarControleBusca, fotosDaVisita } from './services/visitaEstado';
 import { preencherProdutosDaEmpresa } from './services/equipeService';
 import { executarVoltar, registrarVoltarWeb, registrarVoltarAndroid } from './services/navegacaoService';
+import { dataBrasil, estadoAgendaCliente, FUSO_AGENDA } from './services/agendaService';
+import { listarAdiamentos, salvarAdiamento, adiamentoParaRelatorio, enviarFotoAdiamento, paginaConclusoesAgenda } from './services/adiamentoService';
 
 const normalizarTipoConta = (tipo) => {
   return String(tipo || '')
@@ -49,11 +52,14 @@ export default function App() {
     processarFilaSincronizacao,
     targetUid,
     salvarConfiguracoes,
-    recuperandoSenha
+    recuperandoSenha,
+    dataHojeISO, adiamentos, setAdiamentos, setErroAgenda, versaoAgenda, recarregarAgenda
   } = useContext(AppContext);
 
   const [clienteAtual, setClienteAtual] = useState(null);
   const [clienteEditando, setClienteEditando] = useState(null);
+  const [adiamentoAtual, setAdiamentoAtual] = useState(null);
+  const fotoAdiamentoEnviada = useRef(null);
 
   const [historicoDoRelatorio, setHistoricoDoRelatorio] =
     useState([]);
@@ -171,14 +177,10 @@ export default function App() {
 
       // Recupera o estado a partir das visitas existentes, sem alterar registros.
       const ultimas = new Map();
+      const concluidas = new Map();
       const tamanhoPagina = 500;
       for (let inicio = 0; ; inicio += tamanhoPagina) {
-        const { data: visitas, error: erroVisitas } = await supabase
-          .from('visitas')
-          .select('id, cliente_id, data_visita, created_at').eq('tipo', 'visita')
-          .eq('user_id', targetUid)
-          .order('id', { ascending: true })
-          .range(inicio, inicio + tamanhoPagina - 1);
+        const { data: visitas, error: erroVisitas } = await paginaConclusoesAgenda(supabase, targetUid, inicio, tamanhoPagina);
         if (!ativo) return;
         if (erroVisitas) {
           console.error('Erro ao recuperar conclusões:', erroVisitas);
@@ -188,18 +190,31 @@ export default function App() {
         for (const visita of visitas || []) {
           const dataVisita = visita.data_visita || visita.created_at;
           const chave = String(visita.cliente_id);
+          if (!concluidas.has(chave)) concluidas.set(chave, new Set());
+          concluidas.get(chave).add(dataBrasil(dataVisita));
           if (!ultimas.has(chave) || new Date(dataVisita) > new Date(ultimas.get(chave))) {
             ultimas.set(chave, dataVisita);
           }
         }
         if ((visitas || []).length < tamanhoPagina) break;
       }
+      try {
+        const registros = await listarAdiamentos(supabase, targetUid);
+        if (!ativo) return;
+        setAdiamentos(registros);
+        setErroAgenda('');
+      } catch (erro) {
+        if (!ativo) return;
+        console.error('Erro ao carregar adiamentos:', erro);
+        setErroAgenda('Não foi possível carregar os adiamentos neste ambiente. Verifique a conexão e a configuração do banco antes de reagendar.');
+      }
       setClientes(
         (data || []).map(c => ({
           ...c,
           diasVisita: c.dias_visita || [],
           horaVisita: c.hora_visita || '',
-          ultimaVisita: ultimas.get(String(c.id)) || null
+          ultimaVisita: ultimas.get(String(c.id)) || null,
+          datasConcluidas: [...(concluidas.get(String(c.id)) || [])]
         }))
       );
     };
@@ -209,7 +224,54 @@ export default function App() {
     return () => {
       ativo = false;
     };
-  }, [user?.id, targetUid, chaveRotas, setClientes]);
+  }, [user?.id, targetUid, chaveRotas, setClientes, dataHojeISO, versaoAgenda, setAdiamentos, setErroAgenda]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const atualizar = () => { if (!document.hidden) recarregarAgenda(); };
+    const timer = setInterval(atualizar, 60000);
+    window.addEventListener('focus', atualizar);
+    window.addEventListener('online', atualizar);
+    document.addEventListener('visibilitychange', atualizar);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', atualizar);
+      window.removeEventListener('online', atualizar);
+      document.removeEventListener('visibilitychange', atualizar);
+    };
+  }, [user?.id, recarregarAgenda]);
+
+  const abrirAdiamento = cliente => {
+    if (!estadoAgendaCliente(cliente, dataHojeISO, adiamentos).pendente) {
+      alert('Somente uma visita pendente de hoje pode ser adiada.');
+      return;
+    }
+    fotoAdiamentoEnviada.current = null;
+    setAdiamentoAtual({ id: crypto.randomUUID(), cliente, dataOriginal: dataHojeISO });
+    setTela('adiar_visita');
+  };
+
+  const confirmarAdiamento = async ({ motivo, novaData, compareceu, foto }) => {
+    if (!adiamentoAtual || salvandoVisita) return;
+    setSalvandoVisita(true);
+    try {
+      let fotoCaminho = null;
+      if (foto) {
+        if (fotoAdiamentoEnviada.current?.arquivo !== foto) {
+          fotoAdiamentoEnviada.current = { arquivo: foto, caminho: await enviarFotoAdiamento(supabase, user.id, foto) };
+        }
+        fotoCaminho = fotoAdiamentoEnviada.current.caminho;
+      }
+      const registro = await salvarAdiamento(supabase, { id: adiamentoAtual.id,
+        userId: user.id, ownerId: targetUid, clienteId: adiamentoAtual.cliente.id,
+        dataOriginal: adiamentoAtual.dataOriginal, novaData, motivo, compareceu, fotoCaminho });
+      setAdiamentos(prev => [registro, ...prev.filter(a => a.id !== registro.id)]);
+      recarregarAgenda();
+      showToast('Visita adiada. Histórico e nova data preservados.');
+      setTela('lista');
+    } catch (erro) { alert('Não foi possível adiar a visita: ' + erro.message); }
+    finally { setSalvandoVisita(false); }
+  };
 
   const handleSair = async () => {
     if (!window.confirm('Sair da conta?')) return;
@@ -336,7 +398,7 @@ export default function App() {
 
       const { data: dadosEquipe, error: erroEquipe } = await supabase.rpc('dados_equipe');
       if (erroEquipe) throw erroEquipe;
-      const visitasComProdutos = await preencherProdutosDaEmpresa(supabase, targetUid, data || []);
+      const visitasComProdutos = await preencherProdutosDaEmpresa(supabase, targetUid, filtro.adiamentoId ? [] : data || []);
       const historico = await Promise.all(
         visitasComProdutos.map(async visita => {
           const fotos = await criarLinks(
@@ -358,7 +420,8 @@ export default function App() {
             clienteId: visita.cliente_id,
             funcionarioNome: filtro.nome || dadosEquipe?.funcionarios?.find(f => f.usuario_id === visita.criado_por)?.nome || (visita.criado_por !== visita.user_id ? 'Funcionário (vínculo encerrado)' : null),
             criadoPor: visita.criado_por,
-            d: dataVisita.toLocaleDateString('pt-BR'),
+            d: dataVisita.toLocaleDateString('pt-BR', { timeZone: FUSO_AGENDA }),
+            dataISO: dataBrasil(dataVisita),
             h: visita.horario || '',
             ts: dataVisita.getTime(),
             p: visita.ph || '',
@@ -378,7 +441,13 @@ export default function App() {
       );
 
       if (!controleRelatorio.current.atual(pedido)) return;
-      setHistoricoDoRelatorio(historico);
+      const reagendamentos = await listarAdiamentos(supabase, targetUid, cliente.id, true);
+      const eventos = await Promise.all(reagendamentos.filter(a => !filtro.visitaId && (!filtro.adiamentoId || a.id === filtro.adiamentoId)).map(async a => {
+        const [foto] = await criarLinks(a.foto_caminho ? [a.foto_caminho] : []);
+        return { ...adiamentoParaRelatorio(a, foto), funcionarioNome: filtro.nome || dadosEquipe?.funcionarios?.find(f => f.usuario_id === a.criado_por)?.nome || null };
+      }));
+      if (!controleRelatorio.current.atual(pedido)) return;
+      setHistoricoDoRelatorio([...historico, ...eventos].sort((a, b) => b.ts - a.ts));
     } catch (erro) {
       if (!controleRelatorio.current.atual(pedido)) return;
       console.error(
@@ -1049,10 +1118,12 @@ export default function App() {
 
       const horario =
         `${inicio.toLocaleTimeString('pt-BR', {
+          timeZone: FUSO_AGENDA,
           hour: '2-digit',
           minute: '2-digit'
         })} - ` +
         `${fim.toLocaleTimeString('pt-BR', {
+          timeZone: FUSO_AGENDA,
           hour: '2-digit',
           minute: '2-digit'
         })} (${minutos}m)`;
@@ -1088,6 +1159,7 @@ export default function App() {
             ? {
                 ...c,
                 ultimaVisita: fim.toISOString(),
+                datasConcluidas: [...new Set([...(c.datasConcluidas || []), dataBrasil(fim)])],
                 visitaEmAndamentoData: null
               }
             : c
@@ -1105,6 +1177,7 @@ export default function App() {
       );
 
       setTela('lista');
+      recarregarAgenda();
     } catch (erro) {
       console.error(
         'Erro ao salvar visita:',
@@ -1153,11 +1226,12 @@ export default function App() {
       clienteId: clienteAtual.id,
       tipo: 'problema',
       d: dataOcorrencia.toLocaleDateString(
-        'pt-BR'
+        'pt-BR', { timeZone: FUSO_AGENDA }
       ),
       h: dataOcorrencia.toLocaleTimeString(
         'pt-BR',
         {
+          timeZone: FUSO_AGENDA,
           hour: '2-digit',
           minute: '2-digit'
         }
@@ -1381,11 +1455,14 @@ export default function App() {
   }
 
   // NAVEGAÇÃO
-  const telaPermitida = funcionario && !['lista', 'agenda', 'visita', 'configuracoes'].includes(tela) ? 'lista' : tela;
+  const telaPermitida = funcionario && !['lista', 'agenda', 'visita', 'adiar_visita', 'configuracoes'].includes(tela) ? 'lista' : tela;
   switch (telaPermitida) {
+    case 'adiar_visita':
+      return <AdiarVisita cliente={adiamentoAtual?.cliente} dataOriginal={adiamentoAtual?.dataOriginal} salvando={salvandoVisita} salvar={confirmarAdiamento} voltar={voltarTela} />;
     case 'lista':
       return (
         <Home
+          adiarVisita={abrirAdiamento}
           setTela={setTela}
           iniciarVisita={iniciarVisita}
           reabrirTarefaDaHome={
@@ -1852,6 +1929,7 @@ export default function App() {
     default:
       return (
         <Home
+          adiarVisita={abrirAdiamento}
           setTela={setTela}
           iniciarVisita={iniciarVisita}
           reabrirTarefaDaHome={

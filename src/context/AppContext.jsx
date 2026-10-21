@@ -11,6 +11,7 @@ import { sincronizarPendencia, pendenciasDaConta } from '../services/filaSupabas
 import { carregarContextoEquipe, aplicarContextoEquipe, listarFuncionarios } from '../services/equipeService';
 import { resolverImagemPerfil } from '../services/imagemPerfilService';
 import { criarHistoricoTelas } from '../services/navegacaoService';
+import { dataBrasil, diaSemanaAgenda, observarDiaBrasil } from '../services/agendaService';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AppContext = createContext();
@@ -69,6 +70,10 @@ export const AppProvider = ({ children }) => {
   });
 
   const [clientes, setClientes] = useState([]);
+  const [adiamentos, setAdiamentos] = useState([]);
+  const [erroAgenda, setErroAgenda] = useState('');
+  const [versaoAgenda, setVersaoAgenda] = useState(0);
+  const recarregarAgenda = useCallback(() => setVersaoAgenda(v => v + 1), []);
   const [tela, setTelaEstado] = useState('lista');
   const historicoTelas = useRef(criarHistoricoTelas());
   const setTela = useCallback(destino => {
@@ -103,19 +108,10 @@ export const AppProvider = ({ children }) => {
     'bg-gradient-to-r from-sky-500 via-teal-500 to-emerald-500 text-white shadow-lg active:scale-[0.98] transition-all';
 
   const [dateObj, setDateObj] = useState(() => new Date());
-  useEffect(() => {
-    const atualizarData = () => setDateObj(new Date());
-    const timer = setInterval(atualizarData, 30000);
-    window.addEventListener('focus', atualizarData);
-    document.addEventListener('visibilitychange', atualizarData);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener('focus', atualizarData);
-      document.removeEventListener('visibilitychange', atualizarData);
-    };
-  }, []);
-  const diaAtual = dateObj.getDay();
-  const dataHojeStr = dateObj.toDateString();
+  useEffect(() => observarDiaBrasil({ atualizar: setDateObj, janela: window, documento: document }), []);
+  const dataHojeISO = dataBrasil(dateObj);
+  const diaAtual = diaSemanaAgenda(dataHojeISO);
+  const dataHojeStr = new Date(`${dataHojeISO}T12:00:00`).toDateString();
 
   // Aplica e salva o tema visual.
   useEffect(() => {
@@ -146,6 +142,8 @@ export const AppProvider = ({ children }) => {
         setAuthLoading(Boolean(usuarioAtual));
         setErroPerfil('');
         setClientes([]);
+        setAdiamentos([]);
+        setErroAgenda('');
         setContextoEquipe(null);
         setGerenciaEquipe(false);
         setPendentesCount(0);
@@ -405,6 +403,13 @@ export const AppProvider = ({ children }) => {
     setPerfil,
     clientes,
     setClientes,
+    adiamentos,
+    setAdiamentos,
+    erroAgenda,
+    setErroAgenda,
+    versaoAgenda,
+    recarregarAgenda,
+    dataHojeISO,
     tela,
     setTela,
     voltarTela,

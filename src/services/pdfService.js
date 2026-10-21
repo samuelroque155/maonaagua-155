@@ -1,10 +1,11 @@
 
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import { applyPlugin } from 'jspdf-autotable';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { desenharIdentidadeProfissional, identificacaoCliente } from './identidadeRelatorio';
+import { desenharIdentidadeProfissional, identificacaoCliente } from './identidadeRelatorio.js';
+import { desenharAdiamentosPDF } from './adiamentoRelatorio.js';
 
 applyPlugin(jsPDF);
 
@@ -265,7 +266,7 @@ export const gerarRelatorioPDF = async (
     y += 5;
 
     const visitasNormais = historicoComImagens.filter(
-      v => v.tipo !== 'problema'
+      v => v.tipo !== 'problema' && v.tipo !== 'adiamento'
     );
 
     const tableData = visitasNormais.map(v => {
@@ -843,6 +844,8 @@ export const gerarRelatorioPDF = async (
     // RODAPÉ
     // ==========================================
 
+    y = desenharAdiamentosPDF(pdf, historicoComImagens.filter(v => v.tipo === 'adiamento'), { y, margem, larguraConteudo, topo: topoPagina, limite: limiteConteudo });
+
     if (y > 260) {
       pdf.addPage();
     }
@@ -943,11 +946,16 @@ const fileName =
         navigator.canShare({ files: [file] });
 
       if (podeCompartilhar) {
-        await navigator.share({
-          title: `Relatório - ${nomeCliente}`,
-          text: 'Relatório de manutenção de piscina.',
-          files: [file]
-        });
+        try {
+          await navigator.share({
+            title: `Relatório - ${nomeCliente}`,
+            text: 'Relatório de manutenção de piscina.',
+            files: [file]
+          });
+        } catch (erroCompartilhamento) {
+          // Alguns navegadores anunciam suporte, mas recusam arquivos/permissões.
+          if (erroCompartilhamento.name !== 'AbortError') pdf.save(fileName);
+        }
       } else {
         pdf.save(fileName);
       }

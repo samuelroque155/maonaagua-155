@@ -186,8 +186,8 @@ export default function GestaoEquipe({ setTela, abrirRelatorio }) {
               return <article key={v.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-2">
                 <h3 className="font-bold text-zinc-800 dark:text-zinc-100">Cliente: {cliente.nome}</h3>
                 <p className="text-sm text-teal-600">Responsável: {nome}</p>
-                <p className="text-xs text-zinc-500">{new Date(v.data_visita).toLocaleDateString('pt-BR')} · {v.horario || ''} · {v.tipo === 'problema' ? 'Ocorrência' : 'Limpeza'}</p>
-                <button onClick={() => abrirRelatorio(cliente, { visitaId: v.id, nome })} className={`w-full p-3 rounded-xl font-bold ${gradBtn}`}>Abrir relatório e fotos</button>
+                <p className="text-xs text-zinc-500">{new Date(v.data_visita).toLocaleDateString('pt-BR')} · {v.horario || ''} · {v.tipo === 'adiamento' ? 'Visita adiada' : v.tipo === 'problema' ? 'Ocorrência' : 'Limpeza'}</p>
+                <button onClick={() => abrirRelatorio(cliente, v.tipo === 'adiamento' ? { adiamentoId: v.adiamentoId, nome } : { visitaId: v.id, nome })} className={`w-full p-3 rounded-xl font-bold ${gradBtn}`}>Abrir relatório e fotos</button>
               </article>;
             })}
           </section>

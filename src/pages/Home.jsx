@@ -1,18 +1,18 @@
 
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
-import { limpezaConcluida } from '../services/visitaEstado';
+import { dataBrasil, estadoAgendaCliente, resumirAgendaDia } from '../services/agendaService';
 import {
   Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Navigation, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity
 } from 'lucide-react';
 
-export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toast, progressoPausado }) {
+export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progressoPausado }) {
   const {
     user, perfil, clientes, gerenciaEquipe, modoEscuro, setModoEscuro,
-    pendentesCount, pendentesLegados, erroSincronizacao, isSyncing, handleSair, gradText, gradBtn,
-    diaAtual, dataHojeStr, processarFilaSincronizacao, tela
+    pendentesCount, erroSincronizacao, isSyncing, gradText, gradBtn,
+    dataHojeStr, processarFilaSincronizacao, tela, adiamentos = [], dataHojeISO = dataBrasil(), erroAgenda
   } = useContext(AppContext);
-  const [mostrarTodasRotas, setMostrarTodasRotas] = useState(true);
+  const [mostrarTodasRotas, setMostrarTodasRotas] = useState(false);
   const nomeCabecalho = perfil.tipoConta === 'funcionario' ? 'Minhas piscinas' : perfil.empresa || 'Mão Na Água';
   const cidadeCabecalho = perfil.tipoConta === 'funcionario' ? perfil.cidadeEmpresa : perfil.cidade;
 
@@ -21,12 +21,8 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
     clientesFiltrados = clientes.filter(c => perfil.rotas.map(String).includes(String(c.id)));
   }
 
-  const piscinasDeHoje = clientesFiltrados.filter(c =>
-    (c.diasVisita || []).includes(diaAtual) ||
-    limpezaConcluida(c, new Date(dataHojeStr)) ||
-    c.adiadoPara === diaAtual ||
-    String(c.id) === String(progressoPausado?.clienteId)
-  );
+  const resumoAgenda = resumirAgendaDia(clientesFiltrados, adiamentos, dataHojeISO);
+  const piscinasDeHoje = resumoAgenda.pendentes;
 
   const visitasEmAndamento = perfil.tipoConta === 'empresa'
     ? clientes.filter(c => c.visitaEmAndamentoData === dataHojeStr)
@@ -93,7 +89,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
       )}
 
       {erroSincronizacao && <p role="alert" className="max-w-md mx-auto px-6 pt-3 text-xs text-amber-600">{erroSincronizacao}</p>}
-      {pendentesLegados > 0 && <p className="max-w-md mx-auto px-6 pt-3 text-xs text-amber-600">{pendentesLegados} registro(s) antigo(s) preservado(s) no aparelho, sem identificação da conta. Precisam de revisão antes do envio.</p>}
+      {erroAgenda && <p role="alert" className="max-w-md mx-auto px-6 pt-3 text-xs text-amber-600">{erroAgenda}</p>}
       <main className="p-6 max-w-md mx-auto space-y-6">
 
         {/* Status Bar */}
@@ -104,7 +100,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
             </div>
             <div>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-black uppercase tracking-widest">Agenda de Hoje</p>
-              <p className="text-lg font-bold text-zinc-800 dark:text-zinc-200">{piscinasDeHoje.length} Piscinas</p>
+              <p className="text-lg font-bold text-zinc-800 dark:text-zinc-200">{resumoAgenda.totalPendentes} {resumoAgenda.totalPendentes === 1 ? 'Piscina pendente' : 'Piscinas pendentes'}</p>
             </div>
           </div>
 
@@ -139,10 +135,11 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
         <div className="space-y-4">
           <div className="flex items-center justify-between ml-2">
             <h2 className="text-xs font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">
-              {perfil.tipoConta === 'funcionario' && mostrarTodasRotas ? 'Minhas rotas' : 'Limpar Hoje'}
+              {perfil.tipoConta === 'funcionario' && mostrarTodasRotas ? 'Todas as rotas' : 'Limpar Hoje'}
             </h2>
             <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">
-              {new Date().toLocaleDateString('pt-BR', {
+              {new Date(`${dataHojeISO}T12:00:00Z`).toLocaleDateString('pt-BR', {
+                timeZone: 'UTC',
                 weekday: 'long',
                 day: 'numeric',
                 month: 'long'
@@ -161,12 +158,12 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
               <div className="w-16 h-16 bg-slate-50 dark:bg-zinc-950 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-400/30">
                 <Plus size={32} />
               </div>
-              <p className="text-sm font-bold text-zinc-400">{perfil.tipoConta === 'funcionario' && mostrarTodasRotas ? 'Nenhuma rota atribuída para esta conta.' : 'Tudo limpo por hoje!'}</p>
+              <p className="text-sm font-bold text-zinc-400">{perfil.tipoConta === 'funcionario' && mostrarTodasRotas ? 'Nenhuma rota atribuída para esta conta.' : 'Nenhuma piscina para limpar hoje.'}</p>
             </div>
           ) : (
             clientesExibidos.map(cliente => {
-              const pausada = String(progressoPausado?.clienteId) === String(cliente.id);
-              const concluida = !pausada && limpezaConcluida(cliente, new Date(dataHojeStr));
+              const estado = estadoAgendaCliente(cliente, dataHojeISO, adiamentos);
+              const concluida = estado.concluida;
               const emAndamento = (
                 String(progressoPausado?.clienteId) === String(cliente.id) ||
                 cliente.visitaEmAndamentoData === dataHojeStr
@@ -218,7 +215,7 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
                     </div>
                   </div>
 
-                  {!concluida ? (
+                  {estado.pendente ? (
                     <button
                       onClick={() => iniciarVisita(cliente)}
                       className={`w-full py-4 rounded-2xl font-bold text-sm tracking-wide shadow-lg flex items-center justify-center gap-2 ${
@@ -231,14 +228,9 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
                       <Navigation size={18} fill="currentColor" />
                     </button>
                   ) : (
-                    <button
-                      disabled={perfil.tipoConta === 'funcionario'}
-                      onClick={() => reabrirTarefaDaHome(cliente)}
-                      className="w-full py-3.5 rounded-xl font-bold text-[10px] bg-slate-50 dark:bg-zinc-800 text-zinc-400 border border-zinc-100 dark:border-zinc-700 uppercase tracking-widest hover:bg-zinc-100 transition-colors"
-                    >
-                      {perfil.tipoConta === 'funcionario' ? 'Limpeza enviada à empresa' : 'Reabrir Visita'}
-                    </button>
+                    <p className="text-xs text-zinc-500">{concluida ? 'Limpeza finalizada. Registro mantido no histórico.' : estado.adiada ? 'Visita adiada. Confira a nova data na agenda.' : 'Sem limpeza programada para hoje.'}</p>
                   )}
+                  {estado.pendente && <button onClick={() => adiarVisita?.(cliente)} disabled={Boolean(erroAgenda) || !adiarVisita} className="w-full mt-3 py-3 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sm font-bold text-amber-600 disabled:opacity-40">Adiar visita</button>}
                 </div>
               );
             })

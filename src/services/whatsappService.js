@@ -55,3 +55,12 @@ export function urlWhatsApp(telefone, mensagem) {
   const destino = fone ? `phone=${fone}&` : '';
   return `https://api.whatsapp.com/send?${destino}text=${encodeURIComponent(mensagem)}`;
 }
+
+export function mensagemProdutosSimples({ cliente, perfil, produtos = [] }) {
+  const nomes = produtos.map(p => String(p.nome || '').trim()).filter(Boolean);
+  if (!nomes.length) throw new Error('Esta visita não tem produtos a repor registrados.');
+  const empresa = nomeProfissional(perfil);
+  if (!empresa) throw new Error('Cadastre seu nome profissional ou da empresa antes de compartilhar.');
+  return [`Olá, ${cliente.nome}!`, '', '🛒 *Produtos a repor:*', '',
+    ...nomes.map(nome => `• ${nome}`), '', 'Obrigado pela atenção!', '', `*${empresa}*`].join('\n');
+}

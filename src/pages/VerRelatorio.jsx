@@ -6,6 +6,9 @@ import { identificacaoCliente } from '../services/identidadeRelatorio';
 import { visitasDoCliente } from '../services/visitaEstado';
 import { AppContext } from '../context/AppContext.jsx';
 import { gerarRelatorioPDF } from '../services/pdfService';
+import { mensagemProdutosSimples } from '../services/whatsappService';
+import { abrirWhatsApp } from '../utils/whatsapp';
+import { formatarDataAgenda, FUSO_AGENDA } from '../services/agendaService';
 import {
   ArrowLeft,
   Share2,
@@ -26,6 +29,7 @@ import {
 
 // Converte datas brasileiras para o formato YYYY-MM-DD.
 function obterDataVisita(visita) {
+  if (visita?.dataISO) return visita.dataISO;
   if (visita?.d) {
     const match = String(visita.d).match(
       /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
@@ -235,33 +239,16 @@ export default function VerRelatorio({
     tipoConta === 'autonomo' ||
     tipoConta === 'empresa';
 
-  // Visitas finalizadas, sem ocorrências avulsas.
-  const visitasRegistradas = useMemo(() => {
-    return visitasDoCliente(historico, cliente?.id)
-      .filter(v => v.tipo !== 'problema')
-      .sort((a, b) => {
-        const dataA = obterDataVisita(a);
-        const dataB = obterDataVisita(b);
-
-        if (dataA !== dataB) {
-          return dataB.localeCompare(dataA);
-        }
-
-        return Number(b.ts || 0) -
-          Number(a.ts || 0);
-      });
-  }, [historico, cliente?.id]);
-
   // Datas que realmente possuem visitas.
   const datasDisponiveis = useMemo(() => {
     return [
       ...new Set(
-        visitasRegistradas
+        visitasDoCliente(historico, cliente?.id)
           .map(obterDataVisita)
           .filter(Boolean)
       )
     ].sort((a, b) => b.localeCompare(a));
-  }, [visitasRegistradas]);
+  }, [historico, cliente?.id]);
 
   const mesesDisponiveis = useMemo(() => {
     return [
@@ -311,7 +298,7 @@ export default function VerRelatorio({
 
   const visitasFiltradas = useMemo(() => {
     return historicoFiltrado
-      .filter(v => v.tipo !== 'problema')
+      .filter(v => v.tipo !== 'problema' && v.tipo !== 'adiamento')
       .sort((a, b) =>
         Number(b.ts || 0) -
         Number(a.ts || 0)
@@ -353,6 +340,14 @@ export default function VerRelatorio({
     tipoRelatorio === 'dia'
       ? formatarData(dataAtiva)
       : formatarMes(mesAtivo);
+  const adiamentosFiltrados = historicoFiltrado.filter(v => v.tipo === 'adiamento');
+  const enviarProdutosSalvos = visita => {
+    if (funcionario) return;
+    try {
+      const mensagem = mensagemProdutosSimples({ cliente, perfil, produtos: visita.prods || [] });
+      if (!abrirWhatsApp(cliente.telefone, mensagem)) alert('O telefone deste cliente precisa ter DDD para abrir o WhatsApp.');
+    } catch (e) { alert(e.message); }
+  };
 
   const handleSharePDF = async () => {
     if (loadingPDF || carregando) return;
@@ -1044,6 +1039,18 @@ export default function VerRelatorio({
             </section>
           )}
 
+        {adiamentosFiltrados.length > 0 && <section className="space-y-3">
+          <h3 className="text-sm font-black uppercase text-zinc-800 dark:text-white">Histórico de adiamentos</h3>
+          {adiamentosFiltrados.map(a => <article key={a.id} className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900 rounded-2xl p-5 space-y-2 text-sm">
+            <h4 className="font-bold text-amber-600">Visita adiada</h4>
+            <p>Data original: {formatarDataAgenda(a.dataOriginal)} {a.horarioOriginal}</p>
+            <p>Registrado em: {new Date(a.criadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
+            {a.comparecimentoEm && <p>Comparecimento: {new Date(a.comparecimentoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>}
+            <p className="whitespace-pre-wrap break-words">Motivo: {a.motivo}</p>
+            <p className="font-bold text-teal-600">Nova data: {formatarDataAgenda(a.novaData)}</p>
+            {(a.fotos || []).map((foto, index) => <img key={index} src={foto} alt="Comprovação de comparecimento" className="w-full max-h-72 object-contain rounded-xl" />)}
+          </article>)}
+        </section>}
         {/* GERENCIAR VISITAS */}
         {!modoImpressao &&
           !carregando &&
@@ -1102,6 +1109,7 @@ export default function VerRelatorio({
 
                         </div>
 
+                        {!funcionario && <button onClick={() => enviarProdutosSalvos(visita)} className="w-full mb-3 py-3 rounded-xl border border-teal-300 dark:border-teal-800 text-teal-600 text-xs font-bold">Enviar produtos a repor pelo WhatsApp</button>}
                         {funcionario ? (
                           <button
                             onClick={() =>

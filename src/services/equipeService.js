@@ -1,3 +1,5 @@
+import { listarAdiamentos } from './adiamentoService.js';
+
 export async function carregarContextoEquipe(client) {
   const { data, error } = await client.rpc('contexto_equipe');
   if (error) throw error;
@@ -61,8 +63,13 @@ export async function listarRelatoriosEquipe(client, ownerId) {
       .range(inicio, inicio + 499);
     if (error) throw error;
     visitas.push(...(data || []));
-    if ((data || []).length < 500) return visitas;
+    if ((data || []).length < 500) break;
   }
+  const adiamentos = await listarAdiamentos(client, ownerId, null, true);
+  return [...visitas, ...adiamentos.filter(a => a.criado_por !== ownerId).map(a => ({
+    id: `adiamento:${a.id}`, adiamentoId: a.id, cliente_id: a.cliente_id, criado_por: a.criado_por,
+    user_id: a.user_id, data_visita: a.criado_em, horario: a.horario_original, tipo: 'adiamento'
+  }))].sort((a, b) => new Date(b.data_visita) - new Date(a.data_visita));
 }
 
 export async function resolverAlerta(client, ownerId, id) {

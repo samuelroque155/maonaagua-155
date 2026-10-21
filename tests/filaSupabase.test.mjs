@@ -76,7 +76,8 @@ test('visita com outra autoria não confirma remoção da fila', async () => {
 });
 test('contexto confirmado substitui vínculo do perfil; remoção revoga tipo e rotas', async () => {
   const perfil = { tipoConta: 'autonomo', vinculoEmpresa: 'forjada', rotas: [99], assinaturaAtiva: false };
-  const efetivo = aplicarContextoEquipe(perfil, { employer_uid: 'owner', rotas: ['7'], assinatura_ativa: true });
+  const efetivo = aplicarContextoEquipe(perfil, { employer_uid: 'owner', rotas: ['7'], assinatura_ativa: true, empresa: { cidade: 'JATAÍ-GO' } });
+  assert.equal(efetivo.cidadeEmpresa, 'JATAÍ-GO');
   assert.equal(efetivo.tipoConta, 'funcionario'); assert.equal(efetivo.vinculoEmpresa, 'owner');
   assert.equal(aplicarContextoEquipe(efetivo, null).tipoConta, null);
   assert.equal(aplicarContextoEquipe(perfil, null).vinculoEmpresa, null);

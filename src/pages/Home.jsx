@@ -3,16 +3,18 @@ import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
 import { limpezaConcluida } from '../services/visitaEstado';
 import {
-  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Navigation, Clock, BellRing, Settings, ShieldCheck, Cloud, CloudOff, UserPlus, User, Briefcase, Activity
+  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Navigation, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity
 } from 'lucide-react';
 
 export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toast, progressoPausado }) {
   const {
     user, perfil, clientes, gerenciaEquipe, modoEscuro, setModoEscuro,
     pendentesCount, pendentesLegados, erroSincronizacao, isSyncing, handleSair, gradText, gradBtn,
-    diaAtual, dataHojeStr, processarFilaSincronizacao, tela, targetUid
+    diaAtual, dataHojeStr, processarFilaSincronizacao, tela
   } = useContext(AppContext);
   const [mostrarTodasRotas, setMostrarTodasRotas] = useState(true);
+  const nomeCabecalho = perfil.tipoConta === 'funcionario' ? 'Minhas piscinas' : perfil.empresa || 'Mão Na Água';
+  const cidadeCabecalho = perfil.tipoConta === 'funcionario' ? perfil.cidadeEmpresa : perfil.cidade;
 
   let clientesFiltrados = clientes;
   if (perfil.tipoConta === 'funcionario' && perfil.rotas) {
@@ -48,13 +50,13 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative shrink-0 w-10 h-10 bg-teal-500 rounded-2xl flex items-center justify-center shadow-lg shadow-teal-500/20">
-              <span className="text-white font-bold text-xl">{(perfil.empresa || 'Mão Na Água').charAt(0)}</span>
+              <span className="text-white font-bold text-xl">{nomeCabecalho.charAt(0)}</span>
               {perfil.fotoPerfilUrl && !perfil.fotoPerfilNova && <img src={perfil.fotoPerfilUrl} alt="Sua foto ou logo" className="absolute inset-0 w-10 h-10 rounded-2xl object-contain bg-white p-0.5" onError={evento => { evento.currentTarget.style.display = 'none'; }} />}
             </div>
             <div>
-              <h1 className={`text-xl font-black uppercase tracking-tight ${gradText}`}>{perfil.empresa || 'Mão Na Água'}</h1>
+              <h1 className={`text-xl font-black uppercase tracking-tight ${gradText}`}>{nomeCabecalho}</h1>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                <MapPin size={10} /> {perfil.cidade}
+                <MapPin size={10} /> {cidadeCabecalho}
               </p>
             </div>
           </div>
@@ -71,15 +73,11 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
             </button>
 
             <button
-              onClick={() => processarFilaSincronizacao(user.id, clientes, targetUid)}
-              aria-label={isSyncing ? 'Enviando fotos para a nuvem' : pendentesCount > 0 ? `${pendentesCount} visita(s) aguardando envio` : 'Tudo salvo na nuvem'}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${pendentesCount > 0 ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-500' : 'bg-slate-50 dark:bg-zinc-800 text-teal-500'}`}
+              onClick={() => setTela('configuracoes')}
+              aria-label="Configurações"
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all bg-slate-50 dark:bg-zinc-800 text-teal-500"
             >
-              {isSyncing
-                ? <Cloud size={18} className="animate-pulse" />
-                : pendentesCount > 0
-                  ? <CloudOff size={18} />
-                  : <Cloud size={18} />}
+              <Settings size={18} />
             </button>
           </div>
         </div>
@@ -89,7 +87,8 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
         <div className={`max-w-md mx-auto px-6 pt-3 text-xs font-bold ${isSyncing ? 'text-sky-600 dark:text-sky-400' : 'text-amber-600 dark:text-amber-400'}`}>
           {isSyncing
             ? `Enviando ${pendentesCount || 1} visita(s) para a nuvem...`
-            : `${pendentesCount} visita(s) salva(s) no celular aguardando internet. Toque na nuvem para tentar novamente.`}
+            : `${pendentesCount} visita(s) salva(s) no celular aguardando internet.`}
+          {!isSyncing && pendentesCount > 0 && <button onClick={() => processarFilaSincronizacao(user.id)} className="block mt-2 underline">Tentar envio novamente</button>}
         </div>
       )}
 
@@ -136,7 +135,6 @@ export default function Home({ iniciarVisita, reabrirTarefaDaHome, setTela, toas
           </div>
         )}
 
-        {perfil.tipoConta === 'funcionario' && <p className="text-sm text-teal-600 dark:text-teal-400">Empresa responsável: {perfil.empresaResponsavel}. Seus atendimentos serão enviados para ela.</p>}
         {/* Lista de Clientes */}
         <div className="space-y-4">
           <div className="flex items-center justify-between ml-2">

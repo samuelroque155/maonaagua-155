@@ -9,6 +9,7 @@ export function aplicarContextoEquipe(perfil, equipe) {
   return equipe ? {
     ...perfil, tipoConta: 'funcionario', vinculoEmpresa: equipe.employer_uid,
     rotas: equipe.rotas || [], empresaResponsavel: equipe.empresa?.nome || 'Empresa responsável',
+    cidadeEmpresa: equipe.empresa?.cidade || '',
     listaProdutos: equipe.empresa?.listaProdutos || perfil.listaProdutos,
     listaAcessorios: equipe.empresa?.listaAcessorios || perfil.listaAcessorios, assinaturaAtiva: equipe.assinatura_ativa === true
   } : { ...perfil, vinculoEmpresa: null, rotas: [],

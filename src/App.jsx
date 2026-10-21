@@ -29,6 +29,8 @@ import { preencherProdutosDaEmpresa } from './services/equipeService';
 import { executarVoltar, registrarVoltarWeb, registrarVoltarAndroid } from './services/navegacaoService';
 import { dataBrasil, estadoAgendaCliente, FUSO_AGENDA } from './services/agendaService';
 import { listarAdiamentos, salvarAdiamento, adiamentoParaRelatorio, enviarFotoAdiamento, paginaConclusoesAgenda } from './services/adiamentoService';
+import { observarLembretes } from './services/lembretesService';
+import { configurarPush } from './services/pushService';
 
 const normalizarTipoConta = (tipo) => {
   return String(tipo || '')
@@ -92,6 +94,16 @@ export default function App() {
   const pausandoVisita = useRef(false);
   // Identifica qual visita finalizada está sendo editada.
   const [visitaEmEdicao, setVisitaEmEdicao] = useState(null);
+  const agendaLembretes = useRef({ clientes, adiamentos });
+  useEffect(() => { agendaLembretes.current = { clientes, adiamentos }; }, [clientes, adiamentos]);
+  useEffect(() => {
+    if (!user?.id || authLoading || import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY) return;
+    return observarLembretes({ uid: user.id, obterAgenda: () => agendaLembretes.current, notificar: async aviso => {
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
+      const registro = await navigator.serviceWorker.ready;
+      await registro.showNotification(aviso.titulo, { body: aviso.texto, icon: '/logo.png', tag: 'limpezas-do-dia' });
+    } });
+  }, [user?.id, authLoading]);
 
   useEffect(() => {
     let ativo = true;
@@ -275,6 +287,11 @@ export default function App() {
 
   const handleSair = async () => {
     if (!window.confirm('Sair da conta?')) return;
+
+    if (user?.id && 'serviceWorker' in navigator) {
+      try { await configurarPush(supabase, user.id, { ativo: false }, import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY); }
+      catch (e) { console.error('Não foi possível atualizar as notificações no servidor:', e.message); }
+    }
 
     const { error } = await supabase.auth.signOut();
 
@@ -1255,7 +1272,7 @@ export default function App() {
       const enviada = await processarFilaSincronizacao(user.id);
       showToast(enviada ? 'Ocorrência enviada ao Supabase!' : 'Ocorrência salva no aparelho; aguardando envio.');
 
-      return true;
+      return novaOcorrencia;
     } catch (erro) {
       alert(
         'Erro ao salvar ocorrência: ' +
@@ -1561,7 +1578,7 @@ export default function App() {
                 {
                   nome,
                   qtd: 1,
-                  preco: perfil.tipoConta === 'funcionario' ? null : perfil.precosProdutos?.[nome] ?? null
+                  preco: perfil.tipoConta === 'funcionario' ? null : perfil.precosProdutos?.[nome] ?? perfil.precosAcessorios?.[nome] ?? null
                 }
               ]);
             }
@@ -1661,7 +1678,7 @@ export default function App() {
                 {
                   nome,
                   qtd: 1,
-                  preco: perfil.tipoConta === 'funcionario' ? null : perfil.precosProdutos?.[nome] ?? null
+                  preco: perfil.tipoConta === 'funcionario' ? null : perfil.precosProdutos?.[nome] ?? perfil.precosAcessorios?.[nome] ?? null
                 }
               ]);
             }

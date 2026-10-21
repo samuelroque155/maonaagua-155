@@ -1,5 +1,5 @@
 
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
 import {
   ArrowLeft,
@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { compressImage, fileToBase64 } from '../utils/imageUtils';
 import { mensagemProdutos, urlWhatsApp, resumirProdutos } from '../services/whatsappService';
+import { useRascunhoOcorrencia } from '../services/useRascunhoOcorrencia';
+import { enviarOcorrenciaPDF } from '../services/ocorrenciaPdfService';
 
 export default function Visita({
   setTela,
@@ -59,15 +61,20 @@ export default function Visita({
   visitaEmEdicao = null,
   cancelarEdicao
 }) {
-  const { perfil, nomeEmpresaSalvo, gradBtn } = useContext(AppContext);
+  const { user, targetUid, perfil, nomeEmpresaSalvo, gradBtn } = useContext(AppContext);
 
   const gradIconBg = 'bg-teal-500/10 text-teal-500';
 
   const [segundosExibicao, setSegundosExibicao] = useState(0);
 
-  const [fotoOcorrencia, setFotoOcorrencia] = useState(null);
-  const [textoOcorrencia, setTextoOcorrencia] = useState('');
+  const rascunho = useRascunhoOcorrencia(user?.id, `${targetUid || user?.id}:${clienteAtual?.id}:${modoEdicao ? visitaEmEdicao?.id : 'nova'}`);
+  const fotoOcorrencia = rascunho.foto;
+  const textoOcorrencia = rascunho.texto;
+  const setFotoOcorrencia = foto => rascunho.atualizar({ foto, registro: null });
+  const setTextoOcorrencia = texto => rascunho.atualizar({ texto, registro: null });
   const [enviandoOcorrencia, setEnviandoOcorrencia] = useState(false);
+  const versaoFotoOcorrencia = useRef(0);
+  useEffect(() => () => { versaoFotoOcorrencia.current++; }, [clienteAtual?.id]);
 
   // O cronômetro funciona somente durante visitas novas.
   useEffect(() => {
@@ -171,27 +178,27 @@ export default function Visita({
     const file = e.target.files?.[0];
 
     if (!file) return;
+    if (file.size > 20 * 1024 * 1024) return alert('Escolha uma foto com até 20 MB.');
 
-    const localUrl = URL.createObjectURL(file);
-
-    setFotoOcorrencia({
-      url: localUrl,
-      status: 'compressing'
-    });
+    e.target.value = '';
+    const pedido = ++versaoFotoOcorrencia.current;
+    let localUrl;
 
     try {
+      localUrl = await fileToBase64(file);
+      if (pedido !== versaoFotoOcorrencia.current) return;
+      setFotoOcorrencia({ url: localUrl, base64: localUrl, status: 'compressing' });
       const compressedFile = await compressImage(file);
       const base64 = await fileToBase64(compressedFile);
-      const compressedUrl = URL.createObjectURL(
-        compressedFile
-      );
+      if (pedido !== versaoFotoOcorrencia.current) return;
 
       setFotoOcorrencia({
-        url: compressedUrl,
+        url: base64,
         base64,
         status: 'ready'
       });
     } catch (error) {
+      if (pedido !== versaoFotoOcorrencia.current) return;
       console.error(
         'Erro na compressão da ocorrência:',
         error
@@ -199,6 +206,7 @@ export default function Visita({
 
       setFotoOcorrencia({
         url: localUrl,
+        base64: localUrl,
         status: 'error'
       });
     }
@@ -237,8 +245,11 @@ export default function Visita({
       );
 
       if (sucesso) {
-        setFotoOcorrencia(null);
-        setTextoOcorrencia('');
+        rascunho.atualizar({ registro: sucesso });
+        if (perfil.tipoConta !== 'funcionario') {
+          try { await enviarOcorrenciaPDF(clienteAtual, sucesso, { ...perfil, empresa: nomeEmpresaSalvo || perfil.empresa }); }
+          catch (e) { alert('Ocorrência registrada. Não foi possível preparar o PDF agora: ' + e.message); }
+        }
       }
     } catch (erro) {
       console.error(
@@ -625,6 +636,7 @@ export default function Visita({
                 type="file"
                 accept="image/*"
                 capture="environment"
+                disabled={!rascunho.pronto || enviandoOcorrencia}
                 className="hidden"
                 onChange={handleFotoOcorrenciaInput}
               />
@@ -652,7 +664,8 @@ export default function Visita({
 
                   <button
                     type="button"
-                    onClick={() => setFotoOcorrencia(null)}
+                    disabled={enviandoOcorrencia}
+                    onClick={() => { versaoFotoOcorrencia.current++; setFotoOcorrencia(null); }}
                     className="absolute top-1 right-1 bg-rose-500/90 text-white rounded-md p-1"
                   >
                     <Trash2 size={12} />
@@ -669,6 +682,7 @@ export default function Visita({
               <textarea
                 placeholder="Descreva o problema (Ex: Motor barulhento, vazamento no filtro, peça quebrada...)"
                 value={textoOcorrencia}
+                disabled={!rascunho.pronto || enviandoOcorrencia}
                 onChange={e =>
                   setTextoOcorrencia(e.target.value)
                 }
@@ -682,6 +696,7 @@ export default function Visita({
                 onClick={salvarEEnviarOcorrencia}
                 disabled={
                   enviandoOcorrencia ||
+                  !rascunho.pronto || Boolean(rascunho.registro) ||
                   !fotoOcorrencia ||
                   fotoOcorrencia.status !== 'ready' ||
                   !textoOcorrencia.trim()
@@ -699,10 +714,12 @@ export default function Visita({
                 ) : (
                   <>
                     <Send size={16} />
-                    ENVIAR OCORRÊNCIA AGORA
+                    {rascunho.registro ? 'OCORRÊNCIA REGISTRADA' : 'REGISTRAR OCORRÊNCIA'}
                   </>
                 )}
               </button>
+              {rascunho.erro && <p role="alert" className="mt-2 text-xs text-rose-600">{rascunho.erro}</p>}
+              {rascunho.registro && perfil.tipoConta !== 'funcionario' && <button type="button" className="w-full mt-3 py-3 rounded-xl border border-rose-300 text-rose-600 font-bold text-sm" onClick={async () => { try { await enviarOcorrenciaPDF(clienteAtual, rascunho.registro, { ...perfil, empresa: nomeEmpresaSalvo || perfil.empresa }); } catch (e) { alert(e.message); } }}>Compartilhar PDF da ocorrência técnica</button>}
             </div>
           </section>
         )}

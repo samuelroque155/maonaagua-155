@@ -46,7 +46,7 @@ export default function AdiarVisita({ cliente, dataOriginal, salvando, salvar, v
       </label>
       <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={compareceu} disabled={salvando || Boolean(foto)} onChange={e => setCompareceu(e.target.checked)} />Compareci ao local</label>
       <label className="block text-sm font-bold"><span className="flex items-center gap-2"><Camera size={18} />Foto de comprovação (opcional)</span>
-        <input type="file" accept="image/jpeg,image/png,image/webp" disabled={salvando || preparando} onChange={selecionarFoto} className="block mt-3 w-full text-xs" />
+        <input type="file" accept="image/*" capture="environment" disabled={salvando || preparando} onChange={selecionarFoto} className="block mt-3 w-full text-xs" />
       </label>
       {preparando && <p className="text-sm text-teal-600">Preparando foto...</p>}
       {preview && <div className="space-y-2"><img src={preview} alt="Comprovação de comparecimento" className="w-full max-h-60 object-contain rounded-2xl" /><button type="button" disabled={salvando} onClick={() => { setFoto(null); setPreview(''); }} className="text-xs text-rose-500">Remover foto</button></div>}

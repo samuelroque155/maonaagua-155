@@ -6,6 +6,7 @@ import { identificacaoCliente } from '../services/identidadeRelatorio';
 import { visitasDoCliente } from '../services/visitaEstado';
 import { AppContext } from '../context/AppContext.jsx';
 import { gerarRelatorioPDF } from '../services/pdfService';
+import { enviarOcorrenciaPDF } from '../services/ocorrenciaPdfService';
 import { mensagemProdutosSimples, mensagemProdutos } from '../services/whatsappService';
 import { abrirWhatsApp } from '../utils/whatsapp';
 import { formatarDataAgenda, FUSO_AGENDA } from '../services/agendaService';
@@ -344,7 +345,7 @@ export default function VerRelatorio({
   const enviarProdutosSalvos = (visita, comValores = false) => {
     if (funcionario) return;
     try {
-      const produtos = (visita.prods || []).map(p => ({ ...p, preco: p.preco ?? perfil.precosProdutos?.[p.nome] ?? null }));
+      const produtos = (visita.prods || []).map(p => ({ ...p, preco: p.preco ?? perfil.precosProdutos?.[p.nome] ?? perfil.precosAcessorios?.[p.nome] ?? null }));
       const mensagem = comValores ? mensagemProdutos({ cliente, perfil, produtos, comValores: true }) : mensagemProdutosSimples({ cliente, perfil, produtos });
       if (!abrirWhatsApp(cliente.telefone, mensagem)) alert('O telefone deste cliente precisa ter DDD para abrir o WhatsApp.');
     } catch (e) { alert(e.message); }
@@ -1008,6 +1009,7 @@ export default function VerRelatorio({
                             'Ocorrência registrada sem descrição.'}
                         </p>
 
+                        {!funcionario && <button type="button" className="w-full mb-3 py-3 rounded-xl border border-rose-300 text-rose-600 text-xs font-bold" onClick={async () => { try { await enviarOcorrenciaPDF(cliente, ocorrencia, perfil); } catch (e) { alert(e.message); } }}>Compartilhar PDF da ocorrência técnica</button>}
                         {fotos.length > 0 && (
                           <div className="grid grid-cols-3 gap-2">
 

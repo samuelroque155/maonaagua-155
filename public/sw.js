@@ -8,6 +8,45 @@ self.addEventListener('activate', () => {
   self.clients.claim();
 });
 
+function marcarAviso(id, remover = false) {
+  return new Promise((resolve, reject) => {
+    const pedido = indexedDB.open('MaoNaAguaAvisos', 1);
+    pedido.onupgradeneeded = () => pedido.result.createObjectStore('exibidos');
+    pedido.onerror = () => reject(pedido.error);
+    pedido.onsuccess = () => {
+      const banco = pedido.result;
+      const tx = banco.transaction('exibidos', 'readwrite');
+      const loja = tx.objectStore('exibidos');
+      // add e a chave única impedem duas entregas simultâneas do mesmo aviso.
+      if (remover) loja.delete(id); else loja.add(true, id);
+      tx.oncomplete = () => { banco.close(); resolve(true); };
+      tx.onabort = tx.onerror = () => {
+        banco.close();
+        if (tx.error?.name === 'ConstraintError') resolve(false);
+        else reject(tx.error);
+      };
+    };
+  });
+}
+
+self.addEventListener('push', event => {
+  let aviso = {};
+  try { aviso = event.data?.json() || {}; } catch { /* Mensagem inválida: aviso genérico. */ }
+  event.waitUntil((async () => {
+    const id = typeof aviso.id === 'string' && aviso.id.length <= 100 ? aviso.id : null;
+    if (id && !await marcarAviso(id)) return;
+    try {
+      await self.registration.showNotification('Mão Na Água — limpeza', {
+        body: typeof aviso.body === 'string' ? aviso.body.slice(0, 200) : 'Confira as piscinas pendentes na agenda de hoje.',
+        icon: '/logo.png', badge: '/favicon.svg', tag: 'limpezas-do-dia', renotify: false
+      });
+    } catch (erro) {
+      if (id) await marcarAviso(id, true);
+      throw erro;
+    }
+  })());
+});
+
 // To handle clicks on the notification
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();

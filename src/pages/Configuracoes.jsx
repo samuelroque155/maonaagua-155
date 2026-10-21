@@ -5,7 +5,7 @@ import { fileToBase64 } from '../utils/imageUtils';
 import { AppContext } from '../context/AppContext.jsx';
 import ConfiguracaoLembretes from '../components/ConfiguracaoLembretes';
 import {
-  ArrowLeft, Pencil, ShoppingCart, Plus, Trash2, Save, Briefcase, User
+  ArrowLeft, Pencil, ShoppingCart, Plus, Trash2, Save, Briefcase, User, Bell
 } from 'lucide-react';
 
 export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair }) {
@@ -13,6 +13,7 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
   const funcionario = perfil.tipoConta === 'funcionario';
   const [preparandoFoto, setPreparandoFoto] = useState(false);
   const [erroFoto, setErroFoto] = useState('');
+  const [mostrarNotificacoes, setMostrarNotificacoes] = useState(false);
   const pedidoFoto = useRef(0);
   useEffect(() => () => { pedidoFoto.current += 1; }, [user?.id]);
 
@@ -77,15 +78,18 @@ export default function Configuracoes({ setTela, salvarConfiguracoes, handleSair
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans transition-colors duration-300 pb-20">
-      <header className="flex items-center gap-4 mb-10">
+      <header className="flex items-center gap-3 mb-10">
         <button onClick={() => setTela('lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
           <ArrowLeft size={20} />
         </button>
-        <h2 className={`text-2xl font-black ${gradText}`}>Configurações</h2>
+        <h2 className={`flex-1 min-w-0 text-xl sm:text-2xl font-black ${gradText}`}>Configurações</h2>
+        <button type="button" aria-label="Notificações" title="Notificações" aria-expanded={mostrarNotificacoes} aria-controls="configuracao-notificacoes" onClick={() => setMostrarNotificacoes(atual => !atual)} className="shrink-0 p-2.5 rounded-xl border border-teal-300 dark:border-teal-700 bg-white dark:bg-zinc-900 text-teal-700 dark:text-teal-400"><Bell size={20} aria-hidden="true" /></button>
       </header>
 
       <div className="space-y-8">
-        <ConfiguracaoLembretes key={user?.id} />
+        <div id="configuracao-notificacoes" hidden={!mostrarNotificacoes}>
+          {mostrarNotificacoes && <ConfiguracaoLembretes key={user?.id} />}
+        </div>
         <section className="bg-white dark:bg-zinc-900 p-6 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm">
           <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-6 flex items-center gap-2 uppercase tracking-widest">
             <Pencil size={16} className="text-teal-500" /> Perfil Profissional

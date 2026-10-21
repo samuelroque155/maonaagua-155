@@ -33,11 +33,11 @@ export default function OrcamentoAvulso({ voltar }) {
     const blob = prontoPDF ? dados.pdf : await criarOrcamentoPDF(dados, perfil);
     await compartilharDocumento(blob, 'Orcamento.pdf', `Orçamento - ${perfil.empresa}`, `Olá, ${dados.nome}! Segue o orçamento de ${perfil.empresa}.`);
   });
-  const classe = 'w-full p-3 mt-1 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900';
-  return <div className="max-w-md mx-auto p-6 pb-24 space-y-5 text-zinc-800 dark:text-zinc-100">
+  const classe = 'w-full p-3 mt-1 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100';
+  return <div className="min-h-screen max-w-md mx-auto bg-slate-50 dark:bg-zinc-950 p-6 pb-24 space-y-5 text-zinc-800 dark:text-zinc-100">
     <button onClick={voltar} className="text-teal-600 font-bold">← Voltar</button>
     <h1 className="font-black text-2xl text-teal-600">Orçamento avulso</h1>
-    <p className="text-sm text-zinc-500">Cadastro separado: não cria cliente recorrente, rota ou limpeza. Orçamentos e anexos ficam salvos nesta conta, neste aparelho.</p>
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Cadastro separado: não cria cliente recorrente, rota ou limpeza. Orçamentos e anexos ficam salvos nesta conta, neste aparelho.</p>
     <fieldset disabled={!pronto || ocupado} className="space-y-4 disabled:opacity-60">
       <label className="block text-sm">Nome do cliente<input className={classe} value={dados.nome} onChange={e => setDados({ ...dados, nome: e.target.value })} /></label>
       <label className="block text-sm">Telefone<input type="tel" className={classe} value={dados.telefone} onChange={e => setDados({ ...dados, telefone: e.target.value })} /></label>

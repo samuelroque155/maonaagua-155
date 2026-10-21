@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
 import OrcamentoAvulso from './OrcamentoAvulso';
 import { 
-  ArrowLeft
+  ArrowLeft, FileText
 } from 'lucide-react';
 
 export default function NovoCliente({ setTela, adicionarCliente, clienteExistente = null, salvarEdicaoCliente }) {
@@ -32,13 +32,13 @@ export default function NovoCliente({ setTela, adicionarCliente, clienteExistent
   if (orcamento && !clienteExistente) return <OrcamentoAvulso voltar={() => setOrcamento(false)} />;
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-6 text-zinc-900 dark:text-zinc-100 max-w-md mx-auto font-sans pb-10 transition-colors duration-300">
-      <header className="flex items-center gap-4 mb-10 mt-2">
+      <header className="flex items-center gap-2 mb-10 mt-2">
         <button onClick={() => setTela(clienteExistente ? 'relatorio' : 'lista')} className="p-2 text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm"><ArrowLeft size={20} /></button>
-        <h2 className={`text-2xl font-black ${gradText}`}>{clienteExistente ? 'Editar Cadastro' : 'Novo Cliente'}</h2>
+        <h2 className={`flex-1 min-w-0 text-xl sm:text-2xl font-black ${gradText}`}>{clienteExistente ? 'Editar Cadastro' : 'Novo Cliente'}</h2>
+        {!clienteExistente && <button type="button" onClick={() => setOrcamento(true)} className="shrink-0 flex items-center gap-1.5 rounded-xl border border-teal-300 dark:border-teal-700 px-3 py-2.5 text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-zinc-900"><FileText size={16} aria-hidden="true" />Orçamento</button>}
       </header>
 
       <div className="space-y-6">
-        {!clienteExistente && <section className="p-4 rounded-2xl border border-teal-300 dark:border-teal-800"><h3 className="font-bold text-teal-600">Orçamento</h3><p className="text-xs text-zinc-500 mt-1 mb-3">Cliente avulso, sem entrar na agenda de limpezas.</p><button onClick={() => setOrcamento(true)} className="font-bold text-sm text-teal-600">Criar ou consultar orçamento avulso</button></section>}
         <div className="space-y-2">
           <span className="text-xs font-bold text-teal-600 dark:text-teal-500 ml-2 uppercase tracking-wider">Nome Completo</span>
           <input placeholder="Ex: Samuel Silva" value={nome} onChange={e => setNome(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[1.25rem] outline-none focus:border-teal-400 text-zinc-900 dark:text-white transition-all shadow-sm" />

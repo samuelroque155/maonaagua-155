@@ -1,16 +1,17 @@
 
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext.jsx';
+import AcoesVisita from '../components/AcoesVisita.jsx';
 import { dataBrasil, estadoAgendaCliente, resumirAgendaDia } from '../services/agendaService';
 import {
-  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Navigation, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity
+  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity
 } from 'lucide-react';
 
 export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progressoPausado }) {
   const {
     user, perfil, clientes, gerenciaEquipe, modoEscuro, setModoEscuro,
     pendentesCount, erroSincronizacao, isSyncing, gradText, gradBtn,
-    dataHojeStr, processarFilaSincronizacao, tela, adiamentos = [], dataHojeISO = dataBrasil(), erroAgenda
+    dataHojeStr, processarFilaSincronizacao, tela, adiamentos = [], antecipacoes = [], erroAntecipacoes, dataHojeISO = dataBrasil(), erroAgenda
   } = useContext(AppContext);
   const [mostrarTodasRotas, setMostrarTodasRotas] = useState(false);
   const nomeCabecalho = perfil.tipoConta === 'funcionario' ? 'Minhas piscinas' : perfil.empresa || 'Mão Na Água';
@@ -21,7 +22,7 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
     clientesFiltrados = clientes.filter(c => perfil.rotas.map(String).includes(String(c.id)));
   }
 
-  const resumoAgenda = resumirAgendaDia(clientesFiltrados, adiamentos, dataHojeISO);
+  const resumoAgenda = resumirAgendaDia(clientesFiltrados, adiamentos, dataHojeISO, antecipacoes);
   const piscinasDeHoje = resumoAgenda.pendentes;
 
   const visitasEmAndamento = perfil.tipoConta === 'empresa'
@@ -162,7 +163,7 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
             </div>
           ) : (
             clientesExibidos.map(cliente => {
-              const estado = estadoAgendaCliente(cliente, dataHojeISO, adiamentos);
+              const estado = estadoAgendaCliente(cliente, dataHojeISO, adiamentos, antecipacoes);
               const concluida = estado.concluida;
               const emAndamento = (
                 String(progressoPausado?.clienteId) === String(cliente.id) ||
@@ -216,21 +217,13 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
                   </div>
 
                   {estado.pendente ? (
-                    <button
-                      onClick={() => iniciarVisita(cliente)}
-                      className={`w-full py-4 rounded-2xl font-bold text-sm tracking-wide shadow-lg flex items-center justify-center gap-2 ${
-                        emAndamento
-                          ? 'bg-zinc-800 dark:bg-zinc-700 text-white'
-                          : gradBtn
-                      }`}
-                    >
-                      {emAndamento ? 'CONTINUAR LIMPEZA' : 'INICIAR LIMPEZA'}
-                      <Navigation size={18} fill="currentColor" />
-                    </button>
+                    <div>
+                      {estado.antecipacao && <p className="text-xs text-teal-600 mb-2">Visita antecipada de {estado.antecipacao.data_original.split('-').reverse().join('/')}</p>}
+                      <AcoesVisita hoje futura={false} continuar={emAndamento} bloqueado={Boolean(erroAgenda || erroAntecipacoes)} gradBtn={emAndamento ? 'bg-zinc-800 dark:bg-zinc-700 text-white' : gradBtn} iniciar={() => iniciarVisita(cliente)} adiar={adiarVisita && (() => adiarVisita(cliente))} />
+                    </div>
                   ) : (
                     <p className="text-xs text-zinc-500">{concluida ? 'Limpeza finalizada. Registro mantido no histórico.' : estado.adiada ? 'Visita adiada. Confira a nova data na agenda.' : 'Sem limpeza programada para hoje.'}</p>
                   )}
-                  {estado.pendente && <button onClick={() => adiarVisita?.(cliente)} disabled={Boolean(erroAgenda) || !adiarVisita} className="w-full mt-3 py-3 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sm font-bold text-amber-600 disabled:opacity-40">Adiar visita</button>}
                 </div>
               );
             })

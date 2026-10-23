@@ -1,10 +1,13 @@
 import { jsPDF } from 'jspdf';
 import { desenharIdentidadeProfissional, identificacaoCliente } from './identidadeRelatorio.js';
 import { compartilharDocumento, imagemDocumento } from './documentoPdfService.js';
+import { imagemProfissionalPDF } from './imagemPerfilService.js';
 
 export async function criarOcorrenciaPDF(cliente, ocorrencia, perfil) {
   const pdf = new jsPDF();
-  let y = desenharIdentidadeProfissional(pdf, perfil, await imagemDocumento(perfil?.fotoPerfilUrl), 15, 22, 180);
+  let imagemPerfil = null;
+  try { imagemPerfil = await imagemDocumento(perfil?.fotoPerfilUrl); } catch { /* Mantém o registro técnico disponível. */ }
+  let y = desenharIdentidadeProfissional(pdf, perfil, imagemPerfil, 15, 22, 180);
   const espaco = altura => { if (y + altura > 280) { pdf.addPage(); y = 20; } };
   espaco(43);
   pdf.setFillColor(190, 24, 45); pdf.roundedRect(15, y, 180, 28, 3, 3, 'F');
@@ -31,7 +34,9 @@ export async function criarOcorrenciaPDF(cliente, ocorrencia, perfil) {
   }
   return pdf.output('blob');
 }
-export async function enviarOcorrenciaPDF(cliente, ocorrencia, perfil) {
-  const blob = await criarOcorrenciaPDF(cliente, ocorrencia, perfil);
+export async function enviarOcorrenciaPDF(cliente, ocorrencia, perfil, client = null) {
+  const identidade = client ? await imagemProfissionalPDF(client, perfil) : null;
+  const blob = await criarOcorrenciaPDF(cliente, ocorrencia, identidade ? { ...perfil, fotoPerfilUrl: identidade.imagem } : perfil);
   await compartilharDocumento(blob, `Ocorrencia_${String(cliente.nome || 'Cliente').replace(/[^\p{L}\p{N}_-]/gu, '_')}.pdf`, 'Ocorrência técnica', `Atenção: ocorrência técnica registrada por ${perfil.empresa || 'Mão Na Água'}.`);
+  if (identidade?.aviso) alert(identidade.aviso);
 }

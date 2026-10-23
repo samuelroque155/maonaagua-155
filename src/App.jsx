@@ -19,6 +19,8 @@ import Configuracoes from './pages/Configuracoes';
 import Onboarding from './pages/Onboarding';
 import GestaoEquipe from './pages/GestaoEquipe';
 import AdiarVisita from './pages/AdiarVisita';
+import { listarAntecipacoes, descricaoAntecipacao } from './services/antecipacaoService.js';
+import { cancelarAtendimento as registrarCancelamento, prepararRascunhoCancelamento, listarCancelamentos, atendimentoJaCancelado } from './services/cancelamentoVisitaService.js';
 import AcessoPendente from './pages/AcessoPendente';
 import { temAcessoAoApp } from './services/assinaturaService';
 
@@ -55,13 +57,15 @@ export default function App() {
     targetUid,
     salvarConfiguracoes,
     recuperandoSenha,
-    dataHojeISO, adiamentos, setAdiamentos, setErroAgenda, versaoAgenda, recarregarAgenda
+    dataHojeISO, adiamentos, setAdiamentos, setErroAgenda, versaoAgenda, recarregarAgenda,
+    antecipacoes, setAntecipacoes, setErroAntecipacoes, setAntecipacoesDisponiveis, antecipacoesDisponiveis
   } = useContext(AppContext);
 
   const [clienteAtual, setClienteAtual] = useState(null);
   const [clienteEditando, setClienteEditando] = useState(null);
   const [adiamentoAtual, setAdiamentoAtual] = useState(null);
   const fotoAdiamentoEnviada = useRef(null);
+  const fotoCancelamentoEnviada = useRef(null);
 
   const [historicoDoRelatorio, setHistoricoDoRelatorio] =
     useState([]);
@@ -94,8 +98,8 @@ export default function App() {
   const pausandoVisita = useRef(false);
   // Identifica qual visita finalizada está sendo editada.
   const [visitaEmEdicao, setVisitaEmEdicao] = useState(null);
-  const agendaLembretes = useRef({ clientes, adiamentos });
-  useEffect(() => { agendaLembretes.current = { clientes, adiamentos }; }, [clientes, adiamentos]);
+  const agendaLembretes = useRef({ clientes, adiamentos, antecipacoes });
+  useEffect(() => { agendaLembretes.current = { clientes, adiamentos, antecipacoes }; }, [clientes, adiamentos, antecipacoes]);
   useEffect(() => {
     if (!user?.id || authLoading || import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY) return;
     return observarLembretes({ uid: user.id, obterAgenda: () => agendaLembretes.current, notificar: async aviso => {
@@ -220,6 +224,17 @@ export default function App() {
         console.error('Erro ao carregar adiamentos:', erro);
         setErroAgenda('Não foi possível carregar os adiamentos neste ambiente. Verifique a conexão e a configuração do banco antes de reagendar.');
       }
+      try {
+        const registros = await listarAntecipacoes(supabase, targetUid);
+        if (!ativo) return;
+        setAntecipacoes(registros); setErroAntecipacoes(''); setAntecipacoesDisponiveis(true);
+      } catch (erro) {
+        if (!ativo) return;
+        setAntecipacoesDisponiveis(false);
+        const ausente = erro.code === '42P01' || erro.code === 'PGRST205';
+        if (ausente) setAntecipacoes([]);
+        setErroAntecipacoes(ausente ? '' : 'Não foi possível sincronizar as antecipações. Atualize a agenda antes de iniciar uma visita.');
+      }
       setClientes(
         (data || []).map(c => ({
           ...c,
@@ -236,7 +251,7 @@ export default function App() {
     return () => {
       ativo = false;
     };
-  }, [user?.id, targetUid, chaveRotas, setClientes, dataHojeISO, versaoAgenda, setAdiamentos, setErroAgenda]);
+  }, [user?.id, targetUid, chaveRotas, setClientes, dataHojeISO, versaoAgenda, setAdiamentos, setErroAgenda, setAntecipacoes, setAntecipacoesDisponiveis, setErroAntecipacoes]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -254,7 +269,7 @@ export default function App() {
   }, [user?.id, recarregarAgenda]);
 
   const abrirAdiamento = cliente => {
-    if (!estadoAgendaCliente(cliente, dataHojeISO, adiamentos).pendente) {
+    if (!estadoAgendaCliente(cliente, dataHojeISO, adiamentos, antecipacoes).pendente) {
       alert('Somente uma visita pendente de hoje pode ser adiada.');
       return;
     }
@@ -324,6 +339,8 @@ export default function App() {
       userId: user.id,
       salvoEm: Date.now(),
       clienteId: clienteAtual.id,
+      dataAgenda: clienteAtual.dataAgenda,
+      atendimentoId: clienteAtual.atendimentoId,
       ph,
       cloro,
       alcalinidade,
@@ -415,6 +432,7 @@ export default function App() {
 
       const { data: dadosEquipe, error: erroEquipe } = await supabase.rpc('dados_equipe');
       if (erroEquipe) throw erroEquipe;
+      const antecipacoesCliente = await listarAntecipacoes(supabase, targetUid, cliente.id, true);
       const visitasComProdutos = await preencherProdutosDaEmpresa(supabase, targetUid, filtro.adiamentoId ? [] : data || []);
       const historico = await Promise.all(
         visitasComProdutos.map(async visita => {
@@ -448,11 +466,16 @@ export default function App() {
             asp: visita.aspecto || '',
             txtA: visita.observacoes || '',
             prods: visita.produtos || [],
+            fotosCaminhos: visita.fotos || [],
+            fotosAlertaCaminhos: visita.fotos_alerta || [],
             fotos,
             fotosA,
             fotosBase64: [],
             fotosAlertaBase64: [],
-            tipo: visita.tipo || 'visita'
+            tipo: visita.tipo || 'visita',
+            antecipacaoId: visita.antecipacao_id,
+            antecipacaoDados: antecipacoesCliente.find(a => a.id === visita.antecipacao_id),
+            antecipacaoDescricao: antecipacoesCliente.find(a => a.id === visita.antecipacao_id) ? descricaoAntecipacao(antecipacoesCliente.find(a => a.id === visita.antecipacao_id)) : ''
           };
         })
       );
@@ -464,7 +487,27 @@ export default function App() {
         return { ...adiamentoParaRelatorio(a, foto), funcionarioNome: filtro.nome || dadosEquipe?.funcionarios?.find(f => f.usuario_id === a.criado_por)?.nome || null };
       }));
       if (!controleRelatorio.current.atual(pedido)) return;
-      setHistoricoDoRelatorio([...historico, ...eventos].sort((a, b) => b.ts - a.ts));
+      const eventosAntecipados = filtro.visitaId || filtro.adiamentoId ? [] : antecipacoesCliente.map(a => {
+        const realizada = historico.find(v => v.antecipacaoId === a.id);
+        return {
+          id: `antecipacao:${a.id}`, antecipacaoId: a.id, antecipacaoDados: a, clienteId: a.cliente_id, tipo: 'antecipacao',
+          dataISO: a.nova_data, d: a.nova_data.split('-').reverse().join('/'),
+          ts: new Date(a.criado_em).getTime(), descricao: descricaoAntecipacao(a),
+          criadoEm: a.criado_em, criadoPor: a.criado_por, canceladoEm: a.cancelado_em,
+          status: a.cancelado_em ? 'Cancelada; data original restaurada' : realizada ? 'Limpeza concluída' : 'Pendente',
+          dataEfetiva: realizada?.d || '', fotos: [], fotosA: [], prods: []
+        };
+      });
+      const cancelamentos = filtro.visitaId || filtro.adiamentoId ? [] : await listarCancelamentos(supabase, targetUid, cliente.id);
+      const eventosCancelados = await Promise.all(cancelamentos.map(async c => ({
+        id: c.id, clienteId: c.cliente_id, tipo: 'cancelamento', dataISO: dataBrasil(c.cancelado_em), d: dataBrasil(c.cancelado_em).split('-').reverse().join('/'),
+        ts: Date.parse(c.cancelado_em), iniciadoEm: c.iniciado_em, canceladoEm: c.cancelado_em, criadoPor: c.criado_por,
+        funcionarioNome: dadosEquipe?.funcionarios?.find(f => f.usuario_id === c.criado_por)?.nome || (c.criado_por === user.id ? 'Você' : 'Responsável pelo atendimento'),
+        motivo: c.motivo, dataOriginal: c.data_original, novaData: c.nova_data, rascunho: c.rascunho,
+        fotos: await criarLinks([...(c.rascunho?.fotos || []), ...(c.rascunho?.fotos_alerta || [])]), fotosA: [], prods: []
+      })));
+      if (!controleRelatorio.current.atual(pedido)) return;
+      setHistoricoDoRelatorio([...historico, ...eventos, ...eventosAntecipados, ...eventosCancelados].sort((a, b) => b.ts - a.ts));
     } catch (erro) {
       if (!controleRelatorio.current.atual(pedido)) return;
       console.error(
@@ -740,6 +783,9 @@ export default function App() {
     let salvo;
     try {
       salvo = await lerProgresso(user.id);
+      if (salvo?.atendimentoId && await atendimentoJaCancelado(supabase, salvo.atendimentoId, user.id)) {
+        await removerProgresso(user.id); salvo = null;
+      }
       if (!controleEdicao.current.atual(pedido)) return;
     } catch (erro) {
       console.error('Erro ao recuperar limpeza:', erro);
@@ -778,6 +824,8 @@ export default function App() {
 
     const clienteAtualizado = {
       ...cliente,
+      atendimentoId: retomando && salvo.atendimentoId ? salvo.atendimentoId : crypto.randomUUID(),
+      dataAgenda: retomando ? salvo.dataAgenda || dataBrasil(inicioOriginalMs) : dataHojeISO,
       visitaEmAndamentoData: dataHojeStr,
       tempoTrabalhadoAcumulado: acumulado,
       inicioOriginalMs,
@@ -847,6 +895,36 @@ export default function App() {
   };
 
   // PAUSAR VISITA
+  const cancelarAtendimentoIniciado = async ({ motivo, novaData, preservar, ocorrencia }) => {
+    if (!clienteAtual || visitaEmEdicao || salvandoVisita) throw new Error('O atendimento não está disponível para cancelamento.');
+    if (!clienteAtual.atendimentoId) throw new Error('Reabra o atendimento para identificá-lo antes de cancelar.');
+    const sessao = sessaoFoto.current;
+    setSalvandoVisita(true); pausandoVisita.current = true;
+    try {
+      const rascunho = preservar ? prepararRascunhoCancelamento({ ph, cloro, alcalinidade, temperatura, aspecto, textoAlerta, produtosFaltando, fotosVisita, fotosAlerta }, user.id, clienteAtual.id) : {};
+      if (preservar && ocorrencia) {
+        rascunho.observacao_tecnica = ocorrencia.texto || '';
+        if (ocorrencia.foto) {
+          if (ocorrencia.foto.status !== 'ready') throw new Error('Aguarde o preparo da foto da ocorrência antes de preservar o rascunho.');
+          const salvo = fotoCancelamentoEnviada.current;
+          if (salvo?.id !== clienteAtual.atendimentoId || salvo?.base64 !== ocorrencia.foto.base64) {
+            const arquivo = await (await fetch(ocorrencia.foto.base64)).blob();
+            fotoCancelamentoEnviada.current = { id: clienteAtual.atendimentoId, base64: ocorrencia.foto.base64, caminho: await enviarFotoVisita(arquivo) };
+          }
+          rascunho.fotos_alerta.push(fotoCancelamentoEnviada.current.caminho);
+        }
+      }
+      await registrarCancelamento(supabase, { id: clienteAtual.atendimentoId, userId: user.id, ownerId: targetUid, clienteId: clienteAtual.id, iniciadoEm: new Date(clienteAtual.inicioOriginalMs).toISOString(), dataOriginal: clienteAtual.dataAgenda, novaData, motivo, rascunho });
+      if (sessaoFoto.current !== sessao) throw new Error('A sessão mudou. O cancelamento registrado será recuperado ao reabrir esta conta.');
+      await removerProgresso(user.id);
+      sessaoFoto.current += 1;
+      setProgressoPausado(null); setHoraInicioVisita(null); setFotosVisita([]); setFotosAlerta([]);
+      setClientes(anteriores => anteriores.map(c => c.id === clienteAtual.id ? { ...c, visitaEmAndamentoData: null, horaInicioVisitaMs: null, tempoTrabalhadoAcumulado: 0 } : c));
+      setClienteAtual(null); setTela('lista'); recarregarAgenda();
+      showToast(novaData ? 'Atendimento cancelado e limpeza remarcada.' : 'Atendimento cancelado. A limpeza continua pendente.');
+    } finally { if (sessaoFoto.current === sessao) pausandoVisita.current = false; setSalvandoVisita(false); }
+  };
+
   const pausarVisita = async () => {
     if (!clienteAtual || pausandoVisita.current || salvandoVisita) return;
     pausandoVisita.current = true;
@@ -872,6 +950,8 @@ export default function App() {
     const progresso = {
       userId: user.id,
       clienteId: clienteAtual.id,
+      dataAgenda: clienteAtual.dataAgenda,
+      atendimentoId: clienteAtual.atendimentoId,
       ph,
       cloro,
       alcalinidade,
@@ -1152,6 +1232,7 @@ export default function App() {
           criado_por: usuario.id,
           cliente_id: clienteAtual.id,
           data_visita: fim.toISOString(),
+          ...(antecipacoesDisponiveis ? { data_agendada: clienteAtual.dataAgenda || dataBrasil(inicio) } : {}),
           horario,
           cloro: cloro || '',
           ph: ph || '',
@@ -1176,7 +1257,7 @@ export default function App() {
             ? {
                 ...c,
                 ultimaVisita: fim.toISOString(),
-                datasConcluidas: [...new Set([...(c.datasConcluidas || []), dataBrasil(fim)])],
+                datasConcluidas: [...new Set([...(c.datasConcluidas || []), antecipacoesDisponiveis ? clienteAtual.dataAgenda || dataBrasil(inicio) : dataBrasil(fim)])],
                 visitaEmAndamentoData: null
               }
             : c
@@ -1611,6 +1692,7 @@ export default function App() {
             )
           }
           pausarVisita={pausarVisita}
+          cancelarAtendimento={cancelarAtendimentoIniciado}
           enviarOcorrenciaImediata={
             enviarOcorrenciaImediata
           }
@@ -1906,7 +1988,7 @@ export default function App() {
 
     case 'agenda':
       return (
-        <Agenda setTela={setTela} />
+        <Agenda setTela={setTela} iniciarVisita={iniciarVisita} adiarVisita={abrirAdiamento} />
       );
 
     case 'configuracoes':

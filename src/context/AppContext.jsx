@@ -71,6 +71,9 @@ export const AppProvider = ({ children }) => {
 
   const [clientes, setClientes] = useState([]);
   const [adiamentos, setAdiamentos] = useState([]);
+  const [antecipacoes, setAntecipacoes] = useState([]);
+  const [erroAntecipacoes, setErroAntecipacoes] = useState('');
+  const [antecipacoesDisponiveis, setAntecipacoesDisponiveis] = useState(false);
   const [erroAgenda, setErroAgenda] = useState('');
   const [versaoAgenda, setVersaoAgenda] = useState(0);
   const recarregarAgenda = useCallback(() => setVersaoAgenda(v => v + 1), []);
@@ -143,6 +146,9 @@ export const AppProvider = ({ children }) => {
         setErroPerfil('');
         setClientes([]);
         setAdiamentos([]);
+        setAntecipacoes([]);
+        setErroAntecipacoes('');
+        setAntecipacoesDisponiveis(false);
         setErroAgenda('');
         setContextoEquipe(null);
         setGerenciaEquipe(false);
@@ -404,6 +410,7 @@ export const AppProvider = ({ children }) => {
     clientes,
     setClientes,
     adiamentos,
+    antecipacoes, setAntecipacoes, erroAntecipacoes, setErroAntecipacoes, antecipacoesDisponiveis, setAntecipacoesDisponiveis,
     setAdiamentos,
     erroAgenda,
     setErroAgenda,

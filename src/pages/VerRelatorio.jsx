@@ -8,6 +8,7 @@ import { AppContext } from '../context/AppContext.jsx';
 import { gerarRelatorioPDF } from '../services/pdfService';
 import { enviarOcorrenciaPDF } from '../services/ocorrenciaPdfService';
 import { mensagemProdutosSimples, mensagemProdutos } from '../services/whatsappService';
+import { imagemProfissionalPDF, imagensRelatorioPDF } from '../services/imagemPerfilService';
 import { abrirWhatsApp } from '../utils/whatsapp';
 import { formatarDataAgenda, FUSO_AGENDA } from '../services/agendaService';
 import {
@@ -195,7 +196,8 @@ export default function VerRelatorio({
   carregando = false,
   enviarAvisoWhatsApp,
   editarVisitaFinalizada,
-  solicitarCorrecaoVisita
+  solicitarCorrecaoVisita,
+  clienteSupabase = supabase
 }) {
   const {
     perfil,
@@ -204,11 +206,11 @@ export default function VerRelatorio({
   const [fotoProfissional, setFotoProfissional] = useState('');
   useEffect(() => {
     let ativo = true;
-    resolverImagemPerfil(supabase, { fotoPerfilCaminho: perfil.fotoPerfilCaminho })
+    resolverImagemPerfil(clienteSupabase, { fotoPerfilCaminho: perfil.fotoPerfilCaminho })
       .then(url => { if (ativo) setFotoProfissional(url); })
       .catch(() => { if (ativo) setFotoProfissional(''); });
     return () => { ativo = false; };
-  }, [perfil.fotoPerfilCaminho]);
+  }, [perfil.fotoPerfilCaminho, clienteSupabase]);
 
   const [loadingPDF, setLoadingPDF] =
     useState(false);
@@ -299,7 +301,7 @@ export default function VerRelatorio({
 
   const visitasFiltradas = useMemo(() => {
     return historicoFiltrado
-      .filter(v => v.tipo !== 'problema' && v.tipo !== 'adiamento')
+      .filter(v => !v.tipo || v.tipo === 'visita')
       .sort((a, b) =>
         Number(b.ts || 0) -
         Number(a.ts || 0)
@@ -322,12 +324,12 @@ export default function VerRelatorio({
 
   const ocorrenciasFiltradas = useMemo(() => {
     return historicoFiltrado.filter(
-      visita =>
+      visita => visita.tipo !== 'cancelamento' && (
         visita.tipo === 'problema' ||
         Boolean(
           String(visita.txtA || '').trim()
         ) ||
-        listarFotos(visita, true).length > 0
+        listarFotos(visita, true).length > 0)
     );
   }, [historicoFiltrado]);
 
@@ -347,6 +349,7 @@ export default function VerRelatorio({
     try {
       const produtos = (visita.prods || []).map(p => ({ ...p, preco: p.preco ?? perfil.precosProdutos?.[p.nome] ?? perfil.precosAcessorios?.[p.nome] ?? null }));
       const mensagem = comValores ? mensagemProdutos({ cliente, perfil, produtos, comValores: true }) : mensagemProdutosSimples({ cliente, perfil, produtos });
+      if (!window.confirm('Abrir o WhatsApp com a lista de produtos a repor? A mensagem só será enviada quando você confirmar o envio no WhatsApp.')) return;
       if (!abrirWhatsApp(cliente.telefone, mensagem)) alert('O telefone deste cliente precisa ter DDD para abrir o WhatsApp.');
     } catch (e) { alert(e.message); }
   };
@@ -354,7 +357,7 @@ export default function VerRelatorio({
   const handleSharePDF = async () => {
     if (loadingPDF || carregando) return;
 
-    if (!historicoFiltrado.length) {
+    if (!historicoFiltrado.some(v => v.tipo !== 'cancelamento')) {
       alert(
         'Não existem registros para o período selecionado.'
       );
@@ -364,12 +367,16 @@ export default function VerRelatorio({
     setLoadingPDF(true);
 
     try {
-      const fotoPerfilUrl = await resolverImagemPerfil(supabase, perfil, true);
+      const identidade = await imagemProfissionalPDF(clienteSupabase, perfil);
+      const comImagens = await imagensRelatorioPDF(clienteSupabase, historicoFiltrado.filter(v => v.tipo !== 'cancelamento'));
       await gerarRelatorioPDF(
         cliente,
-        historicoFiltrado,
-        { ...perfil, fotoPerfilUrl }
+        comImagens,
+        { ...perfil, fotoPerfilUrl: identidade.imagem }
       );
+      const fotosAusentes = comImagens.reduce((total, v) => total + (v.fotosIndisponiveis || 0), 0);
+      const avisos = [identidade.aviso, fotosAusentes ? `${fotosAusentes} fotografia(s) não puderam ser carregadas neste PDF. Os registros originais foram preservados. Confira a conexão e gere novamente para incluir todas as fotos.` : ''].filter(Boolean);
+      if (avisos.length) alert(avisos.join('\n'));
     } catch (erro) {
       console.error(
         'Erro ao gerar relatório PDF:',
@@ -385,66 +392,14 @@ export default function VerRelatorio({
     }
   };
 
-  const handleWhatsApp = () => {
-    if (!historicoFiltrado.length) {
-      alert(
-        'Não existem registros para compartilhar.'
-      );
-      return;
-    }
-
-    const titulo =
-      tipoRelatorio === 'dia'
-        ? 'RELATÓRIO DO DIA'
-        : 'RELATÓRIO MENSAL';
-
-    const linhas = [
-      `*${titulo} - MÃO NA ÁGUA*`,
-      '',
-      `Cliente: ${cliente.nome}`,
-      `Profissional / empresa: ${perfil.empresa || 'Mão Na Água'}`,
-      `Período: ${periodoDescricao}`,
-      `Visitas registradas: ${visitasFiltradas.length}`,
-      `Fotos registradas: ${totalFotos}`,
-      ''
-    ];
-
-    visitasFiltradas.forEach((visita, index) => {
-      const { hora, duracao } =
-        extrairDadosRegistro(visita);
-
-      linhas.push(
-        `*Visita ${index + 1} - ${visita.d}*`,
-        `Horário: ${hora || 'Não informado'}`,
-        `Duração: ${duracao || 'Não informada'}`,
-        `Aspecto: ${visita.asp || 'Não informado'}`,
-        `pH: ${visita.p || '--'}`,
-        `Cloro: ${visita.c || '--'}`,
-        `Alcalinidade: ${visita.al || '--'}`,
-        `Temperatura: ${visita.t || '--'}`,
-        ''
-      );
-    });
-
-    linhas.push(
-      'Relatório gerado pelo Mão na Água.'
-    );
-
-    const mensagem = linhas.join('\n');
-
-    const telefone = obterTelefoneWhatsApp(
-      cliente
-    );
-
-    const url = telefone
-      ? `https://api.whatsapp.com/send?phone=${telefone}&text=${encodeURIComponent(mensagem)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(mensagem)}`;
-
-    window.open(
-      url,
-      '_blank',
-      'noopener,noreferrer'
-    );
+  const handleWhatsApp = (comValores = false) => {
+    if (funcionario) return;
+    try {
+      const produtos = visitasFiltradas.flatMap(v => v.prods || []).map(p => ({ ...p, preco: p.preco ?? perfil.precosProdutos?.[p.nome] ?? perfil.precosAcessorios?.[p.nome] ?? null }));
+      const mensagem = comValores ? mensagemProdutos({ cliente, perfil, produtos, comValores: true }) : mensagemProdutosSimples({ cliente, perfil, produtos });
+      if (!window.confirm('Abrir o WhatsApp com a lista de produtos a repor? A mensagem só será enviada quando você confirmar o envio no WhatsApp.')) return;
+      if (!abrirWhatsApp(cliente.telefone, mensagem)) alert('O telefone deste cliente precisa ter DDD para abrir o WhatsApp.');
+    } catch (e) { alert(e.message); }
   };
 
   const handleEditarVisita = visita => {
@@ -674,16 +629,17 @@ export default function VerRelatorio({
             <div className="grid grid-cols-2 gap-3">
 
               <button
-                onClick={handleWhatsApp}
+                onClick={() => handleWhatsApp(false)}
                 disabled={
                   carregando ||
-                  !historicoFiltrado.length
+                  !historicoFiltrado.length || funcionario
                 }
                 className="bg-green-500 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs disabled:opacity-50"
               >
                 <MessageSquare size={17} />
-                RESUMO WHATSAPP
+                PRODUTOS SEM PREÇOS
               </button>
+              <button onClick={() => handleWhatsApp(true)} disabled={carregando || !visitasFiltradas.length || funcionario} className="bg-green-600 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 text-xs disabled:opacity-50">PRODUTOS COM PREÇOS</button>
 
               <button
                 onClick={handleSharePDF}
@@ -692,7 +648,7 @@ export default function VerRelatorio({
                   carregando ||
                   !historicoFiltrado.length
                 }
-                className="bg-zinc-800 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs disabled:opacity-50"
+                className="col-span-2 bg-zinc-800 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs disabled:opacity-50"
               >
                 {loadingPDF ? (
                   <Loader2
@@ -709,8 +665,7 @@ export default function VerRelatorio({
             </div>
 
             <p className="text-[11px] text-zinc-500 leading-relaxed">
-              O WhatsApp abre uma mensagem com os
-              parâmetros do período selecionado.
+              O WhatsApp abre somente os produtos a repor do período selecionado.
               Para compartilhar o documento com fotos,
               gere o PDF e anexe o arquivo na conversa.
             </p>
@@ -803,6 +758,7 @@ export default function VerRelatorio({
                           >
                             <td className="py-4 px-1">
                               {visita.d}
+                              {visita.antecipacaoDescricao && <p className="text-[10px] font-normal text-teal-600">{visita.antecipacaoDescricao}</p>}
                               {visita.funcionarioNome && <p className="text-[10px] font-normal text-teal-600">{visita.funcionarioNome}</p>}
                             </td>
 
@@ -1009,7 +965,7 @@ export default function VerRelatorio({
                             'Ocorrência registrada sem descrição.'}
                         </p>
 
-                        {!funcionario && <button type="button" className="w-full mb-3 py-3 rounded-xl border border-rose-300 text-rose-600 text-xs font-bold" onClick={async () => { try { await enviarOcorrenciaPDF(cliente, ocorrencia, perfil); } catch (e) { alert(e.message); } }}>Compartilhar PDF da ocorrência técnica</button>}
+                        {!funcionario && <button type="button" className="w-full mb-3 py-3 rounded-xl border border-rose-300 text-rose-600 text-xs font-bold" onClick={async () => { try { await enviarOcorrenciaPDF(cliente, ocorrencia, perfil, clienteSupabase); } catch (e) { alert(e.message); } }}>Compartilhar PDF da ocorrência técnica</button>}
                         {fotos.length > 0 && (
                           <div className="grid grid-cols-3 gap-2">
 
@@ -1042,6 +998,19 @@ export default function VerRelatorio({
             </section>
           )}
 
+        {historicoFiltrado.filter(v => v.tipo === 'cancelamento').map(c => <article key={c.id} className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm space-y-2">
+          <h3 className="font-bold text-zinc-600 dark:text-zinc-300">Atendimento cancelado · limpeza não realizada</h3>
+          <p>{c.funcionarioNome} · {new Date(c.canceladoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
+          <p>Iniciado em {new Date(c.iniciadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
+          <p>Motivo: {c.motivo}</p>
+          <p>{c.novaData ? `Limpeza remarcada para ${formatarDataAgenda(c.novaData)}` : 'A ocorrência continua pendente na agenda.'}</p>
+          {Object.keys(c.rascunho || {}).length > 0 && <details><summary className="min-h-11 cursor-pointer">Rascunho preservado (não é relatório de limpeza)</summary>
+            {['ph','cloro','alcalinidade','temperatura','aspecto','observacoes','observacao_tecnica'].map(k => c.rascunho[k] ? <p key={k}>{k}: {c.rascunho[k]}</p> : null)}
+            {(c.rascunho.produtos || []).map((p,i) => <p key={i}>{p.nome} · {p.qtd || 1} unidade(s)</p>)}
+            <div className="grid grid-cols-2 gap-2">{(c.fotos || []).map((f,i) => <img key={i} src={f} alt="Foto preservada do atendimento cancelado" className="rounded-xl w-full" />)}</div>
+          </details>}
+        </article>)}
+        {historicoFiltrado.filter(v => v.tipo === 'antecipacao').map(a => <article key={a.id} className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm space-y-2"><h3 className="font-bold text-teal-600">Histórico de antecipação</h3><p className="whitespace-pre-wrap break-words">{a.descricao}</p><p>{a.status}</p>{a.dataEfetiva && <p>Data efetiva do atendimento: {a.dataEfetiva}</p>}<p className="text-xs text-zinc-500">Registrada em {new Date(a.criadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p></article>)}
         {adiamentosFiltrados.length > 0 && <section className="space-y-3">
           <h3 className="text-sm font-black uppercase text-zinc-800 dark:text-white">Histórico de adiamentos</h3>
           {adiamentosFiltrados.map(a => <article key={a.id} className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900 rounded-2xl p-5 space-y-2 text-sm">

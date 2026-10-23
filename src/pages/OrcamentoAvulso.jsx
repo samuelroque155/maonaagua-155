@@ -3,9 +3,11 @@ import { AppContext } from '../context/AppContext.jsx';
 import { lerArquivoLocal, salvarArquivoLocal } from '../services/arquivoLocalService';
 import { validarOrcamento, validarAnexoPDF, criarOrcamentoPDF } from '../services/orcamentoService';
 import { compartilharDocumento } from '../services/documentoPdfService';
+import { imagemProfissionalPDF } from '../services/imagemPerfilService';
+import { supabase } from '../supabase';
 
 const vazio = { nome: '', telefone: '', titulo: '', descricao: '', valor: '', pdf: null, nomePdf: '' };
-export default function OrcamentoAvulso({ voltar }) {
+export default function OrcamentoAvulso({ voltar, clienteSupabase = supabase }) {
   const { user, perfil, gradBtn } = useContext(AppContext);
   const [dados, setDados] = useState(vazio);
   const [lista, setLista] = useState([]);
@@ -31,7 +33,9 @@ export default function OrcamentoAvulso({ voltar }) {
     if (!prontoPDF) validarOrcamento(dados);
     if (!perfil.empresa?.trim()) throw new Error('Salve o nome da empresa nas configurações.');
     if (prontoPDF && !dados.pdf) throw new Error('Adicione o PDF pronto antes de compartilhar.');
-    const blob = prontoPDF ? dados.pdf : await criarOrcamentoPDF(dados, perfil);
+    const identidade = prontoPDF ? {} : await imagemProfissionalPDF(clienteSupabase, perfil);
+    const blob = prontoPDF ? dados.pdf : await criarOrcamentoPDF(dados, { ...perfil, fotoPerfilUrl: identidade.imagem });
+    if (identidade.aviso) setErro(identidade.aviso);
     await compartilharDocumento(blob, prontoPDF ? (dados.nomePdf || 'Orcamento.pdf') : 'Orcamento.pdf', `Orçamento - ${perfil.empresa}`, `${dados.nome?.trim() ? `Olá, ${dados.nome.trim()}!` : 'Olá!'} Segue o orçamento de ${perfil.empresa}.`);
   });
   const classe = 'w-full p-3 mt-1 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100';

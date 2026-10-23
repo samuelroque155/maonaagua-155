@@ -45,10 +45,10 @@ export async function removerFuncionario(client, ownerId, id) {
 }
 
 export async function listarAlertas(client, ownerId) {
-  const { data, error } = await client.from('alertas_produtos').select('*, clientes(nome, telefone)')
+  const { data, error } = await client.from('alertas_produtos').select('*, clientes(nome, telefone), visitas!inner(criado_por,user_id)')
     .eq('user_id', ownerId).order('created_at', { ascending: false });
   if (error) throw error;
-  return (data || []).map(a => ({ ...a, clienteNome: a.clientes?.nome || 'Cliente',
+  return (data || []).filter(a => a.visitas?.criado_por && a.visitas.criado_por !== a.visitas.user_id).map(a => ({ ...a, clienteNome: a.clientes?.nome || 'Cliente',
     clienteTel: a.clientes?.telefone || '', funcionarioAtivo: a.funcionario_nome || 'Responsável',
     data: new Date(a.created_at).toLocaleDateString('pt-BR'), produtos: a.produtos || [] }));
 }

@@ -18,7 +18,9 @@ export async function criarOrcamentoPDF(dados, perfil) {
   validarOrcamento(dados);
   if (!String(perfil.empresa || '').trim()) throw new Error('Salve o nome profissional ou da empresa nas configurações.');
   const pdf = new jsPDF();
-  let y = desenharIdentidadeProfissional(pdf, perfil, await imagemDocumento(perfil.fotoPerfilUrl), 15, 22, 180);
+  let imagem = null;
+  try { imagem = await imagemDocumento(perfil.fotoPerfilUrl); } catch { /* Identidade padrão mantém o orçamento disponível. */ }
+  let y = desenharIdentidadeProfissional(pdf, perfil, imagem, 15, 22, 180);
   const escrever = (texto, tamanho = 11, estilo = 'normal') => {
     pdf.setFont('helvetica', estilo);
     pdf.setFontSize(tamanho);

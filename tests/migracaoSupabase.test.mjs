@@ -118,5 +118,13 @@ test('migração SQL: empresa, funcionário, rotas, fotos, alertas e revogação
       assert.equal((await rows('select * from contexto_equipe()')).length, 0);
       assert.equal((await rows('select * from clientes')).length, 0);
     });
+    // Sem vínculo, pode escolher perfil próprio sem obter clientes da antiga empresa.
+    for (const tipo of ['autonomo', 'empresa']) {
+      await asUser(worker, async () => {
+        assert.equal((await rows(`update perfis set tipo_conta='${tipo}' where id='${worker}' returning tipo_conta`))[0].tipo_conta, tipo);
+        assert.equal((await rows('select * from clientes')).length, 0);
+        assert.equal((await rows('select * from visitas')).length, 0);
+      });
+    }
   } finally { await db.close(); }
 });

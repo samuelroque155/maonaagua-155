@@ -6,29 +6,16 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { desenharIdentidadeProfissional, identificacaoCliente } from './identidadeRelatorio.js';
 import { desenharAdiamentosPDF } from './adiamentoRelatorio.js';
+import { imagemDocumento } from './documentoPdfService.js';
+import { antecipacoesUnicas } from './antecipacaoRelatorio.js';
 
 applyPlugin(jsPDF);
 
 // Converte imagens remotas em Base64.
 const urlToBase64 = async (url) => {
   if (!url) return null;
-  if (url.startsWith('data:')) return url;
-
   try {
-    const response = await fetch(url, { cache: 'no-store' });
-
-    if (!response.ok) {
-      throw new Error(`Erro ao carregar imagem: ${response.status}`);
-    }
-
-    const blob = await response.blob();
-
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    return await imagemDocumento(url);
   } catch (error) {
     console.error('Erro ao converter imagem:', error);
     return null;
@@ -146,6 +133,8 @@ export const gerarRelatorioPDF = async (
   historico,
   perfil
 ) => {
+  historico = (historico || []).filter(v => v.tipo !== 'cancelamento');
+  if (!historico.length) throw new Error('Não há limpeza ou ocorrência técnica para gerar relatório neste período.');
   try {
     const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -168,7 +157,6 @@ export const gerarRelatorioPDF = async (
 
     // A foto é incorporada no PDF; o arquivo compartilhado não depende do link temporário.
     const imagemPerfil = perfil?.fotoPerfilUrl ? await urlToBase64(perfil.fotoPerfilUrl) : null;
-    if (perfil?.fotoPerfilUrl && !imagemPerfil) throw new Error('Não foi possível carregar a foto ou logo para o relatório. Tente novamente.');
     y = desenharIdentidadeProfissional(pdf, perfil, imagemPerfil, margem, y, larguraConteudo);
 
     // CARD DO CLIENTE
@@ -216,6 +204,11 @@ export const gerarRelatorioPDF = async (
     );
 
     y += alturaCliente + 10;
+    const realizadas = (historico || []).filter(v => !v.tipo || v.tipo === 'visita');
+    const datas = [...new Set(realizadas.map(v => v.d).filter(Boolean))];
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor(80);
+    const resumo = pdf.splitTextToSize(`${realizadas.length} visita(s) realizada(s)${datas.length ? ` | ${datas.join(', ')}` : ''}`, larguraConteudo);
+    garantirEspaco(resumo.length * 5 + 8); pdf.text(resumo, margem, y); y += resumo.length * 5 + 8;
     const responsaveis = [...new Set((historico || []).map(v => v.funcionarioNome).filter(Boolean))];
     if (responsaveis.length) {
       pdf.setFont('helvetica', 'normal');
@@ -251,6 +244,11 @@ export const gerarRelatorioPDF = async (
         };
       })
     );
+    const indisponiveis = historicoComImagens.reduce((n,v) => n + (v.fotosIndisponiveis || 0), 0);
+    if (indisponiveis) {
+      const aviso = pdf.splitTextToSize(`${indisponiveis} fotografia(s) indisponivel(is) nesta emissao. Reabra o relatorio com conexao para carregar os arquivos.`, larguraConteudo);
+      garantirEspaco(aviso.length * 5 + 8); pdf.setFontSize(9); pdf.setTextColor(150, 80, 20); pdf.text(aviso, margem, y); y += aviso.length * 5 + 8;
+    }
 
     // HISTÓRICO DE PARÂMETROS
     pdf.setFont('helvetica', 'bold');
@@ -266,7 +264,7 @@ export const gerarRelatorioPDF = async (
     y += 5;
 
     const visitasNormais = historicoComImagens.filter(
-      v => v.tipo !== 'problema' && v.tipo !== 'adiamento'
+      v => v.tipo !== 'problema' && v.tipo !== 'adiamento' && v.tipo !== 'antecipacao'
     );
 
     const tableData = visitasNormais.map(v => {
@@ -289,20 +287,13 @@ export const gerarRelatorioPDF = async (
       ];
     });
 
+    const titulos = ['DATA','STATUS','HORARIO','CL','PH','ALC','TEMP'];
+    const colunas = titulos.map((_,i) => i).filter(i => i === 0 || tableData.some(l => l[i] && l[i] !== '-' && l[i] !== '--'));
     pdf.autoTable({
       startY: y,
 
-      head: [[
-        'DATA',
-        'STATUS',
-        'HORARIO',
-        'CL',
-        'PH',
-        'ALC',
-        'TEMP'
-      ]],
-
-      body: tableData,
+      head: [colunas.map(i => titulos[i])],
+      body: tableData.map(l => colunas.map(i => l[i])),
       theme: 'grid',
 
       headStyles: {
@@ -845,6 +836,18 @@ export const gerarRelatorioPDF = async (
     // ==========================================
 
     y = desenharAdiamentosPDF(pdf, historicoComImagens.filter(v => v.tipo === 'adiamento'), { y, margem, larguraConteudo, topo: topoPagina, limite: limiteConteudo });
+    // Metadados separados preservam tabelas, parâmetros e fotografias das limpezas.
+    const antecipados = antecipacoesUnicas(historicoComImagens);
+    if (antecipados.length) {
+      for (const evento of antecipados) {
+        garantirEspaco(24); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(13, 148, 136);
+        pdf.text(evento.cancelada ? 'Antecipacao cancelada - data original restaurada' : 'Visita antecipada', margem, y); y += 6;
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(55, 65, 81);
+        const textos = [evento.prevista && `Prevista: ${evento.prevista}`, evento.realizada ? `Realizada: ${evento.realizada}` : evento.novaData && !evento.cancelada && `Remarcada: ${evento.novaData}`, evento.motivo && `Motivo: ${evento.motivo}`].filter(Boolean);
+        for (const texto of textos) for (const linha of pdf.splitTextToSize(texto, larguraConteudo)) { garantirEspaco(6); pdf.text(linha, margem, y); y += 5; }
+        y += 4;
+      }
+    }
 
     if (y > 260) {
       pdf.addPage();
@@ -967,10 +970,7 @@ const fileName =
         error
       );
 
-      alert(
-        'Erro ao processar PDF: ' +
-        error.message
-      );
+      throw new Error('Erro ao processar PDF: ' + error.message, { cause: error });
     }
   }
 };

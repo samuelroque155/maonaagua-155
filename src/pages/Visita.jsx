@@ -24,6 +24,8 @@ import { compressImage, fileToBase64 } from '../utils/imageUtils';
 import { mensagemProdutos, urlWhatsApp, resumirProdutos } from '../services/whatsappService';
 import { useRascunhoOcorrencia } from '../services/useRascunhoOcorrencia';
 import { enviarOcorrenciaPDF } from '../services/ocorrenciaPdfService';
+import ModalCancelarVisita from '../components/ModalCancelarVisita.jsx';
+import { supabase } from '../supabase';
 
 export default function Visita({
   setTela,
@@ -54,6 +56,7 @@ export default function Visita({
   salvando,
   updatePrecoProduto,
   pausarVisita,
+  cancelarAtendimento,
   enviarOcorrenciaImediata,
 
   // Propriedades do modo de edição.
@@ -66,6 +69,7 @@ export default function Visita({
   const gradIconBg = 'bg-teal-500/10 text-teal-500';
 
   const [segundosExibicao, setSegundosExibicao] = useState(0);
+  const [cancelando, setCancelando] = useState(false);
 
   const rascunho = useRascunhoOcorrencia(user?.id, `${targetUid || user?.id}:${clienteAtual?.id}:${modoEdicao ? visitaEmEdicao?.id : 'nova'}`);
   const fotoOcorrencia = rascunho.foto;
@@ -168,6 +172,7 @@ export default function Visita({
         produtos: produtosFaltando,
         comValores
       });
+      if (!window.confirm('Abrir o WhatsApp com a lista de produtos a repor? A mensagem só será enviada quando você confirmar o envio no WhatsApp.')) return;
       window.open(urlWhatsApp(clienteAtual.telefone, mensagem), '_blank', 'noopener,noreferrer');
     } catch (erro) {
       alert(erro.message);
@@ -247,7 +252,7 @@ export default function Visita({
       if (sucesso) {
         rascunho.atualizar({ registro: sucesso });
         if (perfil.tipoConta !== 'funcionario') {
-          try { await enviarOcorrenciaPDF(clienteAtual, sucesso, { ...perfil, empresa: nomeEmpresaSalvo || perfil.empresa }); }
+          try { await enviarOcorrenciaPDF(clienteAtual, sucesso, { ...perfil, empresa: nomeEmpresaSalvo || perfil.empresa }, supabase); }
           catch (e) { alert('Ocorrência registrada. Não foi possível preparar o PDF agora: ' + e.message); }
         }
       }
@@ -719,7 +724,7 @@ export default function Visita({
                 )}
               </button>
               {rascunho.erro && <p role="alert" className="mt-2 text-xs text-rose-600">{rascunho.erro}</p>}
-              {rascunho.registro && perfil.tipoConta !== 'funcionario' && <button type="button" className="w-full mt-3 py-3 rounded-xl border border-rose-300 text-rose-600 font-bold text-sm" onClick={async () => { try { await enviarOcorrenciaPDF(clienteAtual, rascunho.registro, { ...perfil, empresa: nomeEmpresaSalvo || perfil.empresa }); } catch (e) { alert(e.message); } }}>Compartilhar PDF da ocorrência técnica</button>}
+              {rascunho.registro && perfil.tipoConta !== 'funcionario' && <button type="button" className="w-full mt-3 py-3 rounded-xl border border-rose-300 text-rose-600 font-bold text-sm" onClick={async () => { try { await enviarOcorrenciaPDF(clienteAtual, rascunho.registro, { ...perfil, empresa: nomeEmpresaSalvo || perfil.empresa }, supabase); } catch (e) { alert(e.message); } }}>Compartilhar PDF da ocorrência técnica</button>}
             </div>
           </section>
         )}
@@ -897,6 +902,7 @@ export default function Visita({
         )}
 
         {/* SALVAR */}
+        {!modoEdicao && cancelarAtendimento && <button type="button" disabled={salvando} onClick={() => setCancelando(true)} className="min-h-11 text-xs text-zinc-500 dark:text-zinc-400 underline disabled:opacity-50">Cancelar visita</button>}
         <button
           type="button"
           onClick={handleSalvar}
@@ -935,6 +941,10 @@ export default function Visita({
         )}
 
       </div>
+      {cancelando && !modoEdicao && <ModalCancelarVisita cliente={clienteAtual} temRascunho={Boolean(fotosVisita.length || fotosAlerta.length || ph || cloro || alcalinidade || temperatura || textoAlerta || produtosFaltando.length || fotoOcorrencia || textoOcorrencia)} gradBtn={gradBtn} fechar={() => setCancelando(false)} confirmar={async dados => {
+        await cancelarAtendimento({ ...dados, ocorrencia: { foto: fotoOcorrencia, texto: textoOcorrencia } });
+        rascunho.atualizar({ foto: null, texto: '', registro: null });
+      }} />}
     </div>
   );
 }

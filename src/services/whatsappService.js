@@ -3,7 +3,7 @@ import { nomeProfissional } from './perfilService.js';
 const moeda = valor => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export function precoInformado(preco) {
-  // O app antigo usava zero para representar um campo ainda não preenchido.
+  // O app antigo usava zero para representar um campo ainda n\u00e3o preenchido.
   if (preco === '' || preco === null || preco === undefined) return null;
   const valor = typeof preco === 'string' ? Number(preco.replace(',', '.')) : Number(preco);
   return Number.isFinite(valor) && valor > 0 ? valor : null;
@@ -21,30 +21,34 @@ export function resumirProdutos(produtos) {
 }
 
 export function mensagemProdutos({ cliente, perfil, produtos, comValores = false }) {
-  if (!produtos.length) throw new Error('Selecione pelo menos um produto ou acessório.');
+  produtos = produtosParaReposicao(produtos);
+  if (!produtos.length) throw new Error('Selecione pelo menos um produto ou acess\u00f3rio.');
   const empresa = nomeProfissional(perfil);
-  if (!empresa) throw new Error('Cadastre e salve seu nome profissional em Configurações antes de enviar a lista.');
+  if (!empresa) throw new Error('Cadastre e salve seu nome profissional em Configura\u00e7\u00f5es antes de enviar a lista.');
   const linhas = [
-    `*${empresa}*`,
-    `Olá, ${cliente.nome}!`,
+    `Ol\u00e1, ${cliente.nome}! Tudo bem?`,
     '',
-    '🧾 Produtos e acessórios para reposição da sua piscina:',
+    comValores
+      ? 'Segue a lista dos produtos necess\u00e1rios para a manuten\u00e7\u00e3o da sua piscina:'
+      : 'Segue a lista dos produtos que precisam ser repostos para a manuten\u00e7\u00e3o da sua piscina:',
+    '',
+    ' *PRODUTOS A REPOR*',
     ''
   ];
   for (const produto of produtos) {
-    if (!comValores) { linhas.push(`• ${produto.nome}`); continue; }
     const qtd = Math.max(1, Number(produto.qtd) || 1);
+    if (!comValores) { linhas.push(`\u2022 ${produto.nome} \u2014 ${qtd} ${qtd === 1 ? 'unidade' : 'unidades'}`); continue; }
     const preco = precoInformado(produto.preco);
     linhas.push(preco === null
-      ? `• ${qtd}x ${produto.nome} — preço não informado`
-      : `• ${qtd}x ${produto.nome} — ${moeda(preco)} por unidade; subtotal ${moeda(Math.round(preco * 100) * qtd / 100)}`);
+      ? `\u2022 ${produto.nome} \u2014 ${qtd} ${qtd === 1 ? 'unidade' : 'unidades'} \u2014 pre\u00e7o n\u00e3o informado`
+      : `\u2022 ${produto.nome} \u2014 ${qtd} ${qtd === 1 ? 'unidade' : 'unidades'} \u2014 ${moeda(preco)}`);
   }
   if (comValores) {
     const { total, semPreco } = resumirProdutos(produtos);
-    linhas.push('', semPreco ? `*Subtotal dos itens com preço: ${moeda(total)}*` : `*Total da lista: ${moeda(total)}*`);
-    if (semPreco) linhas.push('Total da lista pendente: há itens com preço não informado.');
+    if (!semPreco) linhas.push('', ` *TOTAL: ${moeda(total)}*`);
+    else linhas.push('', `Subtotal dos itens com pre\u00e7o informado: ${moeda(total)}. Informe os demais valores para calcular o total.`);
   }
-  linhas.push('', 'Por favor, confirme a reposição para mantermos o cuidado com sua piscina.', '', `Atenciosamente,\n${empresa}`);
+  linhas.push('', 'Por favor, confirme a reposi\u00e7\u00e3o para mantermos o cuidado com sua piscina.', '', `Atenciosamente,\n${empresa}`);
   return linhas.join('\n');
 }
 
@@ -57,10 +61,15 @@ export function urlWhatsApp(telefone, mensagem) {
 }
 
 export function mensagemProdutosSimples({ cliente, perfil, produtos = [] }) {
-  const nomes = produtos.map(p => String(p.nome || '').trim()).filter(Boolean);
-  if (!nomes.length) throw new Error('Esta visita não tem produtos a repor registrados.');
+  const itens = produtosParaReposicao(produtos);
+  if (!itens.length) throw new Error('Esta visita n\u00e3o tem produtos a repor registrados.');
   const empresa = nomeProfissional(perfil);
   if (!empresa) throw new Error('Cadastre seu nome profissional ou da empresa antes de compartilhar.');
-  return [`Olá, ${cliente.nome}!`, '', '🛒 *Produtos a repor:*', '',
-    ...nomes.map(nome => `• ${nome}`), '', 'Obrigado pela atenção!', '', `*${empresa}*`].join('\n');
+  return [`Ol\u00e1, ${cliente.nome}! Tudo bem?`, '', 'Segue a lista dos produtos que precisam ser repostos para a manuten\u00e7\u00e3o da sua piscina:', '', ' *PRODUTOS A REPOR*', '',
+    ...itens.map(p => `\u2022 ${p.nome} \u2014 ${p.qtd} ${p.qtd === 1 ? 'unidade' : 'unidades'}`), '', 'Por favor, confirme a reposi\u00e7\u00e3o para mantermos o cuidado com sua piscina.', '', `Atenciosamente,\n${empresa}`].join('\n');
+}
+
+export function produtosParaReposicao(produtos = []) {
+  return produtos.filter(p => p.faltando !== false && p.selecionado !== false && String(p.nome || '').trim() && (p.qtd == null || Number(p.qtd) > 0))
+    .map(p => ({ ...p, nome: String(p.nome).trim(), qtd: p.qtd == null ? 1 : Number(p.qtd) }));
 }

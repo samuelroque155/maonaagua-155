@@ -1,4 +1,4 @@
-import { dataBrasil, formatarDataAgenda, horaBrasil } from './agendaService.js';
+import { formatarDataAgenda } from './agendaService.js';
 
 export function desenharAdiamentosPDF(pdf, registros, { y, margem = 15, larguraConteudo = 180, topo = 20, limite = 282 }) {
   if (!registros.length) return y;
@@ -13,10 +13,9 @@ export function desenharAdiamentosPDF(pdf, registros, { y, margem = 15, larguraC
   for (const a of registros) {
     espaco(30);
     escrever('Visita adiada', true);
-    escrever(`Data original: ${formatarDataAgenda(a.dataOriginal)} | Horario: ${a.horarioOriginal || 'Nao informado'}`);
-    escrever(`Registrado em: ${formatarDataAgenda(dataBrasil(a.criadoEm))} ${horaBrasil(a.criadoEm)}`);
-    if (a.comparecimentoEm) escrever(`Comparecimento: ${formatarDataAgenda(dataBrasil(a.comparecimentoEm))} ${horaBrasil(a.comparecimentoEm)}`);
-    escrever(`Motivo: ${a.motivo}`);
+    escrever(`Data original: ${formatarDataAgenda(a.dataOriginal)}`);
+    if (a.comparecimentoEm) escrever('Comparecimento sem realizacao da limpeza.');
+    if (a.motivo) escrever(`Motivo: ${a.motivo}`);
     escrever(`Nova data programada: ${formatarDataAgenda(a.novaData)}`);
     const imagens = a.imagensPrincipais || [];
     if (a.fotos?.length && !imagens.length) escrever('Fotografia de comprovacao indisponivel no momento.');

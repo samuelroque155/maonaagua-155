@@ -23,22 +23,31 @@ export function somarDiasAgenda(data, quantidade) {
   return nova.toISOString().slice(0, 10);
 }
 
-export function estadoAgendaCliente(cliente, data, adiamentos = []) {
+export function semanaDaData(data, hoje = dataBrasil()) {
+  if (!dataValida(data) || !dataValida(hoje)) throw new Error('Escolha uma data válida.');
+  const inicio = somarDiasAgenda(hoje, -diaSemanaAgenda(hoje));
+  return Math.floor((Date.parse(`${data}T12:00:00Z`) - Date.parse(`${inicio}T12:00:00Z`)) / 604800000);
+}
+
+export function estadoAgendaCliente(cliente, data, adiamentos = [], antecipacoes = []) {
   if (!dataValida(data)) return { programada: false, reagendada: false, adiada: false, concluida: false, pendente: false };
   const registros = adiamentos.filter(a => String(a.cliente_id) === String(cliente.id));
   const adiada = registros.some(a => a.data_original === data);
   const reagendada = registros.some(a => a.nova_data === data);
+  const ativas = antecipacoes.filter(a => !a.cancelado_em && String(a.cliente_id) === String(cliente.id));
+  const antecipacao = ativas.find(a => a.nova_data === data);
+  const antecipadaOriginal = ativas.find(a => a.data_original === data);
   const recorrente = (cliente.diasVisita || cliente.dias_visita || []).map(Number).includes(diaSemanaAgenda(data));
   const concluida = Array.isArray(cliente.datasConcluidas)
     ? cliente.datasConcluidas.includes(data)
     : Boolean(cliente.ultimaVisita) && dataBrasil(cliente.ultimaVisita) === data;
-  const programada = !adiada && (recorrente || reagendada);
-  return { programada, reagendada, adiada, concluida, pendente: programada && !concluida };
+  const programada = !adiada && !antecipadaOriginal && (recorrente || reagendada || Boolean(antecipacao));
+  return { programada, reagendada, adiada, antecipacao, antecipadaOriginal, concluida, pendente: programada && !concluida };
 }
 
-export function resumirAgendaDia(clientes, adiamentos = [], data = dataBrasil()) {
-  const programadas = clientes.filter(c => estadoAgendaCliente(c, data, adiamentos).programada);
-  const pendentes = programadas.filter(c => !estadoAgendaCliente(c, data, adiamentos).concluida);
+export function resumirAgendaDia(clientes, adiamentos = [], data = dataBrasil(), antecipacoes = []) {
+  const programadas = clientes.filter(c => estadoAgendaCliente(c, data, adiamentos, antecipacoes).programada);
+  const pendentes = programadas.filter(c => !estadoAgendaCliente(c, data, adiamentos, antecipacoes).concluida);
   return { programadas, pendentes, totalPendentes: pendentes.length };
 }
 

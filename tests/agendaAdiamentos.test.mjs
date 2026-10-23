@@ -71,11 +71,56 @@ test('lista simples após finalizar usa somente itens da visita, sem preços nem
   const produtos = [{ nome: 'Cloro', qtd: 2, preco: 80 }, { nome: 'Peneira', qtd: 1, preco: 35 }];
   const antes = structuredClone(produtos);
   const mensagem = mensagemProdutosSimples({ cliente: { nome: 'Ana' }, perfil: { empresa: 'Água Clara' }, produtos });
-  assert.equal(mensagem, 'Olá, Ana!\n\n🛒 *Produtos a repor:*\n\n• Cloro\n• Peneira\n\nObrigado pela atenção!\n\n*Água Clara*');
+  assert.match(mensagem, /Ol\u00e1, Ana! Tudo bem\?/);
+  assert.match(mensagem, /PRODUTOS A REPOR/);
+  assert.match(mensagem, /\u2022 Cloro \u2014 2 unidades/);
+  assert.match(mensagem, /Atenciosamente,\n\u00c1gua Clara/);
   assert.doesNotMatch(mensagem, /R\$|80|35|total|pH|Cloro:|foto|2x/i);
   assert.deepEqual(produtos, antes);
-  assert.match(mensagemProdutos({ cliente: { nome: 'Ana' }, perfil: { empresa: 'Autônomo João' }, produtos, comValores: true }), /Total da lista/);
+  assert.match(mensagemProdutos({ cliente: { nome: 'Ana' }, perfil: { empresa: 'Autônomo João' }, produtos, comValores: true }), /\*TOTAL:/);
   assert.throws(() => mensagemProdutosSimples({ cliente: { nome: 'Ana' }, perfil: { empresa: 'João' } }), /não tem produtos/);
+});
+
+test('tentativa de gravar adiamento com outra sessão não escreve no banco', async () => {
+  const client = { auth: { getUser: async () => ({ data: { user: { id: 'outro' } } }) }, from: () => assert.fail('Não deve gravar') };
+  await assert.rejects(salvarAdiamento(client, { userId: 'eu' }), /sessão mudou/);
+});
+
+test('foto de comparecimento usa armazenamento privado da própria conta sem sobrescrever arquivos', async () => {
+  let pedido;
+  const client = { auth: { getUser: async () => ({ data: { user: { id: 'eu' } } }) },
+    storage: { from: bucket => { assert.equal(bucket, 'fotos-visitas'); return { upload: async (caminho, arquivo, opcoes) => { pedido = { caminho, arquivo, opcoes }; return {}; } }; } } };
+  const foto = new Blob(['fixture'], { type: 'image/jpeg' });
+  const caminho = await enviarFotoAdiamento(client, 'eu', foto);
+  assert.match(caminho, /^eu\/adiamentos\/[0-9a-f-]+\.jpg$/);
+  assert.equal(pedido.arquivo, foto); assert.equal(pedido.opcoes.upsert, false);
+  await assert.rejects(enviarFotoAdiamento(client, 'outro', foto), /sessão mudou/);
+  await assert.rejects(enviarFotoAdiamento(client, 'eu', new Blob(['x'], { type: 'text/plain' })), /imagem compactada/);
+});
+
+test('repetir salvamento após resposta perdida confirma o mesmo adiamento sem criar outro', async () => {
+  const data = dataBrasil();
+  const nova = new Date(`${data}T12:00:00Z`); nova.setUTCDate(nova.getUTCDate() + 2);
+  const registro = { id: 'adiamento', user_id: 'empresa', cliente_id: 1, data_original: data, nova_data: nova.toISOString().slice(0, 10), motivo: 'Portão fechado' };
+  let inseridos = 0;
+  const consulta = { eq: () => consulta, single: async () => ({ data: registro }) };
+  const client = { auth: { getUser: async () => ({ data: { user: { id: 'eu' } } }) }, from: () => ({
+    insert: async payload => { inseridos++; assert.equal(payload.id, registro.id); return { error: { code: '23505' } }; }, select: () => consulta
+  }) };
+  const salvo = await salvarAdiamento(client, { id: registro.id, userId: 'eu', ownerId: 'empresa', clienteId: 1, dataOriginal: data, novaData: registro.nova_data, motivo: registro.motivo, compareceu: true });
+  assert.equal(salvo, registro); assert.equal(inseridos, 1);
+});test('lista simples ap?s finalizar usa somente itens da visita, sem pre\u00e7os nem dados t?cnicos', () => {
+  const produtos = [{ nome: 'Cloro', qtd: 2, preco: 80 }, { nome: 'Peneira', qtd: 1, preco: 35 }];
+  const antes = structuredClone(produtos);
+  const mensagem = mensagemProdutosSimples({ cliente: { nome: 'Ana' }, perfil: { empresa: '\u00c1gua Clara' }, produtos });
+  assert.match(mensagem, /Ol\u00e1, Ana! Tudo bem\?/);
+  assert.match(mensagem, /PRODUTOS A REPOR/);
+  assert.match(mensagem, /\u2022 Cloro \u2014 2 unidades/);
+  assert.match(mensagem, /Atenciosamente,\n\u00c1gua Clara/);
+  assert.doesNotMatch(mensagem, /R\$|80|35|total|pH|Cloro:|foto|2x/i);
+  assert.deepEqual(produtos, antes);
+  assert.match(mensagemProdutos({ cliente: { nome: 'Ana' }, perfil: { empresa: 'Aut?nomo Jo?o' }, produtos, comValores: true }), /\*TOTAL:/);
+  assert.throws(() => mensagemProdutosSimples({ cliente: { nome: 'Ana' }, perfil: { empresa: 'Jo?o' } }), /n\u00e3o tem produtos/);
 });
 
 test('tentativa de gravar adiamento com outra sessão não escreve no banco', async () => {

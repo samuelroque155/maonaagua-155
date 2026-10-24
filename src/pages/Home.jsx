@@ -4,7 +4,7 @@ import { AppContext } from '../context/AppContext.jsx';
 import AcoesVisita from '../components/AcoesVisita.jsx';
 import { dataBrasil, estadoAgendaCliente, resumirAgendaDia } from '../services/agendaService';
 import {
-  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity, FileText
+  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity, FileText, Wallet
 } from 'lucide-react';
 
 export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progressoPausado }) {
@@ -232,18 +232,18 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
       </main>
 
       {/* Nav Bottom */}
-      {perfil.tipoConta !== 'funcionario' && <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg border-t border-zinc-200 dark:border-zinc-800 p-4 flex justify-around items-center z-40 max-w-md mx-auto rounded-t-[2.5rem] shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+      {perfil.tipoConta !== 'funcionario' && <nav className={`fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg border-t border-zinc-200 dark:border-zinc-800 px-2 py-3 flex gap-1 justify-around items-center z-40 max-w-md mx-auto rounded-t-[2.5rem] shadow-[0_-10px_20px_rgba(0,0,0,0.02)] ${perfil.tipoConta === 'empresa' || gerenciaEquipe ? 'grid grid-cols-5' : 'grid grid-cols-4'}`}>
         {perfil.tipoConta !== 'funcionario' && (
           <button
             onClick={() => setTela('novo_cliente')}
-            className={`flex flex-col items-center gap-1 p-2 transition-all ${
+            className={`flex min-w-0 flex-col items-center gap-1 px-0 py-1 transition-all ${
               tela === 'novo_cliente'
                 ? 'text-teal-500 scale-110'
                 : 'text-zinc-400'
             }`}
           >
             <UserPlus size={24} />
-            <span className="text-[9px] font-black uppercase tracking-widest">
+            <span className="text-[8px] font-black uppercase tracking-wide whitespace-nowrap">
               Adicionar
             </span>
           </button>
@@ -251,28 +251,38 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
 
         {perfil.tipoConta !== 'funcionario' && <button
           onClick={() => setTela('relatorio')}
-          className={`flex flex-col items-center gap-1 p-2 transition-all ${
+          className={`flex min-w-0 flex-col items-center gap-1 px-0 py-1 transition-all ${
             tela === 'relatorio'
               ? 'text-teal-500 scale-110'
               : 'text-zinc-400'
           }`}
         >
           <User size={24} />
-          <span className="text-[9px] font-black uppercase tracking-widest">
+          <span className="text-[8px] font-black uppercase tracking-wide whitespace-nowrap">
             Clientes
           </span>
         </button>}
 
         {perfil.tipoConta !== 'funcionario' && <button
+          onClick={() => setTela('financeiro')}
+          className={`flex min-w-0 flex-col items-center gap-1 px-0 py-1 transition-all ${
+            tela === 'financeiro' ? 'text-teal-500 scale-110' : 'text-zinc-400'
+          }`}
+        >
+          <Wallet size={24} />
+          <span className="text-[8px] font-black uppercase tracking-wide whitespace-nowrap">Financeiro</span>
+        </button>}
+
+        {perfil.tipoConta !== 'funcionario' && <button
           onClick={() => setTela('orcamento')}
-          className={`flex flex-col items-center gap-1 p-2 transition-all ${
+          className={`flex min-w-0 flex-col items-center gap-1 px-0 py-1 transition-all ${
             tela === 'orcamento'
               ? 'text-teal-500 scale-110'
               : 'text-zinc-400'
           }`}
         >
           <FileText size={24} />
-          <span className="text-[9px] font-black uppercase tracking-widest">
+          <span className="text-[8px] font-black uppercase tracking-wide whitespace-nowrap">
             Orçamento
           </span>
         </button>}
@@ -280,14 +290,14 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
         {perfil.tipoConta !== 'funcionario' && (perfil.tipoConta === 'empresa' || gerenciaEquipe) && (
           <button
             onClick={() => setTela('gestao_equipe')}
-            className={`flex flex-col items-center gap-1 p-2 transition-all ${
+            className={`flex min-w-0 flex-col items-center gap-1 px-0 py-1 transition-all ${
               tela === 'gestao_equipe'
                 ? 'text-sky-500 scale-110'
                 : 'text-zinc-400'
             }`}
           >
             <Briefcase size={24} />
-            <span className="text-[9px] font-black uppercase tracking-widest">
+            <span className="text-[8px] font-black uppercase tracking-wide whitespace-nowrap">
               Equipe
             </span>
           </button>

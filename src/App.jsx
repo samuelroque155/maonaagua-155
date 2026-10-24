@@ -19,6 +19,7 @@ import AdminPanel from './pages/AdminPanel';
 import Configuracoes from './pages/Configuracoes';
 import Onboarding from './pages/Onboarding';
 import GestaoEquipe from './pages/GestaoEquipe';
+import Financeiro from './pages/Financeiro.jsx';
 import AdiarVisita from './pages/AdiarVisita';
 import { listarAntecipacoes, descricaoAntecipacao } from './services/antecipacaoService.js';
 import { cancelarAtendimento as registrarCancelamento, prepararRascunhoCancelamento, listarCancelamentos, atendimentoJaCancelado } from './services/cancelamentoVisitaService.js';
@@ -34,6 +35,7 @@ import { dataBrasil, estadoAgendaCliente, FUSO_AGENDA } from './services/agendaS
 import { listarAdiamentos, salvarAdiamento, adiamentoParaRelatorio, enviarFotoAdiamento, paginaConclusoesAgenda } from './services/adiamentoService';
 import { observarLembretes } from './services/lembretesService';
 import { configurarPush } from './services/pushService';
+import { cadastroFinanceiroPreenchido, salvarCadastroClienteFinanceiro, lerCacheFinanceiro } from './services/financeiroService.js';
 
 const normalizarTipoConta = (tipo) => {
   return String(tipo || '')
@@ -1807,6 +1809,8 @@ export default function App() {
           setTela={setTela}
           adicionarCliente={async d => {
             try {
+              let financeiroPendente = false;
+              let financeiroRequerMigracao = false;
               const nome = d.nome?.trim();
 
               if (!nome) {
@@ -1851,6 +1855,13 @@ export default function App() {
 
               if (error) throw error;
 
+              if (cadastroFinanceiroPreenchido(d.financeiro)) {
+                const estadoLocal = await lerCacheFinanceiro(usuario.id);
+                const resultadoFinanceiro = await salvarCadastroClienteFinanceiro(supabase, usuario.id, clienteSalvo.id, d.financeiro, estadoLocal);
+                financeiroPendente = resultadoFinanceiro.pendente;
+                financeiroRequerMigracao = resultadoFinanceiro.requerMigracao === true;
+              }
+
               const novo = {
                 ...clienteSalvo,
                 diasVisita:
@@ -1871,6 +1882,9 @@ export default function App() {
               showToast(
                 'Cliente cadastrado com sucesso!'
               );
+              if (financeiroPendente) alert(financeiroRequerMigracao
+                ? 'Cliente cadastrado. Os dados financeiros foram preservados neste aparelho, mas dependem da migração do módulo financeiro no Supabase antes da sincronização.'
+                : 'Cliente cadastrado. Os dados financeiros estão salvos neste aparelho e aguardam sincronização.');
             } catch (erro) {
               console.error(
                 'Erro ao cadastrar cliente:',
@@ -1897,6 +1911,8 @@ export default function App() {
             dados
           ) => {
             try {
+              let financeiroPendente = false;
+              let financeiroRequerMigracao = false;
               const nome = dados.nome?.trim();
 
               if (!nome) {
@@ -1946,6 +1962,13 @@ export default function App() {
 
               if (error) throw error;
 
+              if (cadastroFinanceiroPreenchido(dados.financeiro)) {
+                const estadoLocal = await lerCacheFinanceiro(usuario.id);
+                const resultadoFinanceiro = await salvarCadastroClienteFinanceiro(supabase, usuario.id, id, dados.financeiro, estadoLocal);
+                financeiroPendente = resultadoFinanceiro.pendente;
+                financeiroRequerMigracao = resultadoFinanceiro.requerMigracao === true;
+              }
+
               const clienteAtualizado = {
                 ...clienteSalvo,
                 diasVisita:
@@ -1970,6 +1993,9 @@ export default function App() {
               showToast(
                 'Cliente atualizado no Supabase!'
               );
+              if (financeiroPendente) alert(financeiroRequerMigracao
+                ? 'Cliente atualizado. Os dados financeiros foram preservados neste aparelho, mas dependem da migração do módulo financeiro no Supabase antes da sincronização.'
+                : 'Cliente atualizado. Os dados financeiros estão salvos neste aparelho e aguardam sincronização.');
 
               setTela('relatorio');
             } catch (erro) {
@@ -2028,6 +2054,10 @@ export default function App() {
 
     case 'orcamento':
       return <OrcamentoAvulso voltar={() => setTela('lista')} />;
+
+    case 'financeiro':
+      if (funcionario) return <Home setTela={setTela} iniciarVisita={iniciarVisita} adiarVisita={abrirAdiamento} />;
+      return <Financeiro voltar={() => setTela('lista')} />;
 
     default:
       return (

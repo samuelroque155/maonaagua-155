@@ -120,7 +120,7 @@ export async function salvarContaRecebimento(client, uid, valor, estado = estado
   if (registro.link_pagamento && !/^https:\/\//i.test(registro.link_pagamento)) throw new Error('O link de cobrança precisa começar com https://.');
   if (registro.link_recorrencia && !/^https:\/\//i.test(registro.link_recorrencia)) throw new Error('O link do plano precisa começar com https://.');
   if (registro.instituicao === 'InfinitePay' && registro.tipo_integracao === 'infinitepay_checkout') {
-    throw new Error('Checkout automático por API ainda não foi habilitado. Use o link de cobrança ou plano gerado no app InfinitePay.');
+    throw new Error('Checkout automático ainda não foi habilitado. Use apenas links existentes da InfinitePay e confirme pagamentos manualmente.');
   }
   if (registro.principal) {
     let estadoAtual = estado;

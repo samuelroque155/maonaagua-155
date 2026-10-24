@@ -4,6 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { criarBancoSupabaseTeste, owner, other } from './helpers/supabaseFixture.mjs';
 import { calcularResumo, centavos, crc16Pix, gerarPixCopiaECola, mensagemCobranca, statusCobranca, vencimentoMensal } from '../src/services/financeiro.js';
 import { adicionarNaFilaFinanceira, estadoFinanceiroVazio, sincronizarFilaFinanceira } from '../src/services/financeiroSync.js';
+import { salvarContaRecebimento } from '../src/services/financeiroService.js';
+
+test('Checkout automático da InfinitePay permanece bloqueado', async () => {
+  await assert.rejects(
+    () => salvarContaRecebimento({}, owner, { instituicao: 'InfinitePay', nome_titular: 'Teste', tipo_integracao: 'infinitepay_checkout' }, estadoFinanceiroVazio()),
+    /Checkout automático ainda não foi habilitado/
+  );
+});
 
 const MIGRACAO = '../supabase/migrations/20261024015307_financeiro_base.sql';
 
@@ -76,7 +84,9 @@ test('migraÃ§Ã£o isolada gera cobranÃ§a mensal imutÃ¡vel, idempotente e 
     await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${owner}',true); update clientes_financeiro set valor_mensal=200,descricao='Novo plano' where user_id='${owner}' and cliente_id=1; select gerar_cobrancas_financeiras('2026-03-01'); commit;`);
     rows = await db.query(`select competencia::text,valor::text,descricao from cobrancas_financeiras where user_id='${owner}' order by competencia`);
     assert.deepEqual(rows.rows.map(r => [r.competencia,r.valor,r.descricao]), [['2026-02-01','125.50','Plano antigo'],['2026-03-01','200.00','Novo plano']]);
-    await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${owner}',true); insert into pagamentos_financeiros(user_id,cobranca_id,valor,tipo,forma_pagamento,origem_confirmacao,criado_por) select '${owner}',id,20,'pagamento','pix_manual','manual','${owner}' from cobrancas_financeiras where user_id='${owner}' and competencia='2026-02-01'; commit;`);
+    await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${owner}',true); insert into pagamentos_financeiros(user_id,cobranca_id,valor,tipo,forma_pagamento,origem_confirmacao,criado_por,observacao) select '${owner}',id,20,'pagamento','infinitepay','manual','${owner}','Assinatura existente conferida no app InfinitePay' from cobrancas_financeiras where user_id='${owner}' and competencia='2026-02-01'; commit;`);
+    rows = await db.query(`select forma_pagamento,origem_confirmacao,observacao from pagamentos_financeiros where user_id='${owner}'`);
+    assert.deepEqual(rows.rows, [{ forma_pagamento: 'infinitepay', origem_confirmacao: 'manual', observacao: 'Assinatura existente conferida no app InfinitePay' }]);
     await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${owner}',true);`);
     await assert.rejects(() => db.exec(`insert into pagamentos_financeiros(user_id,cobranca_id,valor,tipo,forma_pagamento,origem_confirmacao,criado_por) select '${owner}',id,106,'pagamento','pix_manual','manual','${owner}' from cobrancas_financeiras where user_id='${owner}' and competencia='2026-02-01'`));
     await db.exec('rollback');

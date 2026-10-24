@@ -36,12 +36,12 @@ export function mensagemProdutos({ cliente, perfil, produtos, comValores = false
     ''
   ];
   for (const produto of produtos) {
-    const qtd = Math.max(1, Number(produto.qtd) || 1);
-    if (!comValores) { linhas.push(`\u2022 ${produto.nome} \u2014 ${qtd} ${qtd === 1 ? 'unidade' : 'unidades'}`); continue; }
+    const item = `\u2022 ${quantidadeProduto(produto.qtd)} \u2014 ${produto.nome}`;
+    if (!comValores) { linhas.push(item); continue; }
     const preco = precoInformado(produto.preco);
     linhas.push(preco === null
-      ? `\u2022 ${produto.nome} \u2014 ${qtd} ${qtd === 1 ? 'unidade' : 'unidades'} \u2014 pre\u00e7o n\u00e3o informado`
-      : `\u2022 ${produto.nome} \u2014 ${qtd} ${qtd === 1 ? 'unidade' : 'unidades'} \u2014 ${moeda(preco)}`);
+      ? `${item} \u2014 pre\u00e7o n\u00e3o informado`
+      : `${item} \u2014 ${moeda(preco)}`);
   }
   if (comValores) {
     const { total, semPreco } = resumirProdutos(produtos);
@@ -66,7 +66,11 @@ export function mensagemProdutosSimples({ cliente, perfil, produtos = [] }) {
   const empresa = nomeProfissional(perfil);
   if (!empresa) throw new Error('Cadastre seu nome profissional ou da empresa antes de compartilhar.');
   return [`Ol\u00e1, ${cliente.nome}! Tudo bem?`, '', 'Segue a lista dos produtos que precisam ser repostos para a manuten\u00e7\u00e3o da sua piscina:', '', ' *PRODUTOS A REPOR*', '',
-    ...itens.map(p => `\u2022 ${p.nome} \u2014 ${p.qtd} ${p.qtd === 1 ? 'unidade' : 'unidades'}`), '', 'Por favor, confirme a reposi\u00e7\u00e3o para mantermos o cuidado com sua piscina.', '', `Atenciosamente,\n${empresa}`].join('\n');
+    ...itens.map(p => `\u2022 ${quantidadeProduto(p.qtd)} \u2014 ${p.nome}`), '', 'Por favor, confirme a reposi\u00e7\u00e3o para mantermos o cuidado com sua piscina.', '', `Atenciosamente,\n${empresa}`].join('\n');
+}
+
+function quantidadeProduto(valor) {
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(Number(valor) || 1);
 }
 
 export function produtosParaReposicao(produtos = []) {

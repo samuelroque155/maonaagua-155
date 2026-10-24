@@ -50,7 +50,7 @@ test('antecipação é composta uma vez por identidade da ocorrência, independe
 test('WhatsApp leva somente faltantes, preserva quantidades e valores reais sem campos técnicos',()=>{
   const dados={cliente:{nome:'André'},perfil:{empresa:'Piscinas Clara'},produtos:[{nome:'Cloro',qtd:2,preco:12.34},{nome:'Algicida',qtd:1,preco:null},{nome:'Não faltou',qtd:9,preco:999,faltando:false}],ph:'7.4',fotos:['SEGREDO'],antecipacaoDescricao:'SEGREDO'};
   const simples=mensagemProdutosSimples(dados),precos=mensagemProdutos({...dados,comValores:true});
-  assert.match(simples,/Cloro — 2 unidade/);assert.doesNotMatch(simples,/R\$|12,34|pH|SEGREDO|Não faltou/);
+  assert.match(simples,/• 2 — Cloro/);assert.doesNotMatch(simples,/R\$|12,34|pH|SEGREDO|Não faltou/);
   assert.match(precos,/24,68/);assert.match(precos,/preço não informado/);assert.doesNotMatch(precos,/pH|SEGREDO|Não faltou|\*Total da lista:/);
   assert.throws(()=>mensagemProdutosSimples({...dados,produtos:[]}),/não tem produtos/);
 });

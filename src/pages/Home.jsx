@@ -4,7 +4,7 @@ import { AppContext } from '../context/AppContext.jsx';
 import AcoesVisita from '../components/AcoesVisita.jsx';
 import { dataBrasil, estadoAgendaCliente, resumirAgendaDia } from '../services/agendaService';
 import {
-  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity
+  Camera, ShoppingCart, MapPin, Plus, CalendarDays, RefreshCw, LogOut, Sun, Moon, Search, Clock, BellRing, Settings, ShieldCheck, UserPlus, User, Briefcase, Activity, FileText
 } from 'lucide-react';
 
 export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progressoPausado }) {
@@ -260,6 +260,20 @@ export default function Home({ iniciarVisita, adiarVisita, setTela, toast, progr
           <User size={24} />
           <span className="text-[9px] font-black uppercase tracking-widest">
             Clientes
+          </span>
+        </button>}
+
+        {perfil.tipoConta !== 'funcionario' && <button
+          onClick={() => setTela('orcamento')}
+          className={`flex flex-col items-center gap-1 p-2 transition-all ${
+            tela === 'orcamento'
+              ? 'text-teal-500 scale-110'
+              : 'text-zinc-400'
+          }`}
+        >
+          <FileText size={24} />
+          <span className="text-[9px] font-black uppercase tracking-widest">
+            Orçamento
           </span>
         </button>}
 

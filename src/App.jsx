@@ -13,6 +13,7 @@ import Relatorios from './pages/Relatorios';
 import VerRelatorio from './pages/VerRelatorio';
 import Visita from './pages/Visita';
 import NovoCliente from './pages/NovoCliente';
+import OrcamentoAvulso from './pages/OrcamentoAvulso.jsx';
 import Agenda from './pages/Agenda';
 import AdminPanel from './pages/AdminPanel';
 import Configuracoes from './pages/Configuracoes';
@@ -2024,6 +2025,9 @@ export default function App() {
           setTela={setTela}
         />
       );
+
+    case 'orcamento':
+      return <OrcamentoAvulso voltar={() => setTela('lista')} />;
 
     default:
       return (

@@ -130,27 +130,43 @@ const dadosMensagem = {
   produtos: [{ nome: 'Cloro', qtd: 2, preco: 39.9 }, { nome: 'Peneira', qtd: 1, preco: null }]
 };
 
-test('lista sem valores contém somente nomes dos itens e o nome profissional', () => {
+test('lista sem valores cont\u00e9m somente os faltantes, quantidades e rodap\u00e9 profissional', () => {
   const mensagem = mensagemProdutos(dadosMensagem);
-  assert.match(mensagem, /Água Clara/);
-  assert.match(mensagem, /• Cloro\n• Peneira/);
-  assert.doesNotMatch(mensagem, /R\$|total|39|2x|preço/);
+  assert.match(mensagem, /Ol\u00e1, Ana! Tudo bem\?/);
+  assert.ok(mensagem.includes('\u2022 2 \u2014 Cloro\n\u2022 1 \u2014 Peneira'));
+  assert.match(mensagem, /PRODUTOS A REPOR/);
+  assert.match(mensagem, /Atenciosamente,\n\u00c1gua Clara/);
+  assert.doesNotMatch(mensagem, /R\$|39|2x|pre\u00e7o/);
 });
 
-test('lista com valores identifica preço faltante sem inventar total', () => {
+test('lista com valores usa pre\u00e7os reais, n\u00e3o inventa total parcial', () => {
   const mensagem = mensagemProdutos({ ...dadosMensagem, comValores: true });
-  assert.match(mensagem, /39,90/);
-  assert.match(mensagem, /79,80/);
-  assert.match(mensagem, /Peneira — preço não informado/);
-  assert.match(mensagem, /Total da lista pendente/);
-  assert.doesNotMatch(mensagem, /\*Total da lista:/);
+  assert.ok(mensagem.includes('\u2022 2 \u2014 Cloro \u2014 R$\u00a039,90'));
+  assert.match(mensagem, /1 \u2014 Peneira \u2014 pre\u00e7o n\u00e3o informado/);
+  assert.match(mensagem, /Subtotal dos itens com pre\u00e7o informado: R\$\s?79,80/);
+  assert.doesNotMatch(mensagem, /\*TOTAL:/);
   assert.equal(resumirProdutos([{ qtd: 3, preco: '0,10' }]).total, 0.3);
   assert.equal(resumirProdutos([{ preco: 0 }, { preco: '' }, { preco: -1 }]).semPreco, 3);
 });
 
-test('lista completa soma quantidades e recusa assinatura com email', () => {
+test('quantidade vem antes do nome e nao confunde numeros do produto, nas duas mensagens', () => {
+  const dados = { cliente: { nome: 'Ana' }, perfil: { empresa: 'Água Clara' }, produtos: [
+    { nome: 'CLORO BALDE 10 KL', qtd: 2, preco: 12.5 },
+    { nome: 'CLORO 1 KL', qtd: 3, preco: 2 }
+  ] };
+  const simples = mensagemProdutos(dados);
+  const comValores = mensagemProdutos({ ...dados, comValores: true });
+  assert.match(simples, /• 2 — CLORO BALDE 10 KL\n• 3 — CLORO 1 KL/);
+  assert.match(comValores, /• 2 — CLORO BALDE 10 KL — R\$\s?12,50\n• 3 — CLORO 1 KL — R\$\s?2,00/);
+  assert.match(comValores, /\*TOTAL: R\$\s?31,00\*/);
+  assert.doesNotMatch(`${simples}\n${comValores}`, /unidades?|quantidade/i);
+  assert.match(simples, /Ol\u00e1, Ana! Tudo bem\?/);
+  assert.match(comValores, /Atenciosamente,\n\u00c1gua Clara/);
+});
+
+test('lista completa calcula total e valida assinatura com email', () => {
   const mensagem = mensagemProdutos({ ...dadosMensagem, produtos: [dadosMensagem.produtos[0]], comValores: true });
-  assert.match(mensagem, /Total da lista: R\$\s79,80/);
+  assert.match(mensagem, /\*TOTAL: R\$\s?79,80\*/);
   assert.throws(() => mensagemProdutos({ ...dadosMensagem, perfil: { empresa: 'conta@exemplo.com' } }), /Cadastre e salve/);
   assert.throws(() => mensagemProdutos({ ...dadosMensagem, produtos: [] }), /Selecione/);
 });

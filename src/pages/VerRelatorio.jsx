@@ -550,6 +550,16 @@ export default function VerRelatorio({
 
             </div>
 
+            <button
+              type="button"
+              onClick={handleSharePDF}
+              disabled={loadingPDF || carregando || !historicoFiltrado.length}
+              className="w-full mb-5 bg-zinc-800 dark:bg-zinc-700 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs transition-colors disabled:opacity-50"
+            >
+              {loadingPDF ? <Loader2 size={17} className="animate-spin" /> : <FileText size={17} />}
+              GERAR PDF
+            </button>
+
             <label className="block text-xs font-bold text-zinc-500 mb-2">
               {tipoRelatorio === 'dia'
                 ? 'Selecione o dia da visita'
@@ -640,27 +650,6 @@ export default function VerRelatorio({
                 PRODUTOS SEM PREÇOS
               </button>
               <button onClick={() => handleWhatsApp(true)} disabled={carregando || !visitasFiltradas.length || funcionario} className="bg-green-600 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 text-xs disabled:opacity-50">PRODUTOS COM PREÇOS</button>
-
-              <button
-                onClick={handleSharePDF}
-                disabled={
-                  loadingPDF ||
-                  carregando ||
-                  !historicoFiltrado.length
-                }
-                className="col-span-2 bg-zinc-800 text-white font-bold py-3.5 px-2 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs disabled:opacity-50"
-              >
-                {loadingPDF ? (
-                  <Loader2
-                    size={17}
-                    className="animate-spin"
-                  />
-                ) : (
-                  <FileText size={17} />
-                )}
-
-                GERAR PDF
-              </button>
 
             </div>
 
@@ -998,28 +987,28 @@ export default function VerRelatorio({
             </section>
           )}
 
-        {historicoFiltrado.filter(v => v.tipo === 'cancelamento').map(c => <article key={c.id} className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm space-y-2">
+        {historicoFiltrado.filter(v => v.tipo === 'cancelamento').map(c => <article key={c.id} className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm space-y-2 text-zinc-800 dark:text-zinc-200">
           <h3 className="font-bold text-zinc-600 dark:text-zinc-300">Atendimento cancelado · limpeza não realizada</h3>
-          <p>{c.funcionarioNome} · {new Date(c.canceladoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
-          <p>Iniciado em {new Date(c.iniciadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
-          <p>Motivo: {c.motivo}</p>
+          <p className="text-zinc-700 dark:text-zinc-200">{c.funcionarioNome} · {new Date(c.canceladoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
+          <p className="text-zinc-700 dark:text-zinc-200">Iniciado em {new Date(c.iniciadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
+          <p className="text-zinc-700 dark:text-zinc-200">Motivo: {c.motivo}</p>
           <p>{c.novaData ? `Limpeza remarcada para ${formatarDataAgenda(c.novaData)}` : 'A ocorrência continua pendente na agenda.'}</p>
-          {Object.keys(c.rascunho || {}).length > 0 && <details><summary className="min-h-11 cursor-pointer">Rascunho preservado (não é relatório de limpeza)</summary>
+          {Object.keys(c.rascunho || {}).length > 0 && <details className="text-zinc-700 dark:text-zinc-200"><summary className="min-h-11 cursor-pointer font-semibold text-zinc-800 dark:text-zinc-100">Rascunho preservado (não é relatório de limpeza)</summary>
             {['ph','cloro','alcalinidade','temperatura','aspecto','observacoes','observacao_tecnica'].map(k => c.rascunho[k] ? <p key={k}>{k}: {c.rascunho[k]}</p> : null)}
             {(c.rascunho.produtos || []).map((p,i) => <p key={i}>{p.nome} · {p.qtd || 1} unidade(s)</p>)}
             <div className="grid grid-cols-2 gap-2">{(c.fotos || []).map((f,i) => <img key={i} src={f} alt="Foto preservada do atendimento cancelado" className="rounded-xl w-full" />)}</div>
           </details>}
         </article>)}
-        {historicoFiltrado.filter(v => v.tipo === 'antecipacao').map(a => <article key={a.id} className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm space-y-2"><h3 className="font-bold text-teal-600">Histórico de antecipação</h3><p className="whitespace-pre-wrap break-words">{a.descricao}</p><p>{a.status}</p>{a.dataEfetiva && <p>Data efetiva do atendimento: {a.dataEfetiva}</p>}<p className="text-xs text-zinc-500">Registrada em {new Date(a.criadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p></article>)}
+        {historicoFiltrado.filter(v => v.tipo === 'antecipacao').map(a => <article key={a.id} className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm space-y-2 text-zinc-800 dark:text-zinc-200"><h3 className="font-bold text-teal-600 dark:text-teal-400">Histórico de antecipação</h3><p className="whitespace-pre-wrap break-words">{a.descricao}</p><p>{a.status}</p>{a.dataEfetiva && <p>Data efetiva do atendimento: {a.dataEfetiva}</p>}<p className="text-xs text-zinc-500 dark:text-zinc-400">Registrada em {new Date(a.criadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p></article>)}
         {adiamentosFiltrados.length > 0 && <section className="space-y-3">
           <h3 className="text-sm font-black uppercase text-zinc-800 dark:text-white">Histórico de adiamentos</h3>
-          {adiamentosFiltrados.map(a => <article key={a.id} className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900 rounded-2xl p-5 space-y-2 text-sm">
-            <h4 className="font-bold text-amber-600">Visita adiada</h4>
+          {adiamentosFiltrados.map(a => <article key={a.id} className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900 rounded-2xl p-5 space-y-2 text-sm text-zinc-800 dark:text-zinc-200">
+            <h4 className="font-bold text-amber-600 dark:text-amber-400">Visita adiada</h4>
             <p>Data original: {formatarDataAgenda(a.dataOriginal)} {a.horarioOriginal}</p>
             <p>Registrado em: {new Date(a.criadoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>
             {a.comparecimentoEm && <p>Comparecimento: {new Date(a.comparecimentoEm).toLocaleString('pt-BR', { timeZone: FUSO_AGENDA })}</p>}
             <p className="whitespace-pre-wrap break-words">Motivo: {a.motivo}</p>
-            <p className="font-bold text-teal-600">Nova data: {formatarDataAgenda(a.novaData)}</p>
+            <p className="font-bold text-teal-600 dark:text-teal-400">Nova data: {formatarDataAgenda(a.novaData)}</p>
             {(a.fotos || []).map((foto, index) => <img key={index} src={foto} alt="Comprovação de comparecimento" className="w-full max-h-72 object-contain rounded-xl" />)}
           </article>)}
         </section>}
@@ -1068,7 +1057,7 @@ export default function VerRelatorio({
                             <p className="font-black text-sm text-zinc-800 dark:text-white">
                               Visita de {visita.d}
                             </p>
-                            {visita.funcionarioNome && <p className="text-xs text-teal-600">Responsável: {visita.funcionarioNome}</p>}
+                            {visita.funcionarioNome && <p className="text-xs text-teal-600 dark:text-teal-400">Responsável: {visita.funcionarioNome}</p>}
 
                             <p className="text-[11px] text-zinc-500 mt-1">
                               {visita.h || 'Horário não informado'}
@@ -1081,10 +1070,6 @@ export default function VerRelatorio({
 
                         </div>
 
-                        {!funcionario && <div className="space-y-2 mb-3">
-                          <button onClick={() => enviarProdutosSalvos(visita, false)} className="w-full py-3 rounded-xl border border-teal-300 dark:border-teal-800 text-teal-600 text-xs font-bold">Enviar somente a lista pelo WhatsApp</button>
-                          <button onClick={() => enviarProdutosSalvos(visita, true)} className="w-full py-3 rounded-xl border border-teal-300 dark:border-teal-800 text-teal-600 text-xs font-bold">Enviar com valores e total pelo WhatsApp</button>
-                        </div>}
                         {funcionario ? (
                           <button
                             onClick={() =>

@@ -73,7 +73,7 @@ test('lista simples após finalizar usa somente itens da visita, sem preços nem
   const mensagem = mensagemProdutosSimples({ cliente: { nome: 'Ana' }, perfil: { empresa: 'Água Clara' }, produtos });
   assert.match(mensagem, /Ol\u00e1, Ana! Tudo bem\?/);
   assert.match(mensagem, /PRODUTOS A REPOR/);
-  assert.match(mensagem, /\u2022 Cloro \u2014 2 unidades/);
+  assert.match(mensagem, /\u2022 2 \u2014 Cloro/);
   assert.match(mensagem, /Atenciosamente,\n\u00c1gua Clara/);
   assert.doesNotMatch(mensagem, /R\$|80|35|total|pH|Cloro:|foto|2x/i);
   assert.deepEqual(produtos, antes);
@@ -115,7 +115,7 @@ test('repetir salvamento após resposta perdida confirma o mesmo adiamento sem c
   const mensagem = mensagemProdutosSimples({ cliente: { nome: 'Ana' }, perfil: { empresa: '\u00c1gua Clara' }, produtos });
   assert.match(mensagem, /Ol\u00e1, Ana! Tudo bem\?/);
   assert.match(mensagem, /PRODUTOS A REPOR/);
-  assert.match(mensagem, /\u2022 Cloro \u2014 2 unidades/);
+  assert.match(mensagem, /\u2022 2 \u2014 Cloro/);
   assert.match(mensagem, /Atenciosamente,\n\u00c1gua Clara/);
   assert.doesNotMatch(mensagem, /R\$|80|35|total|pH|Cloro:|foto|2x/i);
   assert.deepEqual(produtos, antes);

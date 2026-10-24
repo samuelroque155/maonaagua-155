@@ -5,7 +5,7 @@ import { criarBancoSupabaseTeste, owner, worker, other } from './helpers/supabas
 import { dataBrasil, diaSemanaAgenda, somarDiasAgenda, estadoAgendaCliente, semanaDaData } from '../src/services/agendaService.js';
 import { prepararRascunhoCancelamento, cancelarAtendimento } from '../src/services/cancelamentoVisitaService.js';
 
-const migracoes = ['scripts/adiamentos-visitas.sql', 'supabase/migrations/20261021053105_lembretes_push.sql', 'supabase/migrations/20261021060829_permissao_lembretes_auth.sql', 'supabase/migrations/20261021164523_antecipacoes_lembretes_inteligentes.sql', 'supabase/migrations/20261023232856_cancelamentos_atendimentos.sql'];
+const migracoes = ['scripts/adiamentos-visitas.sql', 'supabase/migrations/20261021053105_lembretes_push.sql', 'supabase/migrations/20261021060829_permissao_lembretes_auth.sql', 'supabase/migrations/20261021190701_antecipacoes_lembretes_inteligentes.sql', 'supabase/migrations/20261023232856_cancelamentos_atendimentos.sql'];
 async function banco(incluirCancelamento = true) {
   const db = await criarBancoSupabaseTeste();
   await db.exec('create role service_role bypassrls;');

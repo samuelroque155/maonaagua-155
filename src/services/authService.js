@@ -24,9 +24,29 @@ export function mensagemErroAuth(erro) {
   if (/email_address_not_authorized/.test(codigo) || /email address.*not authorized|only.*authorized.*email/i.test(texto)) return 'O serviço de email do Supabase não está autorizado a enviar para este endereço. É necessário configurar um SMTP próprio; a confirmação de email continuará obrigatória.';
   if (/rate_limit|over_email_send/.test(codigo) || erro?.status === 429) return 'Muitas solicitações em pouco tempo. Aguarde o prazo informado pelo serviço antes de tentar novamente.';
   if (/email_not_confirmed/.test(codigo) || /email not confirmed/i.test(texto)) return 'Confirme seu email antes de entrar. Confira também a pasta de spam ou use “Reenviar confirmação”.';
-  if (/invalid_credentials/.test(codigo)) return 'Email ou senha incorretos. Confira os dados ou recupere sua senha.';
+  if (/invalid_credentials/.test(codigo)) return 'Email ou senha incorretos. Se criou sua conta pelo Google, use “Continuar com o Google”. Para entrar com senha, use “Esqueci minha senha” e defina uma pelo link recebido.';
+  if (/user_already_exists|email_exists/.test(codigo) || /already registered|already been registered/i.test(texto)) return 'Este email já está cadastrado. Use Entrar, Continuar com o Google ou Esqueci minha senha. Cadastrar novamente não altera a senha da conta existente.';
+  if (/weak_password/.test(codigo)) return 'A senha não atende aos requisitos de segurança. Use uma senha mais longa, com letras, números e símbolos.';
+  if (/signup_disabled|email_provider_disabled/.test(codigo)) return 'O cadastro por email está desabilitado no serviço de autenticação. Entre com o Google e informe o responsável pelo aplicativo.';
   if (/flow_state|code_verifier|bad_code|pkce/i.test(codigo + texto)) return 'Esse retorno de login expirou ou foi aberto em outro navegador. Tente entrar novamente no mesmo aparelho. Se confirmou o email, entre agora com email e senha.';
   return texto;
+}
+
+export async function cadastrarComEmail(client, { email, senha, redirectTo }) {
+  const endereco = String(email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(endereco)) throw new Error('Informe um email válido.');
+  if (typeof senha !== 'string' || senha.length < 6) throw new Error('A senha deve ter pelo menos 6 caracteres.');
+  const { data, error } = await client.auth.signUp({
+    email: endereco, password: senha, options: { emailRedirectTo: redirectTo }
+  });
+  if (error) throw error;
+  // O Auth pode ocultar contas existentes retornando um usuário sem identidades.
+  // Não tentar definir senha, criar perfil ou entrar automaticamente nessa conta.
+  if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return 'Este email já está cadastrado. Use Entrar, Continuar com o Google ou Esqueci minha senha. Cadastrar novamente não altera sua conta.';
+  }
+  if (data?.session) return '';
+  return 'Se este email é novo, confira sua caixa de entrada e o spam para confirmar o cadastro antes de entrar. Se já possui conta, use Entrar ou Continuar com o Google; para definir uma senha, use Esqueci minha senha. Cadastrar novamente não redefine a senha.';
 }
 
 // /settings contém somente as configurações públicas de autenticação.

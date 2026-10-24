@@ -1,7 +1,7 @@
 import { supabase, authRedirectUrl, conferirLoginGoogle } from '../supabase';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { mensagemErroAuth } from '../services/authService';
+import { mensagemErroAuth, cadastrarComEmail } from '../services/authService';
 import { AppContext } from '../context/AppContext.jsx';
 import React, { useContext, useState } from 'react';
 
@@ -35,14 +35,7 @@ export default function Login({ redefinindoSenha = false }) {
   });
 
   const handleCadastro = () => executar(async () => {
-    if (senha.length < 6) throw new Error('A senha deve ter pelo menos 6 caracteres.');
-    const { data, error } = await supabase.auth.signUp({
-      email: conferirEmail(),
-      password: senha,
-      options: { emailRedirectTo: authRedirectUrl }
-    });
-    if (error) throw error;
-    if (!data.session) setAviso('Confira seu email e a pasta de spam para confirmar o cadastro. Depois, entre com seu email e senha. Se a conta já existir, use Entrar ou recupere a senha.');
+    setAviso(await cadastrarComEmail(supabase, { email: conferirEmail(), senha, redirectTo: authRedirectUrl }));
   });
 
   const handleRecuperarSenha = () => executar(async () => {

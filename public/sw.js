@@ -36,9 +36,9 @@ self.addEventListener('push', event => {
     const id = typeof aviso.id === 'string' && aviso.id.length <= 100 ? aviso.id : null;
     if (id && !await marcarAviso(id)) return;
     try {
-      await self.registration.showNotification('Mão Na Água — limpeza', {
-        body: typeof aviso.body === 'string' ? aviso.body.slice(0, 200) : 'Confira as piscinas pendentes na agenda de hoje.',
-        icon: '/logo.png', badge: '/favicon.svg', tag: 'limpezas-do-dia', renotify: false
+      await self.registration.showNotification(typeof aviso.title === 'string' ? aviso.title.slice(0, 80) : 'Mão Na Água — limpeza', {
+        body: typeof aviso.body === 'string' ? aviso.body.slice(0, 650) : 'Confira as piscinas pendentes na agenda de hoje.',
+        icon: '/logo.png', badge: '/favicon.svg', tag: typeof aviso.tag === 'string' ? aviso.tag.slice(0, 100) : 'limpezas-do-dia', renotify: false
       });
     } catch (erro) {
       if (id) await marcarAviso(id, true);

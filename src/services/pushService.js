@@ -10,8 +10,8 @@ export async function configurarPush(client, uid, opcoes, chavePublica, ambiente
   }
   const inscricao = await registro.pushManager.getSubscription();
   if (!opcoes.ativo) {
-    // Primeiro cancela a entrega no aparelho, inclusive se a conexão cair.
-    if (inscricao) await inscricao.unsubscribe();
+    // Configuração nova pausa no servidor e conserva a inscrição; clientes legados mantêm o cancelamento local.
+    if (inscricao && !opcoes.preservarInscricao) await inscricao.unsubscribe();
     if (inscricao) {
       const { error } = await client.from('notificacoes_dispositivos').update({ ativo: false }).eq('user_id', uid).eq('endpoint', inscricao.endpoint);
       if (error) throw new Error('Avisos cancelados neste aparelho. Não foi possível atualizar o servidor; tente desligar novamente.');

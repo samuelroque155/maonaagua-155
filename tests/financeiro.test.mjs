@@ -5,7 +5,7 @@ import { criarBancoSupabaseTeste, owner, other } from './helpers/supabaseFixture
 import { calcularResumo, centavos, crc16Pix, gerarPixCopiaECola, mensagemCobranca, statusCobranca, vencimentoMensal } from '../src/services/financeiro.js';
 import { adicionarNaFilaFinanceira, estadoFinanceiroVazio, sincronizarFilaFinanceira } from '../src/services/financeiroSync.js';
 
-const MIGRACAO = '../supabase/migrations/20261024011511_financeiro_base.sql';
+const MIGRACAO = '../supabase/migrations/20261024015307_financeiro_base.sql';
 
 test('valores em centavos, status, parciais e vencimento de fim do mÃªs', () => {
   assert.equal(centavos('R$ 1.234,56'), 123456);

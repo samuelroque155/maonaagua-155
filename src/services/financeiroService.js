@@ -57,7 +57,7 @@ async function listarTudo(client, tabela, uid) {
 }
 
 function mensagemMigracao() {
-  return new Error('O módulo financeiro precisa da migração local 20261024011511_financeiro_base.sql antes de sincronizar. Os dados offline foram preservados.');
+  return new Error('O módulo financeiro precisa da migração local 20261024015307_financeiro_base.sql antes de sincronizar. Os dados offline foram preservados.');
 }
 
 export async function carregarFinanceiro(client, uid, competencia, storage) {

@@ -4,8 +4,14 @@ self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', () => {
-  self.clients.claim();
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    // This worker does not cache app assets. Clear only Cache Storage from old
+    // app workers; push subscriptions and IndexedDB records remain untouched.
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.filter(name => /^maonaagua(?:-|$)/i.test(name)).map(name => caches.delete(name)));
+    await self.clients.claim();
+  })());
 });
 
 function marcarAviso(id, remover = false) {

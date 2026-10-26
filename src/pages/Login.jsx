@@ -1,4 +1,4 @@
-import { supabase, authRedirectUrl, conferirLoginGoogle } from '../supabase';
+import { supabase, authRedirectUrl, conferirLoginGoogle, exigirConfiguracaoSupabase } from '../supabase';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { mensagemErroAuth, cadastrarComEmail } from '../services/authService';
@@ -29,16 +29,19 @@ export default function Login({ redefinindoSenha = false }) {
   };
 
   const handleLogin = () => executar(async () => {
+    exigirConfiguracaoSupabase();
     if (!senha) throw new Error('Preencha sua senha.');
     const { error } = await supabase.auth.signInWithPassword({ email: conferirEmail(), password: senha });
     if (error) throw error;
   });
 
   const handleCadastro = () => executar(async () => {
+    exigirConfiguracaoSupabase();
     setAviso(await cadastrarComEmail(supabase, { email: conferirEmail(), senha, redirectTo: authRedirectUrl }));
   });
 
   const handleRecuperarSenha = () => executar(async () => {
+    exigirConfiguracaoSupabase();
     const { error } = await supabase.auth.resetPasswordForEmail(conferirEmail(), {
       redirectTo: authRedirectUrl
     });
@@ -47,6 +50,7 @@ export default function Login({ redefinindoSenha = false }) {
   });
 
   const handleReenviarConfirmacao = () => executar(async () => {
+    exigirConfiguracaoSupabase();
     const { error } = await supabase.auth.resend({
       type: 'signup', email: conferirEmail(), options: { emailRedirectTo: authRedirectUrl }
     });
@@ -55,6 +59,7 @@ export default function Login({ redefinindoSenha = false }) {
   });
 
   const handleNovaSenha = () => executar(async () => {
+    exigirConfiguracaoSupabase();
     if (senha.length < 6) throw new Error('A senha deve ter pelo menos 6 caracteres.');
     const { error } = await supabase.auth.updateUser({ password: senha });
     if (error) throw error;

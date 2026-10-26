@@ -1,4 +1,4 @@
-import { supabase, erroRetornoInicial } from '../supabase';
+import { supabase, erroRetornoInicial, supabaseConfiguracaoAusente } from '../supabase';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
@@ -130,6 +130,13 @@ export const AppProvider = ({ children }) => {
   // Observa a sessão. Recarrega o perfil apenas quando muda o usuário.
   useEffect(() => {
     let ativo = true;
+
+    if (supabaseConfiguracaoAusente) {
+      setErroAuth('Configuração do Supabase ausente nesta versão. Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no ambiente Production e gere um novo build.');
+      setAuthReady(true);
+      setAuthLoading(false);
+      return () => { ativo = false; };
+    }
 
     const {
       data: { subscription }
